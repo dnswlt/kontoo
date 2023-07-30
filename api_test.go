@@ -11,10 +11,10 @@ import (
 
 func TestExample(t *testing.T) {
 	// Create and serialize example Log.
-	example := Log{
+	example := Entry{
 		Created:   time.Now(),
 		ValueDate: time.Date(2023, time.January, 17, 0, 40, 0, 0, time.UTC),
-		Type:      AssetValue,
+		Type:      AssetValueStatement,
 		Asset: Asset{
 			Id:   "IE00B4L5Y983",
 			Type: Stock,
@@ -33,7 +33,7 @@ func TestExample(t *testing.T) {
 	}
 	// Decode and check it's the same value.
 	dec := gob.NewDecoder(&buf)
-	var log Log
+	var log Entry
 	if err := dec.Decode(&log); err != nil {
 		t.Errorf("could not decode Log: %s", err)
 	}
