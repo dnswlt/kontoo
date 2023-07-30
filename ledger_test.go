@@ -10,7 +10,7 @@ import (
 
 func TestAddBuyStockTransaction(t *testing.T) {
 	l := NewLedger()
-	params := &StockTransactionParams{
+	params := &TransactionParams{
 		txType:    BuyTransaction,
 		valueDate: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 		asset: Asset{
@@ -24,7 +24,7 @@ func TestAddBuyStockTransaction(t *testing.T) {
 		valueMicros:    Mmul(20*UnitValue, 75*UnitValue),
 		costMicros:     12_500_000,
 	}
-	e, err := l.AddStockTransaction(params)
+	e, err := l.AddTransaction(params)
 	if err != nil {
 		t.Fatalf("could not add to ledger: %s", err)
 	}
@@ -47,7 +47,7 @@ func TestAddBuyStockTransaction(t *testing.T) {
 
 func TestAssetIds(t *testing.T) {
 	l := NewLedger()
-	params1 := &StockTransactionParams{
+	params1 := &TransactionParams{
 		txType:    BuyTransaction,
 		valueDate: time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC),
 		asset: Asset{
@@ -60,7 +60,7 @@ func TestAssetIds(t *testing.T) {
 		quantityMicros: 75 * UnitValue,
 		costMicros:     12_500_000,
 	}
-	params2 := &StockTransactionParams{
+	params2 := &TransactionParams{
 		txType:    BuyTransaction,
 		valueDate: time.Date(2023, 2, 1, 12, 0, 0, 0, time.UTC),
 		asset: Asset{
@@ -73,10 +73,10 @@ func TestAssetIds(t *testing.T) {
 		quantityMicros: 50 * UnitValue,
 		costMicros:     15_000_000,
 	}
-	l.AddStockTransaction(params1)
+	l.AddTransaction(params1)
 	// Add twice to test deduplication.
-	l.AddStockTransaction(params2)
-	l.AddStockTransaction(params2)
+	l.AddTransaction(params2)
+	l.AddTransaction(params2)
 	ids := l.AssetIds()
 	sort.Strings(ids)
 	if diff := cmp.Diff(ids, []string{"IE00B4L5Y983", "IE00BTJRMP35"}); diff != "" {

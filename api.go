@@ -4,6 +4,7 @@ import (
 	"time"
 )
 
+//go:generate go-enum -type=AssetType -string -json -all=false
 type AssetType int32
 
 const (
@@ -30,6 +31,7 @@ type Asset struct {
 	Name string
 }
 
+//go:generate go-enum -type=EntryType -string -json -all=false
 type EntryType int32
 
 const (

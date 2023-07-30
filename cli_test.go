@@ -1,6 +1,8 @@
 package kontoo
 
 import (
+	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -66,5 +68,20 @@ func TestFuzzyParseParams(t *testing.T) {
 				t.Errorf("fpParams mismatch (-want +got):\n%s", diff)
 			}
 		})
+	}
+}
+
+func TestLoadAssetList(t *testing.T) {
+	path := path.Join(t.TempDir(), "assets.json")
+	os.WriteFile(path, []byte(`[{"Id": "foo"}]`), 0644)
+	assets, err := loadAssetList(path)
+	if err != nil {
+		t.Fatalf("failed to load asset list: %s", err)
+	}
+	want := []*Asset{
+		{Id: "foo"},
+	}
+	if diff := cmp.Diff(want, assets); diff != "" {
+		t.Errorf("assets mismatch (-want +got):\n%s", diff)
 	}
 }

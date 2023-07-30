@@ -17,19 +17,34 @@ type LedgerUpdate interface {
 	EntryType() EntryType
 }
 
-type StockTransactionParams struct {
-	txType         EntryType
-	valueDate      time.Time
-	asset          Asset
-	currency       Currency
-	priceMicros    int64
-	quantityMicros int64
-	valueMicros    int64
-	costMicros     int64
+type TransactionParams struct {
+	txType             EntryType
+	valueDate          time.Time
+	asset              Asset
+	currency           Currency
+	priceMicros        int64
+	quantityMicros     int64
+	nominalValueMicros int64
+	valueMicros        int64
+	costMicros         int64
 }
 
-func (p *StockTransactionParams) EntryType() EntryType {
+func (p *TransactionParams) EntryType() EntryType {
 	return p.txType
+}
+
+func ValidateTransactionParams(p *TransactionParams) error {
+	if p.asset.isNominalValueBased() {
+		if p.nominalValueMicros <= 0 {
+			return fmt.Errorf("nominal value must be greater than zero")
+		}
+	}
+	if p.asset.isQuantityBased() {
+		if p.quantityMicros <= 0 {
+			return fmt.Errorf("quantity must be greater than zero")
+		}
+	}
+	return nil
 }
 
 // Returns the result of multiplying two values expressed in micros.
@@ -45,14 +60,15 @@ func Mmul(a int64, b int64) int64 {
 	return bigA.Int64()
 }
 
-func (a *Asset) isStockBased() bool {
+func (a *Asset) isQuantityBased() bool {
 	return a.Type == Stock || a.Type == StockExchangeTradedFund || a.Type == StockMutualFund
 }
 
-func (l *Ledger) AddStockTransaction(params *StockTransactionParams) (*Entry, error) {
-	if !params.asset.isStockBased() {
-		return nil, fmt.Errorf("not a stock asset type: %v", params.asset.Type)
-	}
+func (a *Asset) isNominalValueBased() bool {
+	return a.Type == CorporateBond || a.Type == GovernmentBond
+}
+
+func (l *Ledger) AddTransaction(params *TransactionParams) (*Entry, error) {
 	if params.txType != SellTransaction && params.txType != BuyTransaction {
 		return nil, fmt.Errorf("not a valid transaction type: %v", params.txType)
 	}

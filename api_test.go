@@ -3,13 +3,14 @@ package kontoo
 import (
 	"bytes"
 	"encoding/gob"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestExample(t *testing.T) {
+func TestGob(t *testing.T) {
 	// Create and serialize example Log.
 	example := Entry{
 		Created:   time.Now(),
@@ -39,5 +40,26 @@ func TestExample(t *testing.T) {
 	}
 	if diff := cmp.Diff(example, log); diff != "" {
 		t.Errorf("Log mismatch (-want +got):\n%s", diff)
+	}
+}
+
+func TestAssetTypeJsonEnum(t *testing.T) {
+	// AssetType is an int enum, but should be (de-)serialized as a string.
+	s := `{
+		"Id":   "IE00B4L5Y983",
+		"Type": "Stock",
+		"Name": "iShares Core MSCI World UCITS ETF USD (Acc)"
+	 }`
+	var got Asset
+	if err := json.Unmarshal([]byte(s), &got); err != nil {
+		t.Fatalf("unmarshal failed: %s", err)
+	}
+	want := Asset{
+		Id:   "IE00B4L5Y983",
+		Type: Stock,
+		Name: "iShares Core MSCI World UCITS ETF USD (Acc)",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("asset diff (-want +got):\n%s", diff)
 	}
 }
