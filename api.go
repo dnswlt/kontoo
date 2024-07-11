@@ -26,9 +26,17 @@ const (
 )
 
 type Asset struct {
-	Id   string
-	Type AssetType
-	Name string
+	Type           AssetType
+	Name           string
+	ShortName      string
+	IssueDate      time.Time
+	MaturityDate   time.Time
+	InterestMicros Micros
+	IBAN           string
+	AccountNumber  string
+	ISIN           string
+	WKN            string
+	TickerSymbol   string
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false
@@ -43,48 +51,46 @@ const (
 	InterestPayment      EntryType = 5
 	AssetValueStatement  EntryType = 6
 	AccountBalance       EntryType = 8
-	EntryDeletion        EntryType = 7
 )
 
-type Entry struct {
-	Created     time.Time
-	SequenceNum int64
-	ValueDate   time.Time
-	Type        EntryType
-	Asset       Asset
+// Dates without a time component.
+type Date time.Time
 
-	Currency Currency
+type LedgerEntry struct {
+	Created     time.Time
+	SequenceNum int64     `json:",omitempty"`
+	ValueDate   Date      `json:",omitempty"`
+	Type        EntryType `json:",omitempty"`
+	AssetRef    string    `json:",omitempty"`
+	AssetID     string    `json:",omitempty"`
+
+	Currency Currency `json:",omitempty"`
 
 	// All *Micros fields are given in either micros of the currency or micros of a fraction.
-	// 1'000'000 CHF in ValueMicros equal 1 CHF, 500'000 PriceMicros of a bond equal a price of 50% of the
-	// nominal value.
+	// 1'000'000 in ValueMicros equals 1.00 CHF (or whatever the Currency),
+	// 500'000 PriceMicros of a bond equal a price of 50% of the nominal value.
+	ValueMicros        Micros `json:"Value,omitempty"`        // Value in micros of the currency. 1'000'000 CHF in ValueMicros equal 1 CHF.
+	NominalValueMicros Micros `json:"NominalValue,omitempty"` // Nominal value of a bond.
+	QuantityMicros     Micros `json:"Quantity,omitempty"`     // Number of stocks, oz of gold.
+	PriceMicros        Micros `json:"Price,omitempty"`        // Price of a single quantity of the asset.
+	CostMicros         Micros `json:"Cost,omitempty"`         // Cost incurred by the transaction.
 
-	ValueMicros        int64 // Value in micros of the currency. 1'000'000 CHF in ValueMicros equal 1 CHF.
-	NominalValueMicros int64 // Nominal value of a bond.
-	QuantityMicros     int64 // Number of stocks, oz of gold.
-	PriceMicros        int64 // Price of a single quantity of the asset.
-
-	CostMicros int64 // Cost incurred by the transaction.
-
-	RefSequenceNum int64 // SequenceNum of a previous entry that this one refers to (e.g. for deletion).
+	Comment string `json:",omitempty"`
 }
 
 type Ledger struct {
-	entries []*Entry
+	Assets  []*Asset       `json:",omitempty"`
+	Entries []*LedgerEntry `json:",omitempty"`
 }
 
 type AssetValue struct {
-	Asset              Asset
-	ValueDate          time.Time
-	PriceDate          time.Time
-	ValueMicros        int64
-	NominalValueMicros int64 // Nominal value of a bond.
-	QuantityMicros     int64 // Number of stocks.
-	PriceMicros        int64 // Price of a single quantity of the asset.
+	ValueMicros        Micros
+	NominalValueMicros Micros // Nominal value of a bond.
+	QuantityMicros     Micros // Number of stocks.
+	PriceMicros        Micros // Price of a single quantity of the asset.
 }
 
 const (
-	Micros    = 1
 	Millis    = 1_000
 	UnitValue = 1_000_000
 )

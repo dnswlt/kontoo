@@ -1,206 +1,143 @@
 package kontoo
 
 import (
+	"encoding/json"
 	"fmt"
-	"math/big"
-	"sort"
+	"os"
+	"strings"
 	"time"
 )
 
-func NewLedger() *Ledger {
-	return &Ledger{
-		entries: []*Entry{},
+func DateVal(year int, month time.Month, day int) Date {
+	return Date(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+}
+
+func (d *Date) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(string(data), "\"")
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return err
 	}
-}
-
-type LedgerUpdate interface {
-	EntryType() EntryType
-}
-
-type TransactionParams struct {
-	txType             EntryType
-	valueDate          time.Time
-	asset              Asset
-	currency           Currency
-	priceMicros        int64
-	quantityMicros     int64
-	nominalValueMicros int64
-	valueMicros        int64
-	costMicros         int64
-}
-
-func (p *TransactionParams) EntryType() EntryType {
-	return p.txType
-}
-
-func ValidateTransactionParams(p *TransactionParams) error {
-	if p.asset.isNominalValueBased() {
-		if p.nominalValueMicros <= 0 {
-			return fmt.Errorf("nominal value must be greater than zero")
-		}
-	}
-	if p.asset.isQuantityBased() {
-		if p.quantityMicros <= 0 {
-			return fmt.Errorf("quantity must be greater than zero")
-		}
-	}
+	*d = Date(t)
 	return nil
 }
 
-// Returns the result of multiplying two values expressed in micros.
-// E.g., a == 2_000_000, b == 3_000_000 ==> MultMicros(a, b) == 6_000_000.
-func Mmul(a int64, b int64) int64 {
-	bigA := big.NewInt(a)
-	bigB := big.NewInt(b)
-	bigA.Mul(bigA, bigB)
-	bigA.Div(bigA, big.NewInt(1_000_000))
-	if !bigA.IsInt64() {
-		panic(fmt.Sprintf("cannot represent %v as int64 micros", bigA))
-	}
-	return bigA.Int64()
+func (d Date) MarshalJSON() ([]byte, error) {
+	return []byte("\"" + time.Time(d).Format("2006-01-02") + "\""), nil
 }
 
-func (a *Asset) isQuantityBased() bool {
-	return a.Type == Stock || a.Type == StockExchangeTradedFund || a.Type == StockMutualFund
+func (d Date) Equal(e Date) bool {
+	return time.Time(d).Equal(time.Time(e))
 }
 
-func (a *Asset) isNominalValueBased() bool {
-	return a.Type == CorporateBond || a.Type == GovernmentBond
+type Store struct {
+	L        *Ledger
+	assetMap map[string]*Asset // Maps the ledger's assets by ID.
 }
 
-func (l *Ledger) AddTransaction(params *TransactionParams) (*Entry, error) {
-	if params.txType != SellTransaction && params.txType != BuyTransaction {
-		return nil, fmt.Errorf("not a valid transaction type: %v", params.txType)
-	}
-	seq := int64(len(l.entries))
-	e := &Entry{
-		Created:        time.Now(),
-		SequenceNum:    seq,
-		ValueDate:      params.valueDate,
-		Type:           params.txType,
-		Asset:          params.asset,
-		Currency:       params.currency,
-		ValueMicros:    params.valueMicros,
-		QuantityMicros: params.quantityMicros,
-		CostMicros:     params.costMicros,
-		PriceMicros:    params.priceMicros,
-	}
-	l.entries = append(l.entries, e)
-	return e, nil
-}
-
-func (l *Ledger) AssetIds() []string {
-	m := make(map[string]struct{})
-	var ids []string
-	for _, e := range l.entries {
-		id := e.Asset.Id
-		if id == "" {
-			continue
-		}
+func NewStore(ledger *Ledger) (*Store, error) {
+	m := make(map[string]*Asset)
+	for _, asset := range ledger.Assets {
+		id := asset.ID()
 		if _, found := m[id]; found {
-			continue
+			return nil, fmt.Errorf("duplicate ID in ledger assets: %q", id)
 		}
-		m[id] = struct{}{}
-		ids = append(ids, id)
+		m[asset.ID()] = asset
 	}
-	return ids
+	return &Store{
+		L:        ledger,
+		assetMap: m,
+	}, nil
 }
 
-func (l *Ledger) Entries(assetId string, t time.Time) []*Entry {
-	var entries []*Entry
-	del := make(map[int64]bool)
-	for i := len(l.entries) - 1; i >= 0; i-- {
-		e := l.entries[i]
-		if e.Asset.Id != assetId {
-			continue
-		}
-		if e.Type == EntryDeletion {
-			del[e.RefSequenceNum] = true
-		}
-		if e.ValueDate.After(t) || del[e.SequenceNum] {
-			continue
-		}
-		entries = append(entries, e)
+func (a *Asset) ID() string {
+	if a.ISIN != "" {
+		return a.ISIN
 	}
-	sort.Slice(entries, func(i, j int) bool {
-		c := entries[i].ValueDate.Compare(entries[j].ValueDate)
-		if c == 0 {
-			return entries[i].SequenceNum < entries[j].SequenceNum
-		}
-		return c < 0
-	})
-	return entries
+	if a.IBAN != "" {
+		return a.IBAN
+	}
+	if a.AccountNumber != "" {
+		return a.AccountNumber
+	}
+	if a.WKN != "" {
+		return a.WKN
+	}
+	if a.TickerSymbol != "" {
+		return a.TickerSymbol
+	}
+	return ""
 }
 
-func (v *AssetValue) Add(e *Entry) {
-	v.QuantityMicros += e.QuantityMicros
-	v.NominalValueMicros += e.NominalValueMicros
+func (a *Asset) MatchRef(ref string) bool {
+	return a.IBAN == ref || a.ISIN == ref || a.WKN == ref ||
+		a.AccountNumber == ref || a.TickerSymbol == ref ||
+		a.ShortName == ref || a.Name == ref
 }
 
-func (v *AssetValue) Subtract(e *Entry) {
-	v.QuantityMicros -= e.QuantityMicros
-	v.NominalValueMicros -= e.NominalValueMicros
+func (s *Store) NextSequenceNum() int64 {
+	if len(s.L.Entries) == 0 {
+		return 0
+	}
+	return s.L.Entries[len(s.L.Entries)-1].SequenceNum + 1
 }
 
-func (v *AssetValue) Set(e *Entry) {
-	v.QuantityMicros = e.QuantityMicros
-	v.NominalValueMicros = e.NominalValueMicros
-	v.ValueMicros = e.ValueMicros
-	v.PriceMicros = e.PriceMicros
-	v.PriceDate = e.ValueDate
-}
-
-func (v *AssetValue) Reset() {
-	v.QuantityMicros = 0
-	v.NominalValueMicros = 0
-	v.ValueMicros = 0
-	v.PriceMicros = 0
-	v.PriceDate = time.Time{}
-}
-
-func (l *Ledger) AssetValue(assetId string, t time.Time) AssetValue {
-	entries := l.Entries(assetId, t)
-	if len(entries) == 0 {
-		return AssetValue{
-			Asset: Asset{
-				Id: assetId,
-			},
+func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
+	var res *Asset
+	for _, asset := range s.L.Assets {
+		if asset.MatchRef(ref) {
+			if res != nil {
+				// Non-unique reference
+				return nil, false
+			}
+			res = asset
 		}
 	}
-	var val AssetValue
-	ref := entries[len(entries)-1]
-	val.Asset = ref.Asset
-	val.ValueDate = ref.ValueDate
-	for _, e := range entries {
-		if e.PriceMicros > 0 {
-			val.PriceMicros = e.PriceMicros
-			val.PriceDate = e.ValueDate
-		}
-		switch e.Type {
-		case BuyTransaction:
-			val.Add(e)
-		case SellTransaction:
-			val.Subtract(e)
-		case AccountBalance, AssetValueStatement:
-			val.Set(e)
-		case AssetMaturity:
-			val.Reset()
-		}
+	if res == nil {
+		return nil, false
 	}
-	return val
+	return res, true
 }
 
-/*
-const (
-	UnspecifiedEntryType EntryType = 0
-	BuyTransaction       EntryType = 1
-	SellTransaction      EntryType = 2
-	AssetMaturity        EntryType = 3
-	DividendPayment      EntryType = 4
-	InterestPayment      EntryType = 5
-	AssetValueStatement  EntryType = 6
-	AccountBalance       EntryType = 8
-	EntryDeletion        EntryType = 7
+func (s *Store) Add(e *LedgerEntry) error {
+	var a *Asset
+	found := false
+	if e.AssetID != "" {
+		a, found = s.assetMap[e.AssetID]
+	} else {
+		a, found = s.FindAssetByRef(e.AssetRef)
+	}
+	if !found {
+		return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
+	}
+	if time.Time(e.ValueDate).IsZero() {
+		return fmt.Errorf("ValueDate must be set")
+	}
+	e.Created = time.Now()
+	e.SequenceNum = s.NextSequenceNum()
+	// Change soft-link to ID ref:
+	e.AssetRef = ""
+	e.AssetID = a.ID()
+	s.L.Entries = append(s.L.Entries, e)
+	return nil
+}
 
-)
-*/
+func (l *Ledger) Save(path string) error {
+	data, err := l.Marshal()
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func (l *Ledger) Load(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, l)
+}
+
+func (l *Ledger) Marshal() ([]byte, error) {
+	return json.MarshalIndent(l, "", "  ")
+}
