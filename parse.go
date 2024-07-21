@@ -25,40 +25,6 @@ const (
 	EntryTypeArg
 )
 
-type ArgSpec struct {
-	Name       string
-	Type       argType
-	ShortNames []string
-}
-
-var allArgs []ArgSpec = []ArgSpec{
-	{
-		Name:       "Type",
-		Type:       EntryTypeArg,
-		ShortNames: []string{"t"},
-	},
-	{
-		Name:       "ValueDate",
-		Type:       DateArg,
-		ShortNames: []string{"vd", "date"},
-	},
-	{
-		Name:       "AssetRef",
-		Type:       StringArg,
-		ShortNames: []string{"r", "ref"},
-	},
-	{
-		Name:       "Currency",
-		Type:       StringArg,
-		ShortNames: []string{"c"},
-	},
-	{
-		Name:       "Value",
-		Type:       DecimalArg,
-		ShortNames: []string{"v"},
-	},
-}
-
 var keywordRegex = regexp.MustCompile(`^--?([a-zA-Z]\w*)$`)
 
 func ParseArgs(args []string) (CommandArgs, error) {

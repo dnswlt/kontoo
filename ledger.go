@@ -127,6 +127,11 @@ func (s *Store) Add(e *LedgerEntry) error {
 	if time.Time(e.ValueDate).IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
+	if e.Currency != "" && e.Currency != a.Currency {
+		return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
+	} else if e.Currency == "" {
+		e.Currency = a.Currency
+	}
 	e.Created = time.Now()
 	e.SequenceNum = s.NextSequenceNum()
 	// Change soft-link to ID ref:

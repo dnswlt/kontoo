@@ -166,7 +166,7 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := r.ParseForm(); err != nil {
-		w.WriteHeader(http.StatusBadRequest)
+		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 	// Parse as a ledger entry in the same way that we'd parse it from the command line.
@@ -190,8 +190,16 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	store.Add(e)
-	store.Save()
+	err = store.Add(e)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error adding ledger entry: %v", err), http.StatusBadRequest)
+		return
+	}
+	err = store.Save()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
 	if _, ok := r.Form["SubmitNext"]; ok {
 		// Create new one immediately.
 		http.Redirect(w, r, "/kontoo/entries/new", http.StatusSeeOther)

@@ -28,15 +28,16 @@ const (
 type Asset struct {
 	Type           AssetType
 	Name           string
-	ShortName      string
-	IssueDate      time.Time
-	MaturityDate   time.Time
-	InterestMicros Micros
-	IBAN           string
-	AccountNumber  string
-	ISIN           string
-	WKN            string
-	TickerSymbol   string
+	ShortName      string    `json:",omitempty"`
+	IssueDate      time.Time `json:",omitempty"`
+	MaturityDate   time.Time `json:",omitempty"`
+	InterestMicros Micros    `json:",omitempty"`
+	IBAN           string    `json:",omitempty"`
+	AccountNumber  string    `json:",omitempty"`
+	ISIN           string    `json:",omitempty"`
+	WKN            string    `json:",omitempty"`
+	TickerSymbol   string    `json:",omitempty"`
+	Currency       Currency
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false
