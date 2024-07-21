@@ -153,39 +153,6 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 	return nil
 }
 
-var decimalRegexp = regexp.MustCompile(`^-?(\d+(\.\d*)?|\.\d+$)`)
-
-func ParseDecimalAsMicrosOld(decimal string, m *Micros) error {
-	if matched := decimalRegexp.MatchString(decimal); !matched {
-		return fmt.Errorf("not a valid decimal %q", decimal)
-	}
-	intpart, fracpart, _ := strings.Cut(decimal, ".")
-	var v int64
-	var err error
-	if intpart != "" {
-		v, err = strconv.ParseInt(intpart, 10, 64)
-		if err != nil {
-			return err
-		}
-		if v > math.MaxInt64/UnitValue {
-			return fmt.Errorf("decimal is too large to represent as micros: %d", v)
-		}
-	}
-	if fracpart == "" {
-		*m = Micros(v * UnitValue)
-		return nil
-	}
-	if len(fracpart) > 6 {
-		return fmt.Errorf("fractional part cannot be represented as micros %q", fracpart)
-	}
-	dv, err := strconv.Atoi(fracpart)
-	if err != nil {
-		return err
-	}
-	*m = Micros(v*UnitValue + int64(dv*int(math.Pow10(6-len(fracpart)))))
-	return nil
-}
-
 func ParseDecimal(args []string, m *Micros) error {
 	if args == nil {
 		return nil
@@ -247,45 +214,160 @@ func ParseString(args []string, s *string) error {
 	return nil
 }
 
-func ParseLedgerEntry(args []string) (*LedgerEntry, error) {
-	e := &LedgerEntry{}
+type argParseFunc = func([]string) error
+
+type argSpec struct {
+	args map[string]argParseFunc
+	// pArgs lists args that can also be specified without a keyword
+	// (i.e., as positional arguments), in order. The last of these will receive
+	// all trailing arguments.
+	pArgs []string
+}
+
+func (s *argSpec) entryType(name string, e *EntryType) {
+	s.args[name] = func(xs []string) error {
+		return ParseEntryType(xs, e)
+	}
+}
+
+func (s *argSpec) currency(name string, c *Currency) {
+	s.args[name] = func(xs []string) error {
+		return ParseCurrency(xs, c)
+	}
+}
+
+func (s *argSpec) decimal(name string, d *Micros) {
+	s.args[name] = func(xs []string) error {
+		return ParseDecimal(xs, d)
+	}
+}
+
+func (s *argSpec) date(name string, d *Date) {
+	s.args[name] = func(xs []string) error {
+		return ParseDate(xs, d)
+	}
+}
+
+func (s *argSpec) strings(name, sep string, out *string) {
+	s.args[name] = func(xs []string) error {
+		*out = strings.Join(xs, sep)
+		return nil
+	}
+}
+
+func (s *argSpec) str(name string, out *string) {
+	s.args[name] = func(xs []string) error {
+		if len(xs) != 1 {
+			return fmt.Errorf("too many arguments (%d) for string %q", len(xs), name)
+		}
+		*out = xs[0]
+		return nil
+	}
+}
+
+func subseq(s, t string) bool {
+	if len(s) < len(t) {
+		return false
+	}
+	sp := 0
+	for i := 0; i < len(t); i++ {
+		for sp < len(s) && s[sp] != t[i] {
+			sp++
+		}
+		if sp == len(s) {
+			return false
+		}
+		sp++
+	}
+	return true
+}
+
+// matchArg finds the unique argument in argSpec that has sub as a subsequence.
+// If no unique such argument exists, it returns false.
+func (s *argSpec) matchArg(sub string) (string, bool) {
+	if _, ok := s.args[sub]; ok {
+		// Exact match always comes first.
+		return sub, true
+	}
+	// Try case-insensitive subsequence match.
+	sub = strings.ToLower(sub)
+	match, found := "", false
+	for a := range s.args {
+		if subseq(strings.ToLower(a), sub) {
+			if found {
+				return "", false // not unique
+			}
+			match, found = a, true
+		}
+	}
+	return match, found
+}
+
+func (s *argSpec) parse(args []string) error {
 	ca, err := ParseArgs(args)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	for name, args := range ca.KeywordArgs {
+		if fullName, ok := s.matchArg(name); ok {
+			err := s.args[fullName](args)
+			if err != nil {
+				return err
+			}
+		} else {
+			return fmt.Errorf("invalid argument: %q", name)
+		}
+	}
+	// Parse positional args.
 	if len(ca.Args) > 0 {
-		if len(ca.Args) >= 1 {
-			ca.KeywordArgs["Type"] = []string{ca.Args[0]}
+		np := len(s.pArgs)
+		if np == 0 {
+			return fmt.Errorf("excess positional arguments: %v", ca.Args)
 		}
-		if len(ca.Args) == 2 {
-			ca.KeywordArgs["AssetRef"] = []string{ca.Args[1]}
+		i := 0
+		for i < len(ca.Args) && i < np-1 {
+			if err := s.args[s.pArgs[i]](ca.Args[i : i+1]); err != nil {
+				return err
+			}
+			i++
 		}
-		if len(ca.Args) > 2 {
-			return nil, fmt.Errorf("too many non-keyword arguments: %v", ca.Args[2:])
+		// Excess args
+		if i < len(ca.Args) {
+			if err := s.args[s.pArgs[i]](ca.Args[i:]); err != nil {
+				return err
+			}
 		}
 	}
-	if err := ParseEntryType(ca.KeywordArgs["Type"], &e.Type); err != nil {
+	return nil
+}
+
+func (s *argSpec) positionalArgs(names ...string) {
+	s.pArgs = append(s.pArgs, names...)
+}
+
+func ledgerArgSpec(e *LedgerEntry) *argSpec {
+	s := &argSpec{args: make(map[string]argParseFunc)}
+	s.entryType("Type", &e.Type)
+	s.str("AssetID", &e.AssetID)
+	s.str("AssetRef", &e.AssetRef)
+	s.currency("Currency", &e.Currency)
+	s.decimal("Value", &e.ValueMicros)
+	s.decimal("NominalValue", &e.NominalValueMicros)
+	s.decimal("Cost", &e.CostMicros)
+	s.decimal("Quantity", &e.QuantityMicros)
+	s.decimal("Price", &e.PriceMicros)
+	s.date("ValueDate", &e.ValueDate)
+	s.strings("Comment", " ", &e.Comment)
+	s.positionalArgs("Type", "AssetRef")
+	return s
+}
+
+func ParseLedgerEntry(args []string) (*LedgerEntry, error) {
+	e := &LedgerEntry{}
+	s := ledgerArgSpec(e)
+	err := s.parse(args)
+	if err != nil {
 		return nil, err
-	}
-	ref := ca.KeywordArgs["AssetRef"]
-	if len(ref) != 1 {
-		return nil, fmt.Errorf("must specify exactly one -AssetRef, got %v", ref)
-	}
-	e.AssetRef = ref[0]
-	if err := ParseCurrency(ca.KeywordArgs["Currency"], &e.Currency); err != nil {
-		return nil, err
-	}
-	if err := ParseDecimal(ca.KeywordArgs["Value"], &e.ValueMicros); err != nil {
-		return nil, err
-	}
-	if err := ParseDecimal(ca.KeywordArgs["NominalValue"], &e.NominalValueMicros); err != nil {
-		return nil, err
-	}
-	if err := ParseDate(ca.KeywordArgs["ValueDate"], &e.ValueDate); err != nil {
-		return nil, err
-	}
-	if args, found := ca.KeywordArgs["Comment"]; found {
-		e.Comment = strings.Join(args, " ")
 	}
 	return e, nil
 }

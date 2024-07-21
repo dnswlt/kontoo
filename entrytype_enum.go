@@ -20,40 +20,41 @@ func _() {
 	_ = x[DividendPayment-4]
 	_ = x[InterestPayment-5]
 	_ = x[AssetValueStatement-6]
-	_ = x[AccountBalance-8]
+	_ = x[AccountBalance-7]
+	_ = x[ExchangeRate-8]
 }
 
-const (
-	_EntryType_name_0 = "UnspecifiedEntryTypeBuyTransactionSellTransactionAssetMaturityDividendPaymentInterestPaymentAssetValueStatement"
-	_EntryType_name_1 = "AccountBalance"
-)
+const _EntryType_name = "UnspecifiedEntryTypeBuyTransactionSellTransactionAssetMaturityDividendPaymentInterestPaymentAssetValueStatementAccountBalanceExchangeRate"
 
-var (
-	_EntryType_index_0 = [...]uint8{0, 20, 34, 49, 62, 77, 92, 111}
-)
+var _EntryType_index = [...]uint8{0, 20, 34, 49, 62, 77, 92, 111, 125, 137}
+
+func _() {
+	var _nil_EntryType_value = func() (val EntryType) { return }()
+
+	// An "cannot convert EntryType literal (type EntryType) to type fmt.Stringer" compiler error signifies that the base type have changed.
+	// Re-run the go-enum command to generate them again.
+	var _ fmt.Stringer = _nil_EntryType_value
+}
 
 func (i EntryType) String() string {
-	switch {
-	case 0 <= i && i <= 6:
-		return _EntryType_name_0[_EntryType_index_0[i]:_EntryType_index_0[i+1]]
-	case i == 8:
-		return _EntryType_name_1
-	default:
+	if i < 0 || i >= EntryType(len(_EntryType_index)-1) {
 		return "EntryType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	return _EntryType_name[_EntryType_index[i]:_EntryType_index[i+1]]
 }
 
-var _EntryType_values = []EntryType{0, 1, 2, 3, 4, 5, 6, 8}
+var _EntryType_values = []EntryType{0, 1, 2, 3, 4, 5, 6, 7, 8}
 
 var _EntryType_name_to_values = map[string]EntryType{
-	_EntryType_name_0[0:20]:   0,
-	_EntryType_name_0[20:34]:  1,
-	_EntryType_name_0[34:49]:  2,
-	_EntryType_name_0[49:62]:  3,
-	_EntryType_name_0[62:77]:  4,
-	_EntryType_name_0[77:92]:  5,
-	_EntryType_name_0[92:111]: 6,
-	_EntryType_name_1[0:14]:   8,
+	_EntryType_name[0:20]:    0,
+	_EntryType_name[20:34]:   1,
+	_EntryType_name[34:49]:   2,
+	_EntryType_name[49:62]:   3,
+	_EntryType_name[62:77]:   4,
+	_EntryType_name[77:92]:   5,
+	_EntryType_name[92:111]:  6,
+	_EntryType_name[111:125]: 7,
+	_EntryType_name[125:137]: 8,
 }
 
 // ParseEntryTypeString retrieves an enum value from the enum constants string name.

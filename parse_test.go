@@ -162,3 +162,27 @@ func TestParseLedgerEntry(t *testing.T) {
 		})
 	}
 }
+
+func TestSubseq(t *testing.T) {
+	tests := []struct {
+		s    string
+		t    string
+		want bool
+	}{
+		{"foo", "", true},
+		{"", "", true},
+		{"foo", "bar", false},
+		{"foo", "foo", true},
+		{"foo", "foos", false},
+		{"123f4o5o", "foo", true},
+		{"_jack_", "jacki", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.s+"-"+tc.t, func(t *testing.T) {
+			got := subseq(tc.s, tc.t)
+			if got != tc.want {
+				t.Errorf("Want: %t, got: %t", tc.want, got)
+			}
+		})
+	}
+}

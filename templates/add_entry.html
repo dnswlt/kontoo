@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hexz</title>
+    <style>
+        body {
+            font-family: sans-serif;
+        }
+        th {
+            text-align: left;
+        }
+        td, th {
+            padding-right: 1ex;
+        }
+        .ralign {
+            text-align: right;
+        }
+        .field-label {
+            font-weight: bold;
+            font-size: 90%;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        .field-value {
+            width: 12em;
+            margin-bottom: 1ex;
+        }
+        .field-value input, .field-value textarea, .field-value select {
+            width: 100%;
+        }
+        textarea {
+            font-family: sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kontoo</h1>
+    <form method="post" action="/kontoo/entries">
+        <div class="field">
+            <div class="field-label">
+                <label for="ValueDate">Value date</label>
+            </div>
+            <div class="field-value">
+                <input id="ValueDate" name="ValueDate" type="date" value="{{.CurrentDate}}"required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Type">Type</label>
+            </div>
+            <div class="field-value">
+                <select id="Type" name="Type" type="text">
+                    <option value="BuyTransaction">Buy</option>
+                    <option value="SellTransaction">Sell</option>
+                    <option value="AssetMaturity">Asset maturity</option>
+                    <option value="DividendPayment">Dividend payment</option>
+                    <option value="InterestPayment">Interest payment</option>
+                    <option value="AssetValueStatement">Asset value</option>
+                    <option value="AccountBalance">Account balance</option>
+                    <option value="ExchangeRate">Exchange rate</option>
+                </select>   
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="AssetID">Asset</label>
+            </div>
+            <div class="field-value">
+                <select id="AssetID" name="AssetID" type="text">
+                    {{range .Assets}}
+                    <option value="{{.ID}}">{{.Name}}</option>
+                    {{end}}
+                    <option value="">-- See Asset Ref. --</option>
+                </select>   
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="AssetRef">Asset reference</label>
+            </div>
+            <div class="field-value">
+                <input id="AssetRef" name="AssetRef" type="text">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Value">Value</label>
+            </div>
+            <div class="field-value">
+                <input id="Value" name="Value" type="text">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="NominalValue">Nominal value</label>
+            </div>
+            <div class="field-value">
+                <input id="NominalValue" name="NominalValue" type="text" pattern="\d+(\.\d+)?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Quantity">Quantity</label>
+            </div>
+            <div class="field-value">
+                <input id="Quantity" name="Quantity" type="text" pattern="\d+(\.\d+)?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Price">Price</label>
+            </div>
+            <div class="field-value">
+                <input id="Price" name="Price" type="text" pattern="\d+(\.\d+)?%?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Cost">Cost</label>
+            </div>
+            <div class="field-value">
+                <input id="Cost" name="Cost" type="text" pattern="\d+(\.\d+)?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Comment">Comment</label>
+            </div>
+            <div class="field-value">
+                <textarea rows="3" id="Comment" name="Comment"></textarea>
+            </div>
+        </div>
+        <div>
+            <input type="submit" name="Submit" value="Save">
+            <input type="submit" name="SubmitNext" value="Save &amp; enter next">
+        </div>
+    </form>
+</body>
+</html>

@@ -50,7 +50,8 @@ const (
 	DividendPayment      EntryType = 4
 	InterestPayment      EntryType = 5
 	AssetValueStatement  EntryType = 6
-	AccountBalance       EntryType = 8
+	AccountBalance       EntryType = 7
+	ExchangeRate         EntryType = 8
 )
 
 // Dates without a time component.
