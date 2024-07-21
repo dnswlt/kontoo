@@ -33,9 +33,18 @@ func (d Date) Equal(e Date) bool {
 type Store struct {
 	L        *Ledger
 	assetMap map[string]*Asset // Maps the ledger's assets by ID.
+	path     string            // Path to the ledger JSON.
 }
 
-func NewStore(ledger *Ledger) (*Store, error) {
+func LoadStore(path string) (*Store, error) {
+	l := &Ledger{}
+	if err := l.Load(path); err != nil {
+		return nil, fmt.Errorf("failed to load ledger: %w", err)
+	}
+	return NewStore(l, path)
+}
+
+func NewStore(ledger *Ledger, path string) (*Store, error) {
 	m := make(map[string]*Asset)
 	for _, asset := range ledger.Assets {
 		id := asset.ID()
@@ -47,7 +56,12 @@ func NewStore(ledger *Ledger) (*Store, error) {
 	return &Store{
 		L:        ledger,
 		assetMap: m,
+		path:     path,
 	}, nil
+}
+
+func (s *Store) Save() error {
+	return s.L.Save(s.path)
 }
 
 func (a *Asset) ID() string {

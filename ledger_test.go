@@ -24,7 +24,7 @@ func TestStoreAdd(t *testing.T) {
 		AssetRef:  "BUND.123",
 		ValueDate: DateVal(2023, 1, 30),
 	}
-	s, err := NewStore(l)
+	s, err := NewStore(l, "")
 	if err != nil {
 		t.Fatalf("Failed to create Store: %v", err)
 	}

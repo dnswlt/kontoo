@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Hexz</title>
+    <style>
+        body {
+            font-family: arial, sans-serif;
+        }
+        th {
+            text-align: left;
+        }
+        td, th {
+            padding-right: 1ex;
+        }
+        .ralign {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>Kontoo</h1>
+    <p>
+        {{.CurrentDate}}
+    </p>
+    <table>
+        <thead>
+            <tr>
+                <th>Value Date</th>
+                <th>Entry Type</th>
+                <th>Asset ID</th>
+                <th>Asset Name</th>
+                <th>Asset Class</th>
+                <th>Currency</th>
+                <th>Value</th>
+                <th>Cost</th>
+                <th>Quantity</th>
+                <th>Price</th>
+                <th>Comment</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .TableRows}}
+            <tr>
+                <td>{{ .ValueDate }}</td>
+                <td>{{ .EntryType }}</td>
+                <td>{{ .AssetID }}</td>
+                <td>{{ .AssetName }}</td>
+                <td>{{ .AssetType }}</td>
+                <td class="ralign">{{ .Currency }}</td>
+                <td>{{ .Value }}</td>
+                <td>{{ .Cost }}</td>
+                <td>{{ .Quantity }}</td>
+                <td>{{ .Price }}</td>
+                <td>{{ .Comment }}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>    
+</body>
+</html>

@@ -58,7 +58,7 @@ type Date time.Time
 
 type LedgerEntry struct {
 	Created     time.Time
-	SequenceNum int64     `json:",omitempty"`
+	SequenceNum int64
 	ValueDate   Date      `json:",omitempty"`
 	Type        EntryType `json:",omitempty"`
 	AssetRef    string    `json:",omitempty"`

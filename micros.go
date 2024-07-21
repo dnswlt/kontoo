@@ -20,7 +20,7 @@ func (a Micros) Mul(b Micros) Micros {
 	return Micros(bigA.Int64())
 }
 
-func (m Micros) MarshalJSON() ([]byte, error) {
+func (m Micros) Format() string {
 	sign := ""
 	if m < 0 {
 		sign = "-"
@@ -28,12 +28,16 @@ func (m Micros) MarshalJSON() ([]byte, error) {
 	}
 	frac := m % 1_000_000
 	if frac == 0 {
-		return []byte(fmt.Sprintf(`"%s%d"`, sign, m/1_000_000)), nil
+		return fmt.Sprintf(`"%s%d"`, sign, m/1_000_000)
 	}
 	if frac%10_000 == 0 {
-		return []byte(fmt.Sprintf(`"%s%d.%02d"`, sign, m/1_000_000, frac/10_000)), nil
+		return fmt.Sprintf(`"%s%d.%02d"`, sign, m/1_000_000, frac/10_000)
 	}
-	return []byte(fmt.Sprintf(`"%s%d.%06d"`, sign, m/1_000_000, m%1_000_000)), nil
+	return fmt.Sprintf(`"%s%d.%06d"`, sign, m/1_000_000, m%1_000_000)
+}
+
+func (m Micros) MarshalJSON() ([]byte, error) {
+	return []byte(m.Format()), nil
 }
 
 func (m *Micros) UnmarshalJSON(data []byte) error {
