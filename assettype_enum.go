@@ -27,21 +27,24 @@ func _() {
 	_ = x[CheckingAccount-11]
 	_ = x[PensionAccount-12]
 	_ = x[Commodity-13]
+	_ = x[Cash-14]
+	_ = x[TaxLiability-15]
+	_ = x[GeneralDebt-16]
 	_ = x[OtherAssetType-999]
 }
 
 const (
-	_AssetType_name_0 = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountPensionAccountCommodity"
+	_AssetType_name_0 = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountPensionAccountCommodityCashTaxLiabilityGeneralDebt"
 	_AssetType_name_1 = "OtherAssetType"
 )
 
 var (
-	_AssetType_index_0 = [...]uint8{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 206, 215}
+	_AssetType_index_0 = [...]uint8{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 206, 215, 219, 231, 242}
 )
 
 func (i AssetType) String() string {
 	switch {
-	case 0 <= i && i <= 13:
+	case 0 <= i && i <= 16:
 		return _AssetType_name_0[_AssetType_index_0[i]:_AssetType_index_0[i+1]]
 	case i == 999:
 		return _AssetType_name_1
@@ -50,7 +53,7 @@ func (i AssetType) String() string {
 	}
 }
 
-var _AssetType_values = []AssetType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 999}
+var _AssetType_values = []AssetType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 999}
 
 var _AssetType_name_to_values = map[string]AssetType{
 	_AssetType_name_0[0:20]:    0,
@@ -67,6 +70,9 @@ var _AssetType_name_to_values = map[string]AssetType{
 	_AssetType_name_0[177:192]: 11,
 	_AssetType_name_0[192:206]: 12,
 	_AssetType_name_0[206:215]: 13,
+	_AssetType_name_0[215:219]: 14,
+	_AssetType_name_0[219:231]: 15,
+	_AssetType_name_0[231:242]: 16,
 	_AssetType_name_1[0:14]:    999,
 }
 

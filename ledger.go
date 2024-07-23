@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
 
 func DateVal(year int, month time.Month, day int) Date {
-	return Date(time.Date(year, month, day, 0, 0, 0, 0, time.UTC))
+	return Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
 
 func (d *Date) UnmarshalJSON(data []byte) error {
@@ -18,16 +19,16 @@ func (d *Date) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	*d = Date(t)
+	*d = Date{t}
 	return nil
 }
 
 func (d Date) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + time.Time(d).Format("2006-01-02") + "\""), nil
+	return []byte("\"" + d.Format("2006-01-02") + "\""), nil
 }
 
 func (d Date) Equal(e Date) bool {
-	return time.Time(d).Equal(time.Time(e))
+	return d.Time.Equal(e.Time)
 }
 
 type Store struct {
@@ -80,6 +81,9 @@ func (a *Asset) ID() string {
 	if a.TickerSymbol != "" {
 		return a.TickerSymbol
 	}
+	if a.CustomID != "" {
+		return a.CustomID
+	}
 	return ""
 }
 
@@ -113,32 +117,142 @@ func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
 	return res, true
 }
 
+func allZero(ms ...Micros) bool {
+	for _, m := range ms {
+		if m != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Store) append(e *LedgerEntry) {
+	if e.Created.IsZero() {
+		e.Created = time.Now()
+	}
+	e.SequenceNum = s.NextSequenceNum()
+	s.L.Entries = append(s.L.Entries, e)
+}
+
 func (s *Store) Add(e *LedgerEntry) error {
-	var a *Asset
-	found := false
-	if e.AssetID != "" {
-		a, found = s.assetMap[e.AssetID]
-	} else {
-		a, found = s.FindAssetByRef(e.AssetRef)
-	}
-	if !found {
-		return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
-	}
-	if time.Time(e.ValueDate).IsZero() {
+	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
-	if e.Currency != "" && e.Currency != a.Currency {
-		return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
-	} else if e.Currency == "" {
-		e.Currency = a.Currency
+	switch e.Type {
+	case ExchangeRate:
+		if e.QuoteCurrency == "" {
+			return fmt.Errorf("QuoteCurrency must not be empty")
+		}
+		if e.Currency == "" {
+			e.Currency = s.L.Header.BaseCurrency
+		}
+		if e.PriceMicros == 0 {
+			return fmt.Errorf("Price must be non-zero for ExchangeRate entry")
+		}
+		if !allZero(e.ValueMicros, e.NominalValueMicros, e.CostMicros, e.QuantityMicros) {
+			return fmt.Errorf("only Price may be specified for ExchangeRate entry")
+		}
+	case BuyTransaction, SellTransaction, AssetMaturity, DividendPayment, InterestPayment,
+		AssetPrice, AccountBalance:
+		if e.NominalValueMicros != 0 && e.QuantityMicros != 0 {
+			return fmt.Errorf("only one of NominalValueMicros and QuantityMicros may be specified")
+		}
+		if e.QuoteCurrency != "" {
+			return fmt.Errorf("QuoteCurrency must not be specified for entry type %q", e.Type)
+		}
+		if e.PriceMicros < 0 {
+			return fmt.Errorf("PriceMicros must not be negative")
+		}
+		if allZero(e.ValueMicros, e.NominalValueMicros, e.QuantityMicros, e.PriceMicros, e.CostMicros) {
+			return fmt.Errorf("entry must have at least one non-zero value")
+		}
+		// Common checks and actions for an asset-related entry.
+		var a *Asset
+		found := false
+		if e.AssetID != "" {
+			a, found = s.assetMap[e.AssetID]
+		} else {
+			a, found = s.FindAssetByRef(e.AssetRef)
+		}
+		if !found {
+			return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
+		}
+		if e.Currency != "" && e.Currency != a.Currency {
+			return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
+		} else if e.Currency == "" {
+			e.Currency = a.Currency
+		}
+		// Change soft-link to ID ref:
+		e.AssetRef, e.AssetID = "", a.ID()
+	default:
+		return fmt.Errorf("unknown ledger entry type: %q", e.Type)
 	}
-	e.Created = time.Now()
-	e.SequenceNum = s.NextSequenceNum()
-	// Change soft-link to ID ref:
-	e.AssetRef = ""
-	e.AssetID = a.ID()
-	s.L.Entries = append(s.L.Entries, e)
+	s.append(e)
 	return nil
+}
+
+type AssetPosition struct {
+	// Exactly one of Asset and AssetGroup must be populated.
+	Asset      *Asset
+	AssetGroup *AssetGroup
+	PVal
+}
+
+func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
+	byAsset := make(map[string][]*LedgerEntry)
+	// Create sorted lists (ascending by ValueDate) per asset.
+	for _, e := range s.L.Entries {
+		if !e.ValueDate.After(t) {
+			byAsset[e.AssetID] = append(byAsset[e.AssetID], e)
+		}
+	}
+	for _, es := range byAsset {
+		slices.SortFunc(es, func(a, b *LedgerEntry) int {
+			return a.ValueDate.Time.Compare(b.ValueDate.Time)
+		})
+	}
+	var res []*AssetPosition
+	for assetId, es := range byAsset {
+		pos := &AssetPosition{
+			Asset: s.assetMap[assetId],
+		}
+		for _, e := range es {
+			pos.Update(e)
+		}
+		res = append(res, pos)
+	}
+	return res
+}
+
+func (p *AssetPosition) Update(e *LedgerEntry) {
+	switch e.Type {
+	case BuyTransaction:
+		p.NominalValueMicros += e.NominalValueMicros
+		p.QuantityMicros += e.QuantityMicros
+		p.PriceMicros = e.PriceMicros
+	case SellTransaction:
+		p.NominalValueMicros -= e.NominalValueMicros
+		p.QuantityMicros -= e.QuantityMicros
+		p.PriceMicros = e.PriceMicros
+	case AssetMaturity:
+		p.NominalValueMicros = 0
+		p.QuantityMicros = 0
+		p.PriceMicros = 0
+	case AssetPrice:
+		p.PriceMicros = e.PriceMicros
+	case AccountBalance:
+		p.NominalValueMicros = e.NominalValueMicros
+		p.NominalValueMicros = e.NominalValueMicros
+		p.QuantityMicros = e.QuantityMicros
+		p.PriceMicros = e.PriceMicros
+	}
+}
+
+func (v *PVal) ValueMicros() Micros {
+	if v.NominalValueMicros > 0 {
+		return v.NominalValueMicros.MulRound(v.PriceMicros)
+	}
+	return v.QuantityMicros.MulRound(v.PriceMicros)
 }
 
 func (l *Ledger) Save(path string) error {

@@ -19,14 +19,14 @@ func _() {
 	_ = x[AssetMaturity-3]
 	_ = x[DividendPayment-4]
 	_ = x[InterestPayment-5]
-	_ = x[AssetValueStatement-6]
+	_ = x[AssetPrice-6]
 	_ = x[AccountBalance-7]
 	_ = x[ExchangeRate-8]
 }
 
-const _EntryType_name = "UnspecifiedEntryTypeBuyTransactionSellTransactionAssetMaturityDividendPaymentInterestPaymentAssetValueStatementAccountBalanceExchangeRate"
+const _EntryType_name = "UnspecifiedEntryTypeBuyTransactionSellTransactionAssetMaturityDividendPaymentInterestPaymentAssetPriceAccountBalanceExchangeRate"
 
-var _EntryType_index = [...]uint8{0, 20, 34, 49, 62, 77, 92, 111, 125, 137}
+var _EntryType_index = [...]uint8{0, 20, 34, 49, 62, 77, 92, 102, 116, 128}
 
 func _() {
 	var _nil_EntryType_value = func() (val EntryType) { return }()
@@ -52,9 +52,9 @@ var _EntryType_name_to_values = map[string]EntryType{
 	_EntryType_name[49:62]:   3,
 	_EntryType_name[62:77]:   4,
 	_EntryType_name[77:92]:   5,
-	_EntryType_name[92:111]:  6,
-	_EntryType_name[111:125]: 7,
-	_EntryType_name[125:137]: 8,
+	_EntryType_name[92:102]:  6,
+	_EntryType_name[102:116]: 7,
+	_EntryType_name[116:128]: 8,
 }
 
 // ParseEntryTypeString retrieves an enum value from the enum constants string name.

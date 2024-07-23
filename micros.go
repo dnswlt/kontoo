@@ -2,13 +2,14 @@ package kontoo
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 )
 
 type Micros int64
 
 // Returns the result of multiplying two values expressed in micros.
-// E.g., a == 2_000_000, b == 3_000_000 ==> MultMicros(a, b) == 6_000_000.
+// E.g., a == 2_000_000, b == 3_000_000 ==> Mul(a, b) == 6_000_000.
 func (a Micros) Mul(b Micros) Micros {
 	bigA := big.NewInt(int64(a))
 	bigB := big.NewInt(int64(b))
@@ -18,6 +19,12 @@ func (a Micros) Mul(b Micros) Micros {
 		panic(fmt.Sprintf("cannot represent %v as int64 micros", bigA))
 	}
 	return Micros(bigA.Int64())
+}
+
+func (a Micros) MulRound(b Micros) Micros {
+	x := float64(a)
+	y := float64(b) / 1e6
+	return Micros(math.Floor(x * y))
 }
 
 func (m Micros) Format() string {

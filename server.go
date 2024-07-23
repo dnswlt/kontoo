@@ -30,7 +30,7 @@ type LedgerEntryRow struct {
 }
 
 func (e *LedgerEntryRow) ValueDate() string {
-	return time.Time(e.E.ValueDate).Format("2006-01-02")
+	return e.E.ValueDate.Format("2006-01-02")
 }
 func (e *LedgerEntryRow) EntryType() string {
 	return e.E.Type.String()
@@ -48,6 +48,9 @@ func (e *LedgerEntryRow) Currency() string {
 	return string(e.E.Currency)
 }
 func formatMonetaryValue(m Micros) string {
+	if m == 0 {
+		return ""
+	}
 	v := float64(m) / 1e6
 	return fmt.Sprintf("%.2f", v)
 }
@@ -83,17 +86,23 @@ func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 	rows := LedgerEntryRows(s)
 	// Sort ledger rows by (ValueDate, Created) for output table.
 	slices.SortFunc(rows, func(a, b *LedgerEntryRow) int {
-		c := time.Time(a.E.ValueDate).Compare(time.Time(b.E.ValueDate))
+		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
 		if c != 0 {
 			return c
 		}
-		return time.Time(a.E.Created).Compare(time.Time(b.E.Created))
+		return a.E.Created.Compare(b.E.Created)
 	})
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("ledger").Parse(string(data))
+	tmpl := template.New("ledger")
+	tmpl.Funcs(template.FuncMap{
+		"nonzero": func(v Micros) bool {
+			return v != 0
+		},
+	})
+	_, err = tmpl.Parse(string(data))
 	if err != nil {
 		return err
 	}
@@ -120,12 +129,28 @@ func RenderNewEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 	slices.SortFunc(assets, func(a, b *Asset) int {
 		return strings.Compare(a.Name, b.Name)
 	})
+	quoteCurrenciesMap := make(map[Currency]bool)
+	var quoteCurrencies []Currency
+	for _, a := range assets {
+		if a.Currency == s.L.Header.BaseCurrency {
+			continue
+		}
+		if _, ok := quoteCurrenciesMap[a.Currency]; !ok {
+			quoteCurrencies = append(quoteCurrencies, a.Currency)
+			quoteCurrenciesMap[a.Currency] = true
+		}
+	}
+	slices.Sort(quoteCurrencies)
 	return tmpl.Execute(w, struct {
-		CurrentDate string
-		Assets      []*Asset
+		CurrentDate     string
+		Assets          []*Asset
+		BaseCurrency    Currency
+		QuoteCurrencies []Currency
 	}{
-		CurrentDate: time.Now().Format("2006-01-02"),
-		Assets:      assets,
+		CurrentDate:     time.Now().Format("2006-01-02"),
+		Assets:          assets,
+		BaseCurrency:    s.L.Header.BaseCurrency,
+		QuoteCurrencies: quoteCurrencies,
 	})
 }
 
@@ -135,12 +160,14 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html")
-	err = RenderLedgerTemplate(w, "./templates/ledger.html", store)
+	var buf bytes.Buffer
+	err = RenderLedgerTemplate(&buf, "./templates/ledger.html", store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
 }
 
 func (s *Server) handleNewEntryForm(w http.ResponseWriter, r *http.Request) {
@@ -149,13 +176,13 @@ func (s *Server) handleNewEntryForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "text/html")
 	var buf bytes.Buffer
 	err = RenderNewEntryTemplate(&buf, "./templates/add_entry.html", store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
+	w.Header().Set("Content-Type", "text/html")
 	w.Write(buf.Bytes())
 }
 

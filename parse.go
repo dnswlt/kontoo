@@ -139,7 +139,7 @@ func ParseDate(args []string, d *Date) error {
 	s := args[0]
 	for _, layout := range []string{"2006-01-02", "02.01.2006"} {
 		if t, err := time.Parse(layout, s); err == nil {
-			*d = Date(t)
+			*d = Date{t}
 			return nil
 		}
 	}
@@ -317,6 +317,7 @@ func ledgerArgSpec(e *LedgerEntry) *argSpec {
 	s.str("AssetID", &e.AssetID)
 	s.str("AssetRef", &e.AssetRef)
 	s.currency("Currency", &e.Currency)
+	s.currency("QuoteCurrency", &e.QuoteCurrency)
 	s.decimal("Value", &e.ValueMicros)
 	s.decimal("NominalValue", &e.NominalValueMicros)
 	s.decimal("Cost", &e.CostMicros)

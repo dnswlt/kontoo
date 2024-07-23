@@ -22,22 +22,27 @@ const (
 	CheckingAccount         AssetType = 11 // Girokonto
 	PensionAccount          AssetType = 12 // Altersvorsorgekonten (z.B. Säule 3a)
 	Commodity               AssetType = 13 // Edelmetalle, Rohstoffe
+	Cash                    AssetType = 14 // Bargeld
+	TaxLiability            AssetType = 15 // Steuerschuld
+	GeneralDebt             AssetType = 16 // Allg. Schulden
 	OtherAssetType          AssetType = 999
 )
 
 type Asset struct {
 	Type           AssetType
 	Name           string
-	ShortName      string    `json:",omitempty"`
-	IssueDate      time.Time `json:",omitempty"`
-	MaturityDate   time.Time `json:",omitempty"`
-	InterestMicros Micros    `json:",omitempty"`
-	IBAN           string    `json:",omitempty"`
-	AccountNumber  string    `json:",omitempty"`
-	ISIN           string    `json:",omitempty"`
-	WKN            string    `json:",omitempty"`
-	TickerSymbol   string    `json:",omitempty"`
+	ShortName      string `json:",omitempty"`
+	IssueDate      *Date  `json:",omitempty"`
+	MaturityDate   *Date  `json:",omitempty"`
+	InterestMicros Micros `json:",omitempty"`
+	IBAN           string `json:",omitempty"`
+	AccountNumber  string `json:",omitempty"`
+	ISIN           string `json:",omitempty"`
+	WKN            string `json:",omitempty"`
+	TickerSymbol   string `json:",omitempty"`
+	CustomID       string `json:",omitempty"`
 	Currency       Currency
+	AssetGroup     string `json:",omitempty"`
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false
@@ -50,13 +55,15 @@ const (
 	AssetMaturity        EntryType = 3
 	DividendPayment      EntryType = 4
 	InterestPayment      EntryType = 5
-	AssetValueStatement  EntryType = 6
+	AssetPrice           EntryType = 6
 	AccountBalance       EntryType = 7
 	ExchangeRate         EntryType = 8
 )
 
 // Dates without a time component.
-type Date time.Time
+type Date struct {
+	time.Time
+}
 
 type LedgerEntry struct {
 	Created     time.Time
@@ -67,6 +74,9 @@ type LedgerEntry struct {
 	AssetID     string    `json:",omitempty"`
 
 	Currency Currency `json:",omitempty"`
+
+	// Only set for ExchangeRate type entries. Currency represents the base currency in that case.
+	QuoteCurrency Currency `json:",omitempty"`
 
 	// All *Micros fields are given in either micros of the currency or micros of a fraction.
 	// 1'000'000 in ValueMicros equals 1.00 CHF (or whatever the Currency),
@@ -80,16 +90,26 @@ type LedgerEntry struct {
 	Comment string `json:",omitempty"`
 }
 
-type Ledger struct {
-	Assets  []*Asset       `json:",omitempty"`
-	Entries []*LedgerEntry `json:",omitempty"`
+type LedgerHeader struct {
+	BaseCurrency Currency `json:",omitempty"`
 }
 
-type AssetValue struct {
-	ValueMicros        Micros
-	NominalValueMicros Micros // Nominal value of a bond.
-	QuantityMicros     Micros // Number of stocks.
-	PriceMicros        Micros // Price of a single quantity of the asset.
+type AssetGroup struct {
+	ID   string
+	Name string
+}
+
+type Ledger struct {
+	Header      *LedgerHeader  `json:",omitempty"`
+	Assets      []*Asset       `json:",omitempty"`
+	AssetGroups []*AssetGroup  `json:",omitempty"`
+	Entries     []*LedgerEntry `json:",omitempty"`
+}
+
+type PVal struct {
+	NominalValueMicros Micros
+	QuantityMicros     Micros
+	PriceMicros        Micros
 }
 
 const (

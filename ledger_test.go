@@ -21,8 +21,10 @@ func TestStoreAdd(t *testing.T) {
 		},
 	}
 	e := &LedgerEntry{
-		AssetRef:  "BUND.123",
-		ValueDate: DateVal(2023, 1, 30),
+		Type:        AccountBalance,
+		AssetRef:    "BUND.123",
+		ValueDate:   DateVal(2023, 1, 30),
+		ValueMicros: 1_000_000,
 	}
 	s, err := NewStore(l, "")
 	if err != nil {
@@ -129,6 +131,7 @@ func TestMarshalLedger(t *testing.T) {
   "Entries": [
     {
       "Created": "2023-12-31T00:00:00Z",
+      "SequenceNum": 0,
       "ValueDate": "2024-12-31",
       "Type": "BuyTransaction",
       "Currency": "EUR",
@@ -138,5 +141,25 @@ func TestMarshalLedger(t *testing.T) {
 }`
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestMarshalDate(t *testing.T) {
+	tests := []struct {
+		input Date
+		want  string
+	}{
+		{input: DateVal(2024, 10, 13), want: `"2024-10-13"`},
+		{input: Date{}, want: `"0001-01-01"`},
+	}
+	for _, tc := range tests {
+		data, err := tc.input.MarshalJSON()
+		if err != nil {
+			t.Fatalf("failed to MarshalJSON: %v", err)
+		}
+		got := string(data)
+		if got != tc.want {
+			t.Errorf("got: %s, want: %s", got, tc.want)
+		}
 	}
 }

@@ -59,7 +59,7 @@
                     <option value="AssetMaturity">Asset maturity</option>
                     <option value="DividendPayment">Dividend payment</option>
                     <option value="InterestPayment">Interest payment</option>
-                    <option value="AssetValueStatement">Asset value</option>
+                    <option value="AssetPrice">Asset price</option>
                     <option value="AccountBalance">Account balance</option>
                     <option value="ExchangeRate">Exchange rate</option>
                 </select>   
@@ -74,7 +74,7 @@
                     {{range .Assets}}
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
-                    <option value="">-- See Asset Ref. --</option>
+                    <option value="">-- None --</option>
                 </select>   
             </div>
         </div>
@@ -86,6 +86,22 @@
                 <input id="AssetRef" name="AssetRef" type="text">
             </div>
         </div>
+        {{if .QuoteCurrencies }}
+        {{$baseCurrency := .BaseCurrency}}
+        <div class="field">
+            <div class="field-label">
+                <label for="QuoteCurrency">Currency exchange rate</label>
+            </div>
+            <div class="field-value">
+                <select id="QuoteCurrency" name="QuoteCurrency" type="text">
+                    <option value=""></option>
+                    {{range .QuoteCurrencies}}
+                    <option value="{{.}}">{{$baseCurrency}}/{{.}}</option>
+                    {{end}}
+                </select>   
+            </div>
+        </div>
+        {{end}}
         <div class="field">
             <div class="field-label">
                 <label for="Value">Value</label>
