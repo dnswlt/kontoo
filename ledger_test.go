@@ -21,10 +21,10 @@ func TestStoreAdd(t *testing.T) {
 		},
 	}
 	e := &LedgerEntry{
-		Type:        AccountBalance,
-		AssetRef:    "BUND.123",
-		ValueDate:   DateVal(2023, 1, 30),
-		ValueMicros: 1_000_000,
+		Type:               AccountBalance,
+		AssetRef:           "BUND.123",
+		ValueDate:          DateVal(2023, 1, 30),
+		NominalValueMicros: 1_000_000,
 	}
 	s, err := NewStore(l, "")
 	if err != nil {
@@ -46,6 +46,170 @@ func TestStoreAdd(t *testing.T) {
 	}
 	if got.Created.IsZero() {
 		t.Error("Created not set")
+	}
+}
+
+func TestPositionsAtSingleAsset(t *testing.T) {
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Type: SavingsAccount,
+				IBAN: "DE12",
+			},
+		},
+	}
+	s, err := NewStore(l, "/test")
+	if err != nil {
+		t.Fatal("Could not create store", err)
+	}
+	entries := []*LedgerEntry{
+		{
+			Type:               AccountBalance,
+			AssetID:            "DE12",
+			ValueDate:          DateVal(2023, 1, 31),
+			NominalValueMicros: 1000 * UnitValue,
+		},
+		{
+			Type:               InterestPayment,
+			AssetID:            "DE12",
+			ValueDate:          DateVal(2023, 2, 15),
+			NominalValueMicros: 10 * UnitValue,
+		},
+		{
+			Type:               AccountBalance,
+			AssetID:            "DE12",
+			ValueDate:          DateVal(2023, 2, 28),
+			NominalValueMicros: 2000 * UnitValue,
+		},
+	}
+	for _, e := range entries {
+		err = s.Add(e)
+		if err != nil {
+			t.Fatal("Cannot add to ledger:", err)
+		}
+	}
+	params := []struct {
+		date  Date
+		value Micros
+	}{
+		{date: DateVal(2023, 1, 31), value: 1000 * UnitValue},
+		{date: DateVal(2023, 2, 16), value: 1000 * UnitValue},
+		{date: DateVal(2023, 2, 28), value: 2000 * UnitValue},
+	}
+	for _, p := range params {
+		ps := s.AssetPositionsAt(p.date.Time)
+		if len(ps) != 1 {
+			t.Fatalf("Wrong number of positions: want 1, got %d", len(ps))
+		}
+		gotValue := ps[0].ValueMicros()
+		if gotValue != p.value {
+			t.Errorf("Wrong value: Want %v, got %v", p.value, gotValue)
+		}
+	}
+}
+
+func TestPositionsAtMultipleAssets(t *testing.T) {
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Type: SavingsAccount,
+				IBAN: "DE12",
+			},
+			{
+				Type: GovernmentBond,
+				IBAN: "DE99",
+			},
+		},
+	}
+	s, err := NewStore(l, "/test")
+	if err != nil {
+		t.Fatal("Could not create store", err)
+	}
+	entries := []*LedgerEntry{
+		{
+			Type:               AccountBalance,
+			AssetID:            "DE12",
+			ValueDate:          DateVal(2023, 1, 31),
+			NominalValueMicros: 1000 * UnitValue,
+		},
+		{
+			Type:               BuyTransaction,
+			AssetID:            "DE99",
+			ValueDate:          DateVal(2023, 2, 14),
+			NominalValueMicros: 2000 * UnitValue,
+			PriceMicros:        950 * Millis,
+		},
+		{
+			Type:               SellTransaction,
+			AssetID:            "DE99",
+			ValueDate:          DateVal(2023, 2, 20),
+			NominalValueMicros: 500 * UnitValue,
+			PriceMicros:        1100 * Millis,
+		},
+		{
+			Type:               AccountBalance,
+			AssetID:            "DE12",
+			ValueDate:          DateVal(2023, 2, 28),
+			NominalValueMicros: 2000 * UnitValue,
+		},
+	}
+	for _, e := range entries {
+		err = s.Add(e)
+		if err != nil {
+			t.Fatal("Cannot add to ledger:", err)
+		}
+	}
+	tests := []struct {
+		name    string
+		date    Date
+		wantPos map[string]Micros
+	}{
+		{
+			name: "first_entry",
+			date: DateVal(2023, 1, 31),
+			wantPos: map[string]Micros{
+				"DE12": 1000 * UnitValue,
+			},
+		},
+		{
+			name: "after_buy",
+			date: DateVal(2023, 2, 14),
+			wantPos: map[string]Micros{
+				"DE12": 1000 * UnitValue,
+				"DE99": 1900 * UnitValue,
+			},
+		},
+		{
+			name: "after_buy_next_day",
+			date: DateVal(2023, 2, 15),
+			wantPos: map[string]Micros{
+				"DE12": 1000 * UnitValue,
+				"DE99": 1900 * UnitValue,
+			},
+		},
+		{
+			name: "after_sell",
+			date: DateVal(2023, 2, 20),
+			wantPos: map[string]Micros{
+				"DE12": 1000 * UnitValue,
+				"DE99": 1650 * UnitValue,
+			},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ps := s.AssetPositionsAt(tc.date.Time)
+			if len(ps) != len(tc.wantPos) {
+				t.Fatalf("Wrong number of positions: want %d, got %d", len(tc.wantPos), len(ps))
+			}
+			for _, gotPos := range ps {
+				gotValue := gotPos.ValueMicros()
+				assetId := gotPos.Asset.ID()
+				if gotValue != tc.wantPos[assetId] {
+					t.Errorf("Wrong value for asset %s: Want %v, got %v", assetId, tc.wantPos[assetId], gotValue)
+				}
+			}
+		})
 	}
 }
 

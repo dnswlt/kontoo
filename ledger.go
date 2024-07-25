@@ -138,8 +138,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
-	switch e.Type {
-	case ExchangeRate:
+	if e.Type == ExchangeRate {
 		if e.QuoteCurrency == "" {
 			return fmt.Errorf("QuoteCurrency must not be empty")
 		}
@@ -152,49 +151,77 @@ func (s *Store) Add(e *LedgerEntry) error {
 		if !allZero(e.ValueMicros, e.NominalValueMicros, e.CostMicros, e.QuantityMicros) {
 			return fmt.Errorf("only Price may be specified for ExchangeRate entry")
 		}
-	case BuyTransaction, SellTransaction, AssetMaturity, DividendPayment, InterestPayment,
-		AssetPrice, AccountBalance:
-		if e.NominalValueMicros != 0 && e.QuantityMicros != 0 {
-			return fmt.Errorf("only one of NominalValueMicros and QuantityMicros may be specified")
+		s.append(e)
+		return nil
+	}
+	if e.Type == UnspecifiedEntryType || !e.Type.Registered() {
+		return fmt.Errorf("invalid EntryType: %q", e.Type)
+	}
+	// Must be an entry that refers to an asset.
+	var a *Asset
+	found := false
+	if e.AssetID != "" {
+		a, found = s.assetMap[e.AssetID]
+	} else {
+		a, found = s.FindAssetByRef(e.AssetRef)
+	}
+	if !found {
+		return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
+	}
+	if e.Currency != "" && e.Currency != a.Currency {
+		return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
+	} else if e.Currency == "" {
+		e.Currency = a.Currency
+	}
+	// Change soft-link to ID ref:
+	e.AssetRef, e.AssetID = "", a.ID()
+	// General validation
+	if e.NominalValueMicros != 0 && e.QuantityMicros != 0 {
+		return fmt.Errorf("only one of NominalValueMicros and QuantityMicros may be specified")
+	}
+	if e.QuoteCurrency != "" {
+		return fmt.Errorf("QuoteCurrency must only be specified for ExchangeRate entry, not %q", e.Type)
+	}
+	if e.PriceMicros < 0 {
+		return fmt.Errorf("PriceMicros must not be negative")
+	}
+	if allZero(e.ValueMicros, e.NominalValueMicros, e.QuantityMicros, e.PriceMicros, e.CostMicros) {
+		return fmt.Errorf("entry must have at least one non-zero value")
+	}
+	switch e.Type {
+	case BuyTransaction, SellTransaction:
+		if e.PriceMicros == 0 {
+			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
-		if e.QuoteCurrency != "" {
-			return fmt.Errorf("QuoteCurrency must not be specified for entry type %q", e.Type)
+		if e.NominalValueMicros == 0 && e.QuantityMicros == 0 {
+			return fmt.Errorf("one of NominalValueMicros and QuantityMicros must be specified")
 		}
-		if e.PriceMicros < 0 {
-			return fmt.Errorf("PriceMicros must not be negative")
+	case AssetPrice:
+		if e.PriceMicros == 0 {
+			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
-		if allZero(e.ValueMicros, e.NominalValueMicros, e.QuantityMicros, e.PriceMicros, e.CostMicros) {
-			return fmt.Errorf("entry must have at least one non-zero value")
+	case AccountBalance:
+		// For accounts, the nominal value and the actual value are assumed
+		// to be the same. Our calculations on ledger entries rely on the
+		// nominal value to be present.
+		if e.NominalValueMicros == 0 && e.ValueMicros != 0 {
+			return fmt.Errorf("NominalValueMicros must be used instead of ValueMicros for %s", e.Type)
 		}
-		// Common checks and actions for an asset-related entry.
-		var a *Asset
-		found := false
-		if e.AssetID != "" {
-			a, found = s.assetMap[e.AssetID]
-		} else {
-			a, found = s.FindAssetByRef(e.AssetRef)
+		if e.PriceMicros != 0 && e.PriceMicros != UnitValue {
+			return fmt.Errorf("PriceMicros must be 1.0 or 0, was %v", e.PriceMicros)
 		}
-		if !found {
-			return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
-		}
-		if e.Currency != "" && e.Currency != a.Currency {
-			return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
-		} else if e.Currency == "" {
-			e.Currency = a.Currency
-		}
-		// Change soft-link to ID ref:
-		e.AssetRef, e.AssetID = "", a.ID()
-	default:
-		return fmt.Errorf("unknown ledger entry type: %q", e.Type)
+		e.PriceMicros = UnitValue
 	}
 	s.append(e)
 	return nil
 }
 
 type AssetPosition struct {
-	// Exactly one of Asset and AssetGroup must be populated.
-	Asset      *Asset
-	AssetGroup *AssetGroup
+	// If Asset is nil, AssetGroup must be populated.
+	Asset           *Asset
+	AssetGroup      *AssetGroup
+	LastPriceUpdate Date
+	LastValueUpdate Date
 	PVal
 }
 
@@ -230,29 +257,34 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.NominalValueMicros += e.NominalValueMicros
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
+		p.LastValueUpdate = e.ValueDate
+		p.LastPriceUpdate = e.ValueDate
 	case SellTransaction:
 		p.NominalValueMicros -= e.NominalValueMicros
 		p.QuantityMicros -= e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
+		p.LastValueUpdate = e.ValueDate
+		p.LastPriceUpdate = e.ValueDate
 	case AssetMaturity:
 		p.NominalValueMicros = 0
 		p.QuantityMicros = 0
 		p.PriceMicros = 0
+		p.LastValueUpdate = e.ValueDate
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
+		p.LastPriceUpdate = e.ValueDate
 	case AccountBalance:
 		p.NominalValueMicros = e.NominalValueMicros
-		p.NominalValueMicros = e.NominalValueMicros
-		p.QuantityMicros = e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
+		p.LastValueUpdate = e.ValueDate
 	}
 }
 
 func (v *PVal) ValueMicros() Micros {
 	if v.NominalValueMicros > 0 {
-		return v.NominalValueMicros.MulRound(v.PriceMicros)
+		return v.NominalValueMicros.MulTrunc(v.PriceMicros)
 	}
-	return v.QuantityMicros.MulRound(v.PriceMicros)
+	return v.QuantityMicros.MulTrunc(v.PriceMicros)
 }
 
 func (l *Ledger) Save(path string) error {

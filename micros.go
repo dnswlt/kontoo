@@ -21,10 +21,10 @@ func (a Micros) Mul(b Micros) Micros {
 	return Micros(bigA.Int64())
 }
 
-func (a Micros) MulRound(b Micros) Micros {
+func (a Micros) MulTrunc(b Micros) Micros {
 	x := float64(a)
 	y := float64(b) / 1e6
-	return Micros(math.Floor(x * y))
+	return Micros(math.Trunc(x * y))
 }
 
 func (m Micros) Format() string {

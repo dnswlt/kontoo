@@ -81,8 +81,13 @@ type LedgerEntry struct {
 	// All *Micros fields are given in either micros of the currency or micros of a fraction.
 	// 1'000'000 in ValueMicros equals 1.00 CHF (or whatever the Currency),
 	// 500'000 PriceMicros of a bond equal a price of 50% of the nominal value.
-	ValueMicros        Micros `json:"Value,omitempty"`        // Value in micros of the currency. 1'000'000 CHF in ValueMicros equal 1 CHF.
-	NominalValueMicros Micros `json:"NominalValue,omitempty"` // Nominal value of a bond.
+
+	// Value in micros of the currency. 1'000'000 CHF in ValueMicros equal 1 CHF.
+	// ValueMicros is only informational. The current value of any asset position
+	// is calculated from its NominalValueMicros or QuantityMicros, and its price.
+	// For account balances, the price is zero and only the nominal value is used.
+	ValueMicros        Micros `json:"Value,omitempty"`
+	NominalValueMicros Micros `json:"NominalValue,omitempty"` // Nominal value of a bond or balance of an account.
 	QuantityMicros     Micros `json:"Quantity,omitempty"`     // Number of stocks, oz of gold.
 	PriceMicros        Micros `json:"Price,omitempty"`        // Price of a single quantity of the asset.
 	CostMicros         Micros `json:"Cost,omitempty"`         // Cost incurred by the transaction.
