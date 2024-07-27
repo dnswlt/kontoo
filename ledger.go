@@ -146,10 +146,10 @@ func (s *Store) Add(e *LedgerEntry) error {
 			e.Currency = s.L.Header.BaseCurrency
 		}
 		if e.PriceMicros == 0 {
-			return fmt.Errorf("Price must be non-zero for ExchangeRate entry")
+			return fmt.Errorf("PriceMicros must be non-zero for ExchangeRate entry")
 		}
-		if !allZero(e.ValueMicros, e.NominalValueMicros, e.CostMicros, e.QuantityMicros) {
-			return fmt.Errorf("only Price may be specified for ExchangeRate entry")
+		if !allZero(e.ValueMicros, e.CostMicros, e.QuantityMicros) {
+			return fmt.Errorf("only PriceMicros may be specified for ExchangeRate entry")
 		}
 		s.append(e)
 		return nil
@@ -176,16 +176,13 @@ func (s *Store) Add(e *LedgerEntry) error {
 	// Change soft-link to ID ref:
 	e.AssetRef, e.AssetID = "", a.ID()
 	// General validation
-	if e.NominalValueMicros != 0 && e.QuantityMicros != 0 {
-		return fmt.Errorf("only one of NominalValueMicros and QuantityMicros may be specified")
-	}
 	if e.QuoteCurrency != "" {
 		return fmt.Errorf("QuoteCurrency must only be specified for ExchangeRate entry, not %q", e.Type)
 	}
 	if e.PriceMicros < 0 {
 		return fmt.Errorf("PriceMicros must not be negative")
 	}
-	if allZero(e.ValueMicros, e.NominalValueMicros, e.QuantityMicros, e.PriceMicros, e.CostMicros) {
+	if allZero(e.ValueMicros, e.QuantityMicros, e.PriceMicros) {
 		return fmt.Errorf("entry must have at least one non-zero value")
 	}
 	switch e.Type {
@@ -193,24 +190,17 @@ func (s *Store) Add(e *LedgerEntry) error {
 		if e.PriceMicros == 0 {
 			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
-		if e.NominalValueMicros == 0 && e.QuantityMicros == 0 {
-			return fmt.Errorf("one of NominalValueMicros and QuantityMicros must be specified")
+		if e.QuantityMicros == 0 {
+			return fmt.Errorf("QuantityMicros must be specified for %s", e.Type)
 		}
 	case AssetPrice:
 		if e.PriceMicros == 0 {
 			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
 	case AccountBalance:
-		// For accounts, the nominal value and the actual value are assumed
-		// to be the same. Our calculations on ledger entries rely on the
-		// nominal value to be present.
-		if e.NominalValueMicros == 0 && e.ValueMicros != 0 {
-			return fmt.Errorf("NominalValueMicros must be used instead of ValueMicros for %s", e.Type)
+		if e.PriceMicros != 0 || e.QuantityMicros != 0 {
+			return fmt.Errorf("PriceMicros and QuantityMicros must both be 0, was (%v, %v)", e.PriceMicros, e.QuantityMicros)
 		}
-		if e.PriceMicros != 0 && e.PriceMicros != UnitValue {
-			return fmt.Errorf("PriceMicros must be 1.0 or 0, was %v", e.PriceMicros)
-		}
-		e.PriceMicros = UnitValue
 	}
 	s.append(e)
 	return nil
@@ -254,19 +244,15 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 func (p *AssetPosition) Update(e *LedgerEntry) {
 	switch e.Type {
 	case BuyTransaction:
-		p.NominalValueMicros += e.NominalValueMicros
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastValueUpdate = e.ValueDate
 		p.LastPriceUpdate = e.ValueDate
 	case SellTransaction:
-		p.NominalValueMicros -= e.NominalValueMicros
 		p.QuantityMicros -= e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastValueUpdate = e.ValueDate
 		p.LastPriceUpdate = e.ValueDate
 	case AssetMaturity:
-		p.NominalValueMicros = 0
+		p.ValueMicros = 0
 		p.QuantityMicros = 0
 		p.PriceMicros = 0
 		p.LastValueUpdate = e.ValueDate
@@ -274,15 +260,14 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.PriceMicros = e.PriceMicros
 		p.LastPriceUpdate = e.ValueDate
 	case AccountBalance:
-		p.NominalValueMicros = e.NominalValueMicros
-		p.PriceMicros = e.PriceMicros
+		p.ValueMicros = e.ValueMicros
 		p.LastValueUpdate = e.ValueDate
 	}
 }
 
-func (v *PVal) ValueMicros() Micros {
-	if v.NominalValueMicros > 0 {
-		return v.NominalValueMicros.MulTrunc(v.PriceMicros)
+func (v *PVal) CalculatedValueMicros() Micros {
+	if v.ValueMicros != 0 {
+		return v.ValueMicros
 	}
 	return v.QuantityMicros.MulTrunc(v.PriceMicros)
 }

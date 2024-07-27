@@ -319,7 +319,6 @@ func ledgerArgSpec(e *LedgerEntry) *argSpec {
 	s.currency("Currency", &e.Currency)
 	s.currency("QuoteCurrency", &e.QuoteCurrency)
 	s.decimal("Value", &e.ValueMicros)
-	s.decimal("NominalValue", &e.NominalValueMicros)
 	s.decimal("Cost", &e.CostMicros)
 	s.decimal("Quantity", &e.QuantityMicros)
 	s.decimal("Price", &e.PriceMicros)

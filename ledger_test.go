@@ -21,10 +21,10 @@ func TestStoreAdd(t *testing.T) {
 		},
 	}
 	e := &LedgerEntry{
-		Type:               AccountBalance,
-		AssetRef:           "BUND.123",
-		ValueDate:          DateVal(2023, 1, 30),
-		NominalValueMicros: 1_000_000,
+		Type:        AccountBalance,
+		AssetRef:    "BUND.123",
+		ValueDate:   DateVal(2023, 1, 30),
+		ValueMicros: 1_000_000,
 	}
 	s, err := NewStore(l, "")
 	if err != nil {
@@ -64,22 +64,22 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 	}
 	entries := []*LedgerEntry{
 		{
-			Type:               AccountBalance,
-			AssetID:            "DE12",
-			ValueDate:          DateVal(2023, 1, 31),
-			NominalValueMicros: 1000 * UnitValue,
+			Type:        AccountBalance,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 31),
+			ValueMicros: 1000 * UnitValue,
 		},
 		{
-			Type:               InterestPayment,
-			AssetID:            "DE12",
-			ValueDate:          DateVal(2023, 2, 15),
-			NominalValueMicros: 10 * UnitValue,
+			Type:        InterestPayment,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 2, 15),
+			ValueMicros: 10 * UnitValue,
 		},
 		{
-			Type:               AccountBalance,
-			AssetID:            "DE12",
-			ValueDate:          DateVal(2023, 2, 28),
-			NominalValueMicros: 2000 * UnitValue,
+			Type:        AccountBalance,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 2, 28),
+			ValueMicros: 2000 * UnitValue,
 		},
 	}
 	for _, e := range entries {
@@ -101,7 +101,7 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 		if len(ps) != 1 {
 			t.Fatalf("Wrong number of positions: want 1, got %d", len(ps))
 		}
-		gotValue := ps[0].ValueMicros()
+		gotValue := ps[0].ValueMicros
 		if gotValue != p.value {
 			t.Errorf("Wrong value: Want %v, got %v", p.value, gotValue)
 		}
@@ -127,30 +127,30 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	}
 	entries := []*LedgerEntry{
 		{
-			Type:               AccountBalance,
-			AssetID:            "DE12",
-			ValueDate:          DateVal(2023, 1, 31),
-			NominalValueMicros: 1000 * UnitValue,
+			Type:        AccountBalance,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 31),
+			ValueMicros: 1000 * UnitValue,
 		},
 		{
-			Type:               BuyTransaction,
-			AssetID:            "DE99",
-			ValueDate:          DateVal(2023, 2, 14),
-			NominalValueMicros: 2000 * UnitValue,
-			PriceMicros:        950 * Millis,
+			Type:           BuyTransaction,
+			AssetID:        "DE99",
+			ValueDate:      DateVal(2023, 2, 14),
+			QuantityMicros: 2000 * UnitValue,
+			PriceMicros:    950 * Millis,
 		},
 		{
-			Type:               SellTransaction,
-			AssetID:            "DE99",
-			ValueDate:          DateVal(2023, 2, 20),
-			NominalValueMicros: 500 * UnitValue,
-			PriceMicros:        1100 * Millis,
+			Type:           SellTransaction,
+			AssetID:        "DE99",
+			ValueDate:      DateVal(2023, 2, 20),
+			QuantityMicros: 500 * UnitValue,
+			PriceMicros:    1100 * Millis,
 		},
 		{
-			Type:               AccountBalance,
-			AssetID:            "DE12",
-			ValueDate:          DateVal(2023, 2, 28),
-			NominalValueMicros: 2000 * UnitValue,
+			Type:        AccountBalance,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 2, 28),
+			ValueMicros: 2000 * UnitValue,
 		},
 	}
 	for _, e := range entries {
@@ -203,7 +203,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 				t.Fatalf("Wrong number of positions: want %d, got %d", len(tc.wantPos), len(ps))
 			}
 			for _, gotPos := range ps {
-				gotValue := gotPos.ValueMicros()
+				gotValue := gotPos.CalculatedValueMicros()
 				assetId := gotPos.Asset.ID()
 				if gotValue != tc.wantPos[assetId] {
 					t.Errorf("Wrong value for asset %s: Want %v, got %v", assetId, tc.wantPos[assetId], gotValue)
@@ -278,11 +278,12 @@ func TestMarshalLedger(t *testing.T) {
 	l := Ledger{
 		Entries: []*LedgerEntry{
 			{
-				Created:            time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
-				ValueDate:          DateVal(2024, 12, 31),
-				Type:               BuyTransaction,
-				NominalValueMicros: 1_500_000,
-				Currency:           "EUR",
+				Created:        time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
+				ValueDate:      DateVal(2024, 12, 31),
+				Type:           BuyTransaction,
+				QuantityMicros: 1 * UnitValue,
+				PriceMicros:    1_500_000,
+				Currency:       "EUR",
 			},
 		},
 	}
@@ -299,7 +300,8 @@ func TestMarshalLedger(t *testing.T) {
       "ValueDate": "2024-12-31",
       "Type": "BuyTransaction",
       "Currency": "EUR",
-      "NominalValue": "1.50"
+      "Quantity": "1",
+      "Price": "1.50"
     }
   ]
 }`
