@@ -35,11 +35,23 @@ func (e *LedgerEntryRow) ValueDate() string {
 func (e *LedgerEntryRow) EntryType() string {
 	return e.E.Type.String()
 }
+func (e *LedgerEntryRow) HasAsset() bool {
+	return e.A != nil
+}
 func (e *LedgerEntryRow) AssetID() string {
 	return e.A.ID()
 }
 func (e *LedgerEntryRow) AssetName() string {
 	return e.A.Name
+}
+func (e *LedgerEntryRow) Label() string {
+	if e.HasAsset() {
+		return e.AssetName()
+	}
+	if e.E.Type == ExchangeRate {
+		return string(e.E.Currency) + "/" + string(e.E.QuoteCurrency)
+	}
+	return ""
 }
 func (e *LedgerEntryRow) AssetType() string {
 	return e.A.Type.String()
@@ -188,8 +200,8 @@ func (s *Server) handleNewEntryForm(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		w.Header().Add("Allow", "POST")
-		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Header().Set("Allow", "POST")
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if err := r.ParseForm(); err != nil {
@@ -198,15 +210,19 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	// Parse as a ledger entry in the same way that we'd parse it from the command line.
 	var args []string
+	typ := "BuyTransaction" // Use the same default as is displayed in the HTML form.
 	for k, v := range r.Form {
 		if strings.HasPrefix(k, "Submit") {
 			continue // Ignore Submit button values.
 		}
-		if len(v) > 0 && len(v[0]) > 0 {
+		if k == "Type" && len(v) == 1 && len(v[0]) > 0 {
+			typ = v[0]
+		} else if len(v) > 0 && len(v[0]) > 0 {
 			args = append(args, "-"+k)
 			args = append(args, v...)
 		}
 	}
+	args = append(args, "-Type", typ)
 	e, err := ParseLedgerEntry(args)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Cannot parse ledger: %v", err), http.StatusBadRequest)

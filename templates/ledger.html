@@ -45,9 +45,15 @@
             <tr>
                 <td>{{ .ValueDate }}</td>
                 <td>{{ .EntryType }}</td>
+                {{if .HasAsset}}
                 <td>{{ .AssetID }}</td>
                 <td>{{ .AssetName }}</td>
                 <td>{{ .AssetType }}</td>
+                {{else}}
+                <td></td>
+                <td>{{ .Label }}</td>
+                <td></td>
+                {{end}}
                 <td class="ralign">{{ .Currency }}</td>
                 <td>{{ .Value }}</td>
                 <td>{{ .Cost }}</td>

@@ -117,6 +117,14 @@ func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
 	return res, true
 }
 
+func (s *Store) LookupAsset(e *LedgerEntry) (*Asset, bool) {
+	if e.AssetID != "" {
+		a, found := s.assetMap[e.AssetID]
+		return a, found
+	}
+	return s.FindAssetByRef(e.AssetRef)
+}
+
 func allZero(ms ...Micros) bool {
 	for _, m := range ms {
 		if m != 0 {
@@ -158,13 +166,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 		return fmt.Errorf("invalid EntryType: %q", e.Type)
 	}
 	// Must be an entry that refers to an asset.
-	var a *Asset
-	found := false
-	if e.AssetID != "" {
-		a, found = s.assetMap[e.AssetID]
-	} else {
-		a, found = s.FindAssetByRef(e.AssetRef)
-	}
+	a, found := s.LookupAsset(e)
 	if !found {
 		return fmt.Errorf("no asset found for AssetRef %q", e.AssetRef)
 	}
@@ -198,6 +200,17 @@ func (s *Store) Add(e *LedgerEntry) error {
 			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
 	case AccountBalance:
+		if e.PriceMicros != 0 || e.QuantityMicros != 0 {
+			return fmt.Errorf("PriceMicros and QuantityMicros must both be 0, was (%v, %v)", e.PriceMicros, e.QuantityMicros)
+		}
+	case AssetHolding:
+		if e.QuantityMicros == 0 || e.PriceMicros == 0 {
+			return fmt.Errorf("QuantityMicros and PriceMicros must be specified for %s", e.Type)
+		}
+	case InterestPayment, DividendPayment:
+		if e.ValueMicros == 0 {
+			return fmt.Errorf("ValueMicros must be specified for %s", e.Type)
+		}
 		if e.PriceMicros != 0 || e.QuantityMicros != 0 {
 			return fmt.Errorf("PriceMicros and QuantityMicros must both be 0, was (%v, %v)", e.PriceMicros, e.QuantityMicros)
 		}
@@ -261,6 +274,14 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.LastPriceUpdate = e.ValueDate
 	case AccountBalance:
 		p.ValueMicros = e.ValueMicros
+		p.LastValueUpdate = e.ValueDate
+	case AssetHolding:
+		if e.PriceMicros != 0 {
+			p.PriceMicros = e.PriceMicros
+			p.LastPriceUpdate = e.ValueDate
+		}
+		p.ValueMicros = e.ValueMicros
+		p.QuantityMicros = e.QuantityMicros
 		p.LastValueUpdate = e.ValueDate
 	}
 }

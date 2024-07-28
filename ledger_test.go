@@ -10,42 +10,84 @@ import (
 )
 
 func TestStoreAdd(t *testing.T) {
-	l := &Ledger{
-		Assets: []*Asset{
-			{
-				Type:           GovernmentBond,
-				ISIN:           "DE123123123",
-				ShortName:      "BUND.123",
-				InterestMicros: 35_000,
+	tests := []struct {
+		E *LedgerEntry
+	}{
+		{
+			E: &LedgerEntry{
+				Type:        AccountBalance,
+				AssetRef:    "DE12",
+				ValueDate:   DateVal(2023, 1, 1),
+				ValueMicros: 1_000_000,
+			},
+		},
+		{
+			E: &LedgerEntry{
+				Type:           AssetHolding,
+				AssetRef:       "NESN",
+				ValueDate:      DateVal(2023, 1, 2),
+				QuantityMicros: 20 * UnitValue,
+				PriceMicros:    5 * UnitValue,
+			},
+		},
+		{
+			E: &LedgerEntry{
+				Type:           SellTransaction,
+				AssetRef:       "NESN",
+				ValueDate:      DateVal(2023, 1, 3),
+				QuantityMicros: 10 * UnitValue,
+				PriceMicros:    10 * UnitValue,
+			},
+		},
+		{
+			E: &LedgerEntry{
+				Type:        InterestPayment,
+				AssetRef:    "DE12",
+				ValueDate:   DateVal(2023, 1, 3),
+				ValueMicros: 150 * Millis,
 			},
 		},
 	}
-	e := &LedgerEntry{
-		Type:        AccountBalance,
-		AssetRef:    "BUND.123",
-		ValueDate:   DateVal(2023, 1, 30),
-		ValueMicros: 1_000_000,
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Type:           FixedDepositAccount,
+				IBAN:           "DE123123123",
+				ShortName:      "DE12",
+				InterestMicros: 35_000,
+			},
+			{
+				Type:         Stock,
+				TickerSymbol: "NESN",
+			},
+		},
 	}
 	s, err := NewStore(l, "")
 	if err != nil {
 		t.Fatalf("Failed to create Store: %v", err)
 	}
-	err = s.Add(e)
-	if err != nil {
-		t.Fatalf("Failed to add entry: %v", err)
-	}
-	if len(l.Entries) != 1 {
-		t.Fatalf("Entry was not added, len(l.Entries) = %d", len(l.Entries))
-	}
-	got := l.Entries[0]
-	if got != e {
-		t.Error("Entries are not pointer equal")
-	}
-	if got.AssetID != "DE123123123" {
-		t.Errorf("AssetID not set: %q", got.AssetID)
-	}
-	if got.Created.IsZero() {
-		t.Error("Created not set")
+	for i, tc := range tests {
+		err = s.Add(tc.E)
+		if err != nil {
+			t.Fatalf("Failed to add entry: %v", err)
+		}
+		if len(l.Entries) != i+1 {
+			t.Fatalf("Entry was not added, len(l.Entries) = %d", len(l.Entries))
+		}
+		got := l.Entries[i]
+		if got != tc.E {
+			t.Error("Entries are not pointer equal")
+		}
+		a, found := s.LookupAsset(tc.E)
+		if !found {
+			t.Fatalf("Asset not found for ID %q or ref %q", tc.E.AssetID, tc.E.AssetRef)
+		}
+		if got.AssetID != a.ID() {
+			t.Errorf("Wrong AssetID: want %q, got %q", a.ID(), got.AssetID)
+		}
+		if got.Created.IsZero() {
+			t.Error("Created not set")
+		}
 	}
 }
 

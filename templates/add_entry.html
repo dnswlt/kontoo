@@ -1,51 +1,68 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Hexz</title>
+    <title>Kontoo</title>
     <style>
         body {
             font-family: sans-serif;
         }
+
         th {
             text-align: left;
         }
-        td, th {
+
+        td,
+        th {
             padding-right: 1ex;
         }
+
         .ralign {
             text-align: right;
         }
+
         .field-label {
             font-weight: bold;
             font-size: 90%;
         }
+
         form {
             display: flex;
             flex-direction: column;
         }
+
         .field-value {
-            width: 12em;
+            width: 16em;
             margin-bottom: 1ex;
         }
-        .field-value input, .field-value textarea, .field-value select {
+
+        .field-value input,
+        .field-value textarea,
+        .field-value select {
             width: 100%;
         }
+
         textarea {
             font-family: sans-serif;
         }
+
+        .hidden {
+            display: none;
+        }
     </style>
 </head>
+
 <body>
     <h1>Kontoo</h1>
-    <form method="post" action="/kontoo/entries">
+    <form id="entry-form" method="post" action="/kontoo/entries">
         <div class="field">
             <div class="field-label">
                 <label for="ValueDate">Value date</label>
             </div>
             <div class="field-value">
-                <input id="ValueDate" name="ValueDate" type="date" value="{{.CurrentDate}}"required>
+                <input id="ValueDate" name="ValueDate" type="date" value="{{.CurrentDate}}" required>
             </div>
         </div>
         <div class="field">
@@ -53,42 +70,38 @@
                 <label for="Type">Type</label>
             </div>
             <div class="field-value">
-                <select id="Type" name="Type" type="text">
-                    <option value="BuyTransaction">Buy</option>
-                    <option value="SellTransaction">Sell</option>
-                    <option value="AssetMaturity">Asset maturity</option>
-                    <option value="DividendPayment">Dividend payment</option>
-                    <option value="InterestPayment">Interest payment</option>
-                    <option value="AssetPrice">Asset price</option>
-                    <option value="AccountBalance">Account balance</option>
-                    <option value="ExchangeRate">Exchange rate</option>
-                </select>   
+                <input id="Type" type="text" name="Type" list="TypeList" placeholder="BuyTransaction">
+                <datalist id="TypeList">
+                    <option value="BuyTransaction">
+                    <option value="SellTransaction">
+                    <option value="AssetMaturity">
+                    <option value="DividendPayment">
+                    <option value="InterestPayment">
+                    <option value="AssetPrice">
+                    <option value="AccountBalance">
+                    <option value="ExchangeRate">
+                </datalist>
             </div>
         </div>
-        <div class="field">
+        <div id="AssetIDField" class="field">
             <div class="field-label">
                 <label for="AssetID">Asset</label>
             </div>
             <div class="field-value">
-                <select id="AssetID" name="AssetID" type="text">
+                <input id="AssetID" type="text" name="AssetID" list="AssetList">
+                <datalist id="AssetList">
                     {{range .Assets}}
                     <option value="{{.ID}}">{{.Name}}</option>
                     {{end}}
-                    <option value="">-- None --</option>
-                </select>   
+                </datalist>
             </div>
         </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="AssetRef">Asset reference</label>
-            </div>
-            <div class="field-value">
-                <input id="AssetRef" name="AssetRef" type="text">
-            </div>
+        <div id="AssetNameField" class="field">
+            <div class="field-value" id="AssetName">&nbsp;</div>
         </div>
-        {{if .QuoteCurrencies }}
-        {{$baseCurrency := .BaseCurrency}}
-        <div class="field">
+        <div id="QuoteCurrencyField" class="field hidden">
+            {{if .QuoteCurrencies }}
+            {{$baseCurrency := .BaseCurrency}}
             <div class="field-label">
                 <label for="QuoteCurrency">Currency exchange rate</label>
             </div>
@@ -98,11 +111,11 @@
                     {{range .QuoteCurrencies}}
                     <option value="{{.}}">{{$baseCurrency}}/{{.}}</option>
                     {{end}}
-                </select>   
+                </select>
             </div>
+            {{end}}
         </div>
-        {{end}}
-        <div class="field">
+        <div id="ValueField" class="field">
             <div class="field-label">
                 <label for="Value">Value</label>
             </div>
@@ -110,23 +123,15 @@
                 <input id="Value" name="Value" type="text">
             </div>
         </div>
-        <div class="field">
+        <div id="QuantityField" class="field">
             <div class="field-label">
-                <label for="NominalValue">Nominal value</label>
-            </div>
-            <div class="field-value">
-                <input id="NominalValue" name="NominalValue" type="text" pattern="\d+(\.\d+)?">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="Quantity">Quantity</label>
+                <label for="Quantity">Quantity / Nominal value</label>
             </div>
             <div class="field-value">
                 <input id="Quantity" name="Quantity" type="text" pattern="\d+(\.\d+)?">
             </div>
         </div>
-        <div class="field">
+        <div id="PriceField" class="field">
             <div class="field-label">
                 <label for="Price">Price</label>
             </div>
@@ -134,7 +139,7 @@
                 <input id="Price" name="Price" type="text" pattern="\d+(\.\d+)?%?">
             </div>
         </div>
-        <div class="field">
+        <div id="CostField" class="field">
             <div class="field-label">
                 <label for="Cost">Cost</label>
             </div>
@@ -142,7 +147,7 @@
                 <input id="Cost" name="Cost" type="text" pattern="\d+(\.\d+)?">
             </div>
         </div>
-        <div class="field">
+        <div id="CommentField" class="field">
             <div class="field-label">
                 <label for="Comment">Comment</label>
             </div>
@@ -155,5 +160,57 @@
             <input type="submit" name="SubmitNext" value="Save &amp; enter next">
         </div>
     </form>
+
+    <script>
+        document.querySelector("#AssetID").addEventListener("change", function (event) {
+            const assetId = document.querySelector("#AssetID").value;
+            setAssetName(assetId);
+        });
+        document.querySelector("#Type").addEventListener("keydown", function (event) {
+            if (event.key === "Backspace") {
+                event.target.value = "";
+                event.preventDefault();
+            }
+        });
+        document.querySelector("#Type").addEventListener("change", function (event) {
+            const typ = event.target.value;
+            if (typ === "ExchangeRate") {
+                showFields(["QuoteCurrency", "Price"]);
+            } else if (typ === "AccountBalance") {
+                showFields(["AssetID", "AssetName", "Value"]);
+            } else if (typ === "InterestPayment" || typ == "DividendPayment") {
+                showFields(["AssetID", "AssetName", "Value"]);
+            } else if (typ === "AssetPrice") {
+                showFields(["AssetID", "AssetName", "Price"]);
+            } else {
+                showFields(["AssetID", "AssetName", "Value", "Quantity", "Price", "Cost"]);
+            }
+        });
+        function showFields(fieldNames) {
+            const allFieldNames = [
+                "AssetID", "AssetName", "Value", "Quantity", "Price", "Cost", "QuoteCurrency"
+            ];
+            for (const fieldName of allFieldNames) {
+                if (fieldNames.includes(fieldName)) {
+                    document.querySelector(`#${fieldName}Field`).classList.remove("hidden");
+                } else {
+                    document.querySelector(`#${fieldName}Field`).classList.add("hidden");
+                }
+            }
+        }
+        function setAssetName(assetId) {
+            const assets = document.querySelectorAll("#AssetList option");
+            const assetName = document.querySelector("#AssetName");
+            let name = "";
+            for (const a of assets) {
+                if (a.value === assetId) {
+                    name = a.textContent;
+                    break;
+                }
+            }
+            assetName.textContent = name;
+        }
+    </script>
 </body>
+
 </html>

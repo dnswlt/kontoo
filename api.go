@@ -57,7 +57,8 @@ const (
 	InterestPayment      EntryType = 5
 	AssetPrice           EntryType = 6
 	AccountBalance       EntryType = 7
-	ExchangeRate         EntryType = 8
+	AssetHolding         EntryType = 8
+	ExchangeRate         EntryType = 9
 )
 
 // Dates without a time component.
