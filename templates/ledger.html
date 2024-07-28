@@ -21,9 +21,6 @@
 </head>
 <body>
     <h1>Kontoo</h1>
-    <p>
-        {{.CurrentDate}}
-    </p>
     <table>
         <thead>
             <tr>
@@ -48,7 +45,7 @@
                 {{if .HasAsset}}
                 <td>{{ .AssetID }}</td>
                 <td>{{ .AssetName }}</td>
-                <td>{{ .AssetType }}</td>
+                <td>{{ .AssetType }}</td> 
                 {{else}}
                 <td></td>
                 <td>{{ .Label }}</td>
@@ -64,5 +61,8 @@
             {{end}}
         </tbody>
     </table>    
+    <p>
+        Report generated: {{.CurrentDate}}
+    </p>
 </body>
 </html>

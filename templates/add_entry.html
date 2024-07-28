@@ -51,11 +51,27 @@
         .hidden {
             display: none;
         }
+
+        #status-callout {
+            padding: 1ex;
+            margin: 1ex 0;
+            border: 1px solid;
+            border-radius: 5px;
+        }
+        .callout-err {
+            border-color: brown;
+            background-color: #ffe6e6;
+        }
+        .callout-ok {
+            border-color: #008000;
+            background-color: #e6ffe6;
+        }
     </style>
 </head>
 
 <body>
     <h1>Kontoo</h1>
+    <div id="status-callout" class="hidden"></div>
     <form id="entry-form" method="post" action="/kontoo/entries">
         <div class="field">
             <div class="field-label">
@@ -74,11 +90,12 @@
                 <datalist id="TypeList">
                     <option value="BuyTransaction">
                     <option value="SellTransaction">
-                    <option value="AssetMaturity">
-                    <option value="DividendPayment">
-                    <option value="InterestPayment">
                     <option value="AssetPrice">
                     <option value="AccountBalance">
+                    <option value="AssetHolding">
+                    <option value="DividendPayment">
+                    <option value="InterestPayment">
+                    <option value="AssetMaturity">
                     <option value="ExchangeRate">
                 </datalist>
             </div>
@@ -157,11 +174,52 @@
         </div>
         <div>
             <input type="submit" name="Submit" value="Save">
-            <input type="submit" name="SubmitNext" value="Save &amp; enter next">
+            <input id="submit-next" type="submit" name="SubmitNext" value="Save &amp; enter next">
         </div>
     </form>
 
     <script>
+        const entryForm = document.querySelector("#entry-form");
+        entryForm.addEventListener('keydown', function (event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Prevent the default form submission
+                document.getElementById('submit-next').click();
+            }
+        });
+        entryForm.addEventListener("submit", async function (event) {
+            event.preventDefault(); // Prevent the default form submission
+            const formData = new FormData(this);
+            const clickedButton = event.submitter;
+            formData.append(clickedButton.name, clickedButton.value);
+            if (!formData.get("Type")) {
+                formData.set("Type", "BuyTransaction");
+            }
+            try {
+                const response = await fetch("/kontoo/entries", {
+                    method: "POST",
+                    body: formData
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                const statusDiv = document.getElementById("status-callout");
+                if (data.status !== "OK") {
+                    statusDiv.textContent = data.error;
+                    statusDiv.className = "callout-err";
+                } else {
+                    statusDiv.textContent = `Added ledger entry with sequence number ${data.sequenceNum}.`;
+                    statusDiv.className = "callout-ok";
+                    this.reset();
+                }
+                if (clickedButton.name === "Submit") {
+                    window.location.href = "/kontoo/ledger";
+                }
+            }
+            catch (error) {
+                console.error("Error on submit:", error);
+            }
+        });
         document.querySelector("#AssetID").addEventListener("change", function (event) {
             const assetId = document.querySelector("#AssetID").value;
             setAssetName(assetId);
@@ -178,6 +236,8 @@
                 showFields(["QuoteCurrency", "Price"]);
             } else if (typ === "AccountBalance") {
                 showFields(["AssetID", "AssetName", "Value"]);
+            } else if (typ === "AssetHolding") {
+                showFields(["AssetID", "AssetName", "Value", "Quantity", "Price"]);
             } else if (typ === "InterestPayment" || typ == "DividendPayment") {
                 showFields(["AssetID", "AssetName", "Value"]);
             } else if (typ === "AssetPrice") {

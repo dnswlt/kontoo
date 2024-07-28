@@ -2,6 +2,7 @@ package kontoo
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -11,6 +12,15 @@ import (
 	"strings"
 	"time"
 )
+
+// JSON API for server requests and responses.
+type AddLedgerEntryResponse struct {
+	Status      string `json:"status"`
+	SequenceNum int64  `json:"sequenceNum,omitempty"`
+	Error       string `json:"error,omitempty"`
+}
+
+// END JSON API
 
 type Server struct {
 	addr       string
@@ -182,7 +192,7 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleNewEntryForm(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleNewEntriesNew(w http.ResponseWriter, r *http.Request) {
 	store, err := LoadStore(s.ledgerPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
@@ -198,31 +208,27 @@ func (s *Server) handleNewEntryForm(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", "POST")
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
 	// Parse as a ledger entry in the same way that we'd parse it from the command line.
 	var args []string
-	typ := "BuyTransaction" // Use the same default as is displayed in the HTML form.
 	for k, v := range r.Form {
 		if strings.HasPrefix(k, "Submit") {
 			continue // Ignore Submit button values.
 		}
-		if k == "Type" && len(v) == 1 && len(v[0]) > 0 {
-			typ = v[0]
-		} else if len(v) > 0 && len(v[0]) > 0 {
+		if len(v) > 0 && len(v[0]) > 0 {
 			args = append(args, "-"+k)
 			args = append(args, v...)
 		}
 	}
-	args = append(args, "-Type", typ)
 	e, err := ParseLedgerEntry(args)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Cannot parse ledger: %v", err), http.StatusBadRequest)
@@ -235,7 +241,11 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 	}
 	err = store.Add(e)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error adding ledger entry: %v", err), http.StatusBadRequest)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(AddLedgerEntryResponse{
+			Status: "INVALID_ARGUMENT",
+			Error:  err.Error(),
+		})
 		return
 	}
 	err = store.Save()
@@ -243,13 +253,11 @@ func (s *Server) handleEntries(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	if _, ok := r.Form["SubmitNext"]; ok {
-		// Create new one immediately.
-		http.Redirect(w, r, "/kontoo/entries/new", http.StatusSeeOther)
-		return
-	}
-	// Show ledger.
-	http.Redirect(w, r, "/kontoo/ledger", http.StatusSeeOther)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AddLedgerEntryResponse{
+		Status:      "OK",
+		SequenceNum: e.SequenceNum,
+	})
 }
 
 func (s *Server) createMux() *http.ServeMux {
@@ -258,8 +266,8 @@ func (s *Server) createMux() *http.ServeMux {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusMovedPermanently)
 	})
 	mux.HandleFunc("/kontoo/ledger", s.handleLedger)
-	mux.HandleFunc("/kontoo/entries/new", s.handleNewEntryForm)
-	mux.HandleFunc("/kontoo/entries", s.handleEntries)
+	mux.HandleFunc("/kontoo/entries/new", s.handleNewEntriesNew)
+	mux.HandleFunc("/kontoo/entries", s.handleEntriesPost)
 	return mux
 }
 
