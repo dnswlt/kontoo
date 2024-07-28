@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -104,6 +105,28 @@ func LedgerEntryRows(s *Store) []*LedgerEntryRow {
 	return res
 }
 
+type PositionTableRow struct {
+	Name     string
+	Currency Currency
+	Value    string
+}
+
+func PositionTableRows(s *Store, date time.Time) []*PositionTableRow {
+	positions := s.AssetPositionsAt(date)
+	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+		return strings.Compare(a.Name(), b.Name())
+	})
+	var res []*PositionTableRow
+	for _, p := range positions {
+		res = append(res, &PositionTableRow{
+			Name:     p.Name(),
+			Currency: p.Currency(),
+			Value:    formatMonetaryValue(p.CalculatedValueMicros()),
+		})
+	}
+	return res
+}
+
 func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 	rows := LedgerEntryRows(s)
 	// Sort ledger rows by (ValueDate, Created) for output table.
@@ -176,6 +199,27 @@ func RenderNewEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 	})
 }
 
+func RenderPositionsTemplate(w io.Writer, templatePath string, date time.Time, s *Store) error {
+	data, err := os.ReadFile(templatePath)
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New("positions").Parse(string(data))
+	if err != nil {
+		return err
+	}
+	positions := PositionTableRows(s, date)
+	return tmpl.Execute(w, struct {
+		Date        string
+		CurrentDate string
+		TableRows   []*PositionTableRow
+	}{
+		Date:        date.Format("2006-01-02"),
+		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
+		TableRows:   positions,
+	})
+}
+
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	store, err := LoadStore(s.ledgerPath)
 	if err != nil {
@@ -208,12 +252,40 @@ func (s *Server) handleNewEntriesNew(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", "POST")
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
+	var year, month, day int
+	year, err := strconv.Atoi(r.PathValue("year"))
+	if err != nil || year < 1970 || year > 9999 {
+		http.Error(w, "", http.StatusNotFound)
 		return
 	}
+	month, err = strconv.Atoi(r.PathValue("month"))
+	if err != nil || month < 1 || month > 12 {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	day, err = strconv.Atoi(r.PathValue("day"))
+	if err != nil || day < 1 || day > 31 {
+		http.Error(w, "", http.StatusNotFound)
+		return
+	}
+	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	store, err := LoadStore(s.ledgerPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	var buf bytes.Buffer
+	err = RenderPositionsTemplate(&buf, "./templates/positions.html", date, store)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
@@ -262,12 +334,17 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/kontoo/ledger", http.StatusMovedPermanently)
-	})
 	mux.HandleFunc("/kontoo/ledger", s.handleLedger)
 	mux.HandleFunc("/kontoo/entries/new", s.handleNewEntriesNew)
-	mux.HandleFunc("/kontoo/entries", s.handleEntriesPost)
+	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
+	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {
+		now := time.Now()
+		http.Redirect(w, r, fmt.Sprintf("/kontoo/positions/%d/%d/%d", now.Year(), now.Month(), now.Day()), http.StatusSeeOther)
+	})
+	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}", s.handlePositions)
+	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
+	})
 	return mux
 }
 

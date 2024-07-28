@@ -3,6 +3,7 @@ package kontoo
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"slices"
 	"strings"
@@ -222,7 +223,6 @@ func (s *Store) Add(e *LedgerEntry) error {
 type AssetPosition struct {
 	// If Asset is nil, AssetGroup must be populated.
 	Asset           *Asset
-	AssetGroup      *AssetGroup
 	LastPriceUpdate Date
 	LastValueUpdate Date
 	PVal
@@ -232,6 +232,10 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 	byAsset := make(map[string][]*LedgerEntry)
 	// Create sorted lists (ascending by ValueDate) per asset.
 	for _, e := range s.L.Entries {
+		if e.AssetID == "" {
+			// Ignore e.g. ExchangeRate
+			continue
+		}
 		if !e.ValueDate.After(t) {
 			byAsset[e.AssetID] = append(byAsset[e.AssetID], e)
 		}
@@ -243,8 +247,12 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 	}
 	var res []*AssetPosition
 	for assetId, es := range byAsset {
+		asset, ok := s.assetMap[assetId]
+		if !ok {
+			log.Fatalf("Program error: ledger entry with invalid AssetId: %q", assetId)
+		}
 		pos := &AssetPosition{
-			Asset: s.assetMap[assetId],
+			Asset: asset,
 		}
 		for _, e := range es {
 			pos.Update(e)
@@ -252,6 +260,13 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 		res = append(res, pos)
 	}
 	return res
+}
+
+func (p *AssetPosition) Name() string {
+	return p.Asset.Name
+}
+func (p *AssetPosition) Currency() Currency {
+	return p.Asset.Currency
 }
 
 func (p *AssetPosition) Update(e *LedgerEntry) {

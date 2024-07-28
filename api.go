@@ -24,7 +24,8 @@ const (
 	Commodity               AssetType = 13 // Edelmetalle, Rohstoffe
 	Cash                    AssetType = 14 // Bargeld
 	TaxLiability            AssetType = 15 // Steuerschuld
-	GeneralDebt             AssetType = 16 // Allg. Schulden
+	CreditCardDebt          AssetType = 16 // Schulden auf Kreditkarte
+	OtherDebt               AssetType = 17 // allg. Schulden
 	OtherAssetType          AssetType = 999
 )
 

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kontoo</title>
+    <style>
+        body {
+            font-family: arial, sans-serif;
+        }
+        th {
+            text-align: left;
+        }
+        td, th {
+            padding-right: 1ex;
+        }
+        .ralign {
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <h1>Positions</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Currency</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .TableRows}}
+            <tr>
+                <td>{{ .Name }}</td>
+                <td class="ralign">{{ .Currency }}</td>
+                <td class="ralign">{{ .Value }}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>    
+    <p>
+        Report date: {{.Date}} (generated {{.CurrentDate}})
+    </p>
+</body>
+</html>
