@@ -21,17 +21,25 @@ type AddLedgerEntryResponse struct {
 	Error       string `json:"error,omitempty"`
 }
 
+type AddAssetResponse struct {
+	Status  string `json:"status"`
+	AssetID string `json:"assetId,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // END JSON API
 
 type Server struct {
-	addr       string
-	ledgerPath string
+	addr          string
+	ledgerPath    string
+	resourcesPath string
 }
 
-func NewServer(addr, ledgerPath string) *Server {
+func NewServer(addr, ledgerPath, resourcesPath string) *Server {
 	return &Server{
-		addr:       addr,
-		ledgerPath: ledgerPath,
+		addr:          addr,
+		ledgerPath:    ledgerPath,
+		resourcesPath: resourcesPath,
 	}
 }
 
@@ -160,7 +168,7 @@ func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 	})
 }
 
-func RenderNewEntryTemplate(w io.Writer, templatePath string, s *Store) error {
+func RenderAddEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 	data, err := os.ReadFile(templatePath)
 	if err != nil {
 		return err
@@ -196,6 +204,32 @@ func RenderNewEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 		Assets:          assets,
 		BaseCurrency:    s.L.Header.BaseCurrency,
 		QuoteCurrencies: quoteCurrencies,
+	})
+}
+
+func RenderAddAssetTemplate(w io.Writer, templatePath string, s *Store) error {
+	data, err := os.ReadFile(templatePath)
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New("assets").Parse(string(data))
+	if err != nil {
+		return err
+	}
+	assetTypeVals := AssetTypeValues()
+	assetTypes := make([]string, 0, len(assetTypeVals))
+	for _, a := range assetTypeVals {
+		if a == UnspecifiedAssetType {
+			continue
+		}
+		assetTypes = append(assetTypes, a.String())
+	}
+	return tmpl.Execute(w, struct {
+		CurrentDate string
+		AssetTypes  []string
+	}{
+		CurrentDate: time.Now().Format("2006-01-02"),
+		AssetTypes:  assetTypes,
 	})
 }
 
@@ -236,14 +270,30 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleNewEntriesNew(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 	store, err := LoadStore(s.ledgerPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
 	var buf bytes.Buffer
-	err = RenderNewEntryTemplate(&buf, "./templates/add_entry.html", store)
+	err = RenderAddEntryTemplate(&buf, "./templates/add_entry.html", store)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
+	store, err := LoadStore(s.ledgerPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	var buf bytes.Buffer
+	err = RenderAddAssetTemplate(&buf, "./templates/add_asset.html", store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -332,10 +382,62 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	// Parse as a ledger entry in the same way that we'd parse it from the command line.
+	var args []string
+	for k, v := range r.Form {
+		if strings.HasPrefix(k, "Submit") {
+			continue // Ignore Submit button values.
+		}
+		if len(v) > 0 && len(v[0]) > 0 {
+			args = append(args, "-"+k)
+			args = append(args, v...)
+		}
+	}
+	a, err := ParseAsset(args)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Cannot parse asset: %v", err), http.StatusBadRequest)
+		return
+	}
+	store, err := LoadStore(s.ledgerPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	err = store.AddAsset(a)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(AddAssetResponse{
+			Status: "INVALID_ARGUMENT",
+			Error:  err.Error(),
+		})
+		return
+	}
+	err = store.Save()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(AddAssetResponse{
+		Status:  "OK",
+		AssetID: a.ID(),
+	})
+}
+
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
+	// Serve static resources like CSS from resources/ dir.
+	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesPath))))
+
 	mux.HandleFunc("/kontoo/ledger", s.handleLedger)
-	mux.HandleFunc("/kontoo/entries/new", s.handleNewEntriesNew)
+	mux.HandleFunc("/kontoo/entries/new", s.handleEntriesNew)
+	mux.HandleFunc("GET /kontoo/assets/new", s.handleAssetsNew)
+	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
 	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()

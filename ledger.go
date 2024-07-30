@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -217,6 +218,29 @@ func (s *Store) Add(e *LedgerEntry) error {
 		}
 	}
 	s.append(e)
+	return nil
+}
+
+func (s *Store) AddAsset(a *Asset) error {
+	if a.ID() == "" {
+		return fmt.Errorf("Asset must have an ID")
+	}
+	if strings.TrimSpace(a.Name) == "" {
+		return fmt.Errorf("Asset name must not be empty")
+	}
+	if a.MaturityDate != nil && a.MaturityDate.IsZero() {
+		return fmt.Errorf("MaturityDate must not be nil or non-zero")
+	}
+	if a.IssueDate != nil && a.IssueDate.IsZero() {
+		return fmt.Errorf("IssueDate must not be nil or non-zero")
+	}
+	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
+		return fmt.Errorf("MaturityDate must not be before IssueDate")
+	}
+	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
+		return fmt.Errorf("Currency must use ISO code (3 uppercase letter)")
+	}
+	s.L.Assets = append(s.L.Assets, a)
 	return nil
 }
 

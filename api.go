@@ -35,7 +35,7 @@ type Asset struct {
 	ShortName      string `json:",omitempty"`
 	IssueDate      *Date  `json:",omitempty"`
 	MaturityDate   *Date  `json:",omitempty"`
-	InterestMicros Micros `json:",omitempty"`
+	InterestMicros Micros `json:"Interest,omitempty"`
 	IBAN           string `json:",omitempty"`
 	AccountNumber  string `json:",omitempty"`
 	ISIN           string `json:",omitempty"`
@@ -44,6 +44,7 @@ type Asset struct {
 	CustomID       string `json:",omitempty"`
 	Currency       Currency
 	AssetGroup     string `json:",omitempty"`
+	Comment        string `json:",omitempty"`
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false

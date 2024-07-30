@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type CommandArgs struct {
@@ -74,7 +75,8 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 	intEnd := pos
 	if pos < l {
 		if decimal[pos] != '.' {
-			return fmt.Errorf("invalid character in decimal: %v", decimal[pos])
+			r, _ := utf8.DecodeRuneInString(decimal[pos:])
+			return fmt.Errorf("invalid character in decimal: %c", r)
 		}
 		pos++
 	}
@@ -83,7 +85,8 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 		pos++
 	}
 	if pos < l {
-		return fmt.Errorf("invalid character in decimal: %v", decimal[pos])
+		r, _ := utf8.DecodeRuneInString(decimal[pos:])
+		return fmt.Errorf("invalid character in decimal: %c", r)
 	}
 	if intEnd == intStart && fracStart == l {
 		return fmt.Errorf("decimal contains neither integral nor fractional part: %q", decimal)
@@ -129,6 +132,28 @@ func ParseDecimal(args []string, m *Micros) error {
 	return ParseDecimalAsMicros(args[0], m)
 }
 
+func ParseDecimalOrPercent(args []string, m *Micros) error {
+	if args == nil {
+		return nil
+	}
+	if len(args) != 1 {
+		return fmt.Errorf("invalid number of arguments for Micros: %v", args)
+	}
+	arg := args[0]
+	isPercent := false
+	if strings.HasSuffix(arg, "%") {
+		arg = strings.TrimSuffix(arg, "%")
+		isPercent = true
+	}
+	if err := ParseDecimalAsMicros(arg, m); err != nil {
+		return err
+	}
+	if isPercent {
+		*m = m.Mul(10 * Millis)
+	}
+	return nil
+}
+
 func ParseDate(args []string, d *Date) error {
 	if args == nil {
 		return nil
@@ -151,13 +176,29 @@ func ParseEntryType(args []string, e *EntryType) error {
 		return fmt.Errorf("invalid number of arguments for EntryType: %v", args)
 	}
 	key := strings.ToLower(args[0])
-	for name, value := range _EntryType_name_to_values {
+	for _, typ := range EntryTypeValues() {
+		name := typ.String()
 		if strings.HasPrefix(strings.ToLower(name), key) {
-			*e = EntryType(value)
+			*e = typ
 			return nil
 		}
 	}
 	return fmt.Errorf("cannot parse %q as EntryType", args)
+}
+
+func ParseAssetType(args []string, e *AssetType) error {
+	if len(args) != 1 {
+		return fmt.Errorf("invalid number of arguments for AssetType: %v", args)
+	}
+	key := strings.ToLower(args[0])
+	for _, typ := range AssetTypeValues() {
+		name := typ.String()
+		if strings.HasPrefix(strings.ToLower(name), key) {
+			*e = typ
+			return nil
+		}
+	}
+	return fmt.Errorf("cannot parse %q as AssetType", args)
 }
 
 func ParseCurrency(args []string, c *Currency) error {
@@ -190,9 +231,21 @@ type argSpec struct {
 	pArgs []string
 }
 
+func NewArgSpec() *argSpec {
+	return &argSpec{
+		args: make(map[string]argParseFunc),
+	}
+}
+
 func (s *argSpec) entryType(name string, e *EntryType) {
 	s.args[name] = func(xs []string) error {
 		return ParseEntryType(xs, e)
+	}
+}
+
+func (s *argSpec) assetType(name string, e *AssetType) {
+	s.args[name] = func(xs []string) error {
+		return ParseAssetType(xs, e)
 	}
 }
 
@@ -208,9 +261,26 @@ func (s *argSpec) decimal(name string, d *Micros) {
 	}
 }
 
+func (s *argSpec) decimalOrPercent(name string, d *Micros) {
+	s.args[name] = func(xs []string) error {
+		return ParseDecimalOrPercent(xs, d)
+	}
+}
+
 func (s *argSpec) date(name string, d *Date) {
 	s.args[name] = func(xs []string) error {
 		return ParseDate(xs, d)
+	}
+}
+
+func (s *argSpec) datePtr(name string, d **Date) {
+	s.args[name] = func(xs []string) error {
+		t := new(Date)
+		if err := ParseDate(xs, t); err != nil {
+			return err
+		}
+		*d = t
+		return nil
 	}
 }
 
@@ -311,8 +381,8 @@ func (s *argSpec) positionalArgs(names ...string) {
 	s.pArgs = append(s.pArgs, names...)
 }
 
-func ledgerArgSpec(e *LedgerEntry) *argSpec {
-	s := &argSpec{args: make(map[string]argParseFunc)}
+func ledgerEntryArgSpec(e *LedgerEntry) *argSpec {
+	s := NewArgSpec()
 	s.entryType("Type", &e.Type)
 	s.str("AssetID", &e.AssetID)
 	s.str("AssetRef", &e.AssetRef)
@@ -328,12 +398,42 @@ func ledgerArgSpec(e *LedgerEntry) *argSpec {
 	return s
 }
 
+func assetArgSpec(a *Asset) *argSpec {
+	s := NewArgSpec()
+	s.assetType("Type", &a.Type)
+	s.str("Name", &a.Name)
+	s.str("ShortName", &a.ShortName)
+	s.datePtr("IssueDate", &a.IssueDate)
+	s.datePtr("MaturityDate", &a.MaturityDate)
+	s.decimalOrPercent("Interest", &a.InterestMicros)
+	s.str("IBAN", &a.IBAN)
+	s.str("AccountNumber", &a.AccountNumber)
+	s.str("ISIN", &a.ISIN)
+	s.str("WKN", &a.WKN)
+	s.str("TickerSymbol", &a.TickerSymbol)
+	s.str("CustomID", &a.CustomID)
+	s.currency("Currency", &a.Currency)
+	s.str("AssetGroup", &a.AssetGroup)
+	s.strings("Comment", " ", &a.Comment)
+	return s
+}
+
 func ParseLedgerEntry(args []string) (*LedgerEntry, error) {
 	e := &LedgerEntry{}
-	s := ledgerArgSpec(e)
+	s := ledgerEntryArgSpec(e)
 	err := s.parse(args)
 	if err != nil {
 		return nil, err
 	}
 	return e, nil
+}
+
+func ParseAsset(args []string) (*Asset, error) {
+	a := &Asset{}
+	s := assetArgSpec(a)
+	err := s.parse(args)
+	if err != nil {
+		return nil, err
+	}
+	return a, nil
 }

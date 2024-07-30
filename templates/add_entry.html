@@ -2,77 +2,16 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kontoo</title>
-    <style>
-        body {
-            font-family: sans-serif;
-        }
-
-        th {
-            text-align: left;
-        }
-
-        td,
-        th {
-            padding-right: 1ex;
-        }
-
-        .ralign {
-            text-align: right;
-        }
-
-        .field-label {
-            font-weight: bold;
-            font-size: 90%;
-        }
-
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-
-        .field-value {
-            width: 16em;
-            margin-bottom: 1ex;
-        }
-
-        .field-value input,
-        .field-value textarea,
-        .field-value select {
-            width: 100%;
-        }
-
-        textarea {
-            font-family: sans-serif;
-        }
-
-        .hidden {
-            display: none;
-        }
-
-        #status-callout {
-            padding: 1ex;
-            margin: 1ex 0;
-            border: 1px solid;
-            border-radius: 5px;
-        }
-        .callout-err {
-            border-color: brown;
-            background-color: #ffe6e6;
-        }
-        .callout-ok {
-            border-color: #008000;
-            background-color: #e6ffe6;
-        }
-    </style>
+    <link href="/kontoo/resources/style.css" rel="stylesheet">
 </head>
 
 <body>
-    <h1>Kontoo</h1>
+    <h1>Add entry</h1>
     <div id="status-callout" class="hidden"></div>
-    <form id="entry-form" method="post" action="/kontoo/entries">
+    <form class="columnar" id="entry-form" method="post" action="/kontoo/entries">
         <div class="field">
             <div class="field-label">
                 <label for="ValueDate">Value date</label>
@@ -137,7 +76,7 @@
                 <label for="Value">Value</label>
             </div>
             <div class="field-value">
-                <input id="Value" name="Value" type="text">
+                <input id="Value" name="Value" type="text" pattern="\d+(\.\d+)?">
             </div>
         </div>
         <div id="QuantityField" class="field">

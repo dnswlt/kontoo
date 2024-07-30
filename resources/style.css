@@ -1,0 +1,68 @@
+body {
+    font-family: sans-serif;
+}
+
+th {
+    text-align: left;
+}
+
+td,
+th {
+    padding-right: 1ex;
+}
+
+.ralign {
+    text-align: right;
+}
+
+/* Forms */
+
+.field-label {
+    font-weight: bold;
+    font-size: 90%;
+}
+
+form.columnar {
+    display: flex;
+    flex-direction: column;
+}
+
+.field-value {
+    width: 16em;
+    margin-bottom: 1ex;
+}
+
+.field-value input,
+.field-value textarea,
+.field-value select {
+    width: 100%;
+}
+
+textarea {
+    font-family: sans-serif;
+}
+
+/* Callouts */
+
+#status-callout {
+    padding: 1ex;
+    margin: 1ex 0;
+    border: 1px solid;
+    border-radius: 5px;
+}
+
+.callout-err {
+    border-color: brown;
+    background-color: #ffe6e6;
+}
+
+.callout-ok {
+    border-color: #008000;
+    background-color: #e6ffe6;
+}
+
+/* Visibility */
+
+.hidden {
+    display: none;
+}

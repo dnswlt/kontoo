@@ -37,10 +37,11 @@ func ProcessServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	port := fs.Int("port", 8084, "The port on which to listen")
 	ledgerPath := fs.String("ledger", "./ledger.json", "Path to the ledger.json file")
+	resourcesPath := fs.String("resources", "./resources", "Path from which static resources are served")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("parse error for serve flags: %w", err)
 	}
-	s := kontoo.NewServer(fmt.Sprintf("localhost:%d", *port), *ledgerPath)
+	s := kontoo.NewServer(fmt.Sprintf("localhost:%d", *port), *ledgerPath, *resourcesPath)
 	return s.Serve()
 }
 
