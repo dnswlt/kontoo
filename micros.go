@@ -55,7 +55,7 @@ func (m Micros) Format(format string) string {
 		i++
 	}
 	thousandSep := ""
-	if i < len(rs) && rs[i] != '.' {
+	if i < len(rs) && rs[i] != '.' && rs[i] != '%' {
 		thousandSep = string(rs[i])
 		i++
 	}

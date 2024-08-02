@@ -39,17 +39,17 @@
                 <td></td>
                 {{end}}
                 <td class="ralign">{{ .Currency }}</td>
-                <td>{{ .Value }}</td>
-                <td>{{ .Cost }}</td>
-                <td>{{ .Quantity }}</td>
-                <td>{{ .Price }}</td>
+                <td class="ralign">{{ money .Value }}</td>
+                <td class="ralign">{{if nonzero .Cost}}{{ money .Cost }}{{end}}</td>
+                <td class="ralign">{{ quantity .Quantity }}</td>
+                <td class="ralign">{{ price .Price }}</td>
                 <td>{{ .Comment }}</td>
             </tr>
             {{end}}
         </tbody>
     </table>    
-    <p>
-        Report generated: {{.CurrentDate}}
+    <p class="footer">
+        Report generated {{.CurrentDate}}
     </p>
 </body>
 </html>

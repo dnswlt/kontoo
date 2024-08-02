@@ -17,7 +17,7 @@ import (
 // JSON API for server requests and responses.
 type AddLedgerEntryResponse struct {
 	Status      string `json:"status"`
-	SequenceNum int64  `json:"sequenceNum,omitempty"`
+	SequenceNum int64  `json:"sequenceNum"`
 	Error       string `json:"error,omitempty"`
 }
 
@@ -55,8 +55,8 @@ func (d *Date) String() string {
 	return d.Format("2006-01-02")
 }
 
-func (e *LedgerEntryRow) ValueDate() Date {
-	return e.E.ValueDate
+func (e *LedgerEntryRow) ValueDate() string {
+	return e.E.ValueDate.String()
 }
 func (e *LedgerEntryRow) EntryType() string {
 	return e.E.Type.String()
@@ -85,26 +85,17 @@ func (e *LedgerEntryRow) AssetType() string {
 func (e *LedgerEntryRow) Currency() string {
 	return string(e.E.Currency)
 }
-func formatMonetaryValue(m Micros) string {
-	if m == 0 {
-		return ""
-	}
-	v := float64(m) / 1e6
-	return fmt.Sprintf("%.2f", v)
+func (e *LedgerEntryRow) Value() Micros {
+	return e.E.ValueMicros
 }
-func (e *LedgerEntryRow) Value() MonetaryValue {
-	return MonetaryValue(e.E.ValueMicros)
+func (e *LedgerEntryRow) Cost() Micros {
+	return e.E.CostMicros
 }
-func (e *LedgerEntryRow) Cost() MonetaryValue {
-	return MonetaryValue(e.E.CostMicros)
+func (e *LedgerEntryRow) Quantity() Micros {
+	return e.E.QuantityMicros
 }
-func (e *LedgerEntryRow) Quantity() MonetaryValue {
-	return MonetaryValue(e.E.QuantityMicros)
-}
-func (e *LedgerEntryRow) Price() string {
-	// TODO: clean up
-	v := float64(e.E.PriceMicros) / 1e6
-	return fmt.Sprintf("%.3f", v)
+func (e *LedgerEntryRow) Price() Micros {
+	return e.E.PriceMicros
 }
 func (e *LedgerEntryRow) Comment() string {
 	return e.E.Comment
@@ -121,21 +112,15 @@ func LedgerEntryRows(s *Store) []*LedgerEntryRow {
 	return res
 }
 
-type MonetaryValue Micros
-
-func (v MonetaryValue) String() string {
-	return formatMonetaryValue(Micros(v))
-}
-
 type PositionTableRow struct {
 	ID              string
 	Name            string
 	Type            AssetType
 	Currency        Currency
-	Value           MonetaryValue
-	PurchasePrice   MonetaryValue
-	NominalValue    MonetaryValue
-	InterestRate    float64 // In percent. 1 == 1%
+	Value           Micros
+	PurchasePrice   Micros
+	NominalValue    Micros
+	InterestRate    Micros
 	IssueDate       *Date
 	MaturityDate    *Date
 	YearsToMaturity float64
@@ -164,12 +149,12 @@ func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*
 			Name:     a.Name,
 			Type:     a.Type,
 			Currency: a.Currency,
-			Value:    MonetaryValue(p.CalculatedValueMicros()),
+			Value:    p.CalculatedValueMicros(),
 		}
 		if style == DisplayStyleMaturingSecurities {
 			row.PurchasePrice = 0 // TODO: calculate
-			row.NominalValue = MonetaryValue(p.QuantityMicros)
-			row.InterestRate = float64(a.InterestMicros) / 1e4
+			row.NominalValue = p.QuantityMicros
+			row.InterestRate = a.InterestMicros
 			row.IssueDate = a.IssueDate
 			row.MaturityDate = a.MaturityDate
 			row.YearsToMaturity = a.MaturityDate.Sub(date).Hours() / 24 / 365
@@ -177,6 +162,26 @@ func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*
 		res = append(res, row)
 	}
 	return res
+}
+
+func commonFuncs() template.FuncMap {
+	return template.FuncMap{
+		"nonzero": func(m Micros) bool {
+			return m != 0
+		},
+		"money": func(m Micros) string {
+			return m.Format("()'.2")
+		},
+		"price": func(m Micros) string {
+			return m.Format("'.3")
+		},
+		"quantity": func(m Micros) string {
+			return m.Format("'.0")
+		},
+		"percent": func(m Micros) string {
+			return m.Format(".2%")
+		},
+	}
 }
 
 func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
@@ -193,13 +198,7 @@ func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 	if err != nil {
 		return err
 	}
-	tmpl := template.New("ledger")
-	tmpl.Funcs(template.FuncMap{
-		"nonzero": func(v Micros) bool {
-			return v != 0
-		},
-	})
-	_, err = tmpl.Parse(string(data))
+	tmpl, err := template.New("ledger").Funcs(commonFuncs()).Parse(string(data))
 	if err != nil {
 		return err
 	}
@@ -282,7 +281,7 @@ func RenderPositionsTemplate(w io.Writer, templatePath string, style PositionDis
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("positions").Parse(string(data))
+	tmpl, err := template.New("positions").Funcs(commonFuncs()).Parse(string(data))
 	if err != nil {
 		return err
 	}

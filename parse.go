@@ -391,7 +391,7 @@ func ledgerEntryArgSpec(e *LedgerEntry) *argSpec {
 	s.decimal("Value", &e.ValueMicros)
 	s.decimal("Cost", &e.CostMicros)
 	s.decimal("Quantity", &e.QuantityMicros)
-	s.decimal("Price", &e.PriceMicros)
+	s.decimalOrPercent("Price", &e.PriceMicros)
 	s.date("ValueDate", &e.ValueDate)
 	s.strings("Comment", " ", &e.Comment)
 	s.positionalArgs("Type", "AssetRef")

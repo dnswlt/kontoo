@@ -34,11 +34,11 @@
                 <td>{{ .ID }}</td>
                 <td>{{ .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
-                <td class="ralign">{{ .Value }}</td>
+                <td class="ralign">{{ money .Value }}</td>
                 {{if $showMaturingSecurityFields}}
-                <td class="ralign">{{ .PurchasePrice }}</td>
-                <td class="ralign">{{ .NominalValue }}</td>
-                <td class="ralign">{{ printf "%.2f%%" .InterestRate }}</td>
+                <td class="ralign">{{ money .PurchasePrice }}</td>
+                <td class="ralign">{{ money .NominalValue }}</td>
+                <td class="ralign">{{ percent .InterestRate }}</td>
                 <td>{{ .IssueDate }}</td>
                 <td>{{ .MaturityDate }}</td>
                 <td class="ralign">{{ printf "%.1f" .YearsToMaturity }}</td>
