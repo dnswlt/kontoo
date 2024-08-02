@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,17 +31,39 @@ type AddAssetResponse struct {
 // END JSON API
 
 type Server struct {
-	addr          string
-	ledgerPath    string
-	resourcesPath string
+	addr         string
+	ledgerPath   string
+	resourcesDir string
+	templatesDir string
+	templates    *template.Template
 }
 
-func NewServer(addr, ledgerPath, resourcesPath string) *Server {
-	return &Server{
-		addr:          addr,
-		ledgerPath:    ledgerPath,
-		resourcesPath: resourcesPath,
+func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, error) {
+	if _, err := os.Stat(path.Join(resourcesDir, "style.css")); err != nil {
+		return nil, fmt.Errorf("invalid resourcesDir: %w", err)
 	}
+	if _, err := os.Stat(path.Join(templatesDir, "ledger.html")); err != nil {
+		return nil, fmt.Errorf("invalid templatesDir: %w", err)
+	}
+	s := &Server{
+		addr:         addr,
+		ledgerPath:   ledgerPath,
+		resourcesDir: resourcesDir,
+		templatesDir: templatesDir,
+	}
+	if err := s.reloadTemplates(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+func (s *Server) reloadTemplates() error {
+	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(path.Join(s.templatesDir, "*.html"))
+	if err != nil {
+		return fmt.Errorf("could not parse templates: %w", err)
+	}
+	s.templates = tmpl
+	return nil
 }
 
 type LedgerEntryRow struct {
@@ -184,8 +207,8 @@ func commonFuncs() template.FuncMap {
 	}
 }
 
-func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
-	rows := LedgerEntryRows(s)
+func (s *Server) renderLedgerTemplate(w io.Writer, store *Store) error {
+	rows := LedgerEntryRows(store)
 	// Sort ledger rows by (ValueDate, Created) for output table.
 	slices.SortFunc(rows, func(a, b *LedgerEntryRow) int {
 		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
@@ -194,15 +217,7 @@ func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 		}
 		return a.E.Created.Compare(b.E.Created)
 	})
-	data, err := os.ReadFile(templatePath)
-	if err != nil {
-		return err
-	}
-	tmpl, err := template.New("ledger").Funcs(commonFuncs()).Parse(string(data))
-	if err != nil {
-		return err
-	}
-	return tmpl.Execute(w, struct {
+	return s.templates.ExecuteTemplate(w, "ledger.html", struct {
 		TableRows   []*LedgerEntryRow
 		CurrentDate string
 	}{
@@ -211,24 +226,16 @@ func RenderLedgerTemplate(w io.Writer, templatePath string, s *Store) error {
 	})
 }
 
-func RenderAddEntryTemplate(w io.Writer, templatePath string, s *Store) error {
-	data, err := os.ReadFile(templatePath)
-	if err != nil {
-		return err
-	}
-	tmpl, err := template.New("entries").Parse(string(data))
-	if err != nil {
-		return err
-	}
-	assets := make([]*Asset, len(s.L.Assets))
-	copy(assets, s.L.Assets)
+func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
+	assets := make([]*Asset, len(store.L.Assets))
+	copy(assets, store.L.Assets)
 	slices.SortFunc(assets, func(a, b *Asset) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	quoteCurrenciesMap := make(map[Currency]bool)
 	var quoteCurrencies []Currency
 	for _, a := range assets {
-		if a.Currency == s.L.Header.BaseCurrency {
+		if a.Currency == store.L.Header.BaseCurrency {
 			continue
 		}
 		if _, ok := quoteCurrenciesMap[a.Currency]; !ok {
@@ -237,7 +244,7 @@ func RenderAddEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 		}
 	}
 	slices.Sort(quoteCurrencies)
-	return tmpl.Execute(w, struct {
+	return s.templates.ExecuteTemplate(w, "add_entry.html", struct {
 		CurrentDate     string
 		Assets          []*Asset
 		BaseCurrency    Currency
@@ -245,20 +252,12 @@ func RenderAddEntryTemplate(w io.Writer, templatePath string, s *Store) error {
 	}{
 		CurrentDate:     time.Now().Format("2006-01-02"),
 		Assets:          assets,
-		BaseCurrency:    s.L.Header.BaseCurrency,
+		BaseCurrency:    store.L.Header.BaseCurrency,
 		QuoteCurrencies: quoteCurrencies,
 	})
 }
 
-func RenderAddAssetTemplate(w io.Writer, templatePath string, s *Store) error {
-	data, err := os.ReadFile(templatePath)
-	if err != nil {
-		return err
-	}
-	tmpl, err := template.New("assets").Parse(string(data))
-	if err != nil {
-		return err
-	}
+func (s *Server) renderAddAssetTemplate(w io.Writer) error {
 	assetTypeVals := AssetTypeValues()
 	assetTypes := make([]string, 0, len(assetTypeVals))
 	for _, a := range assetTypeVals {
@@ -267,7 +266,7 @@ func RenderAddAssetTemplate(w io.Writer, templatePath string, s *Store) error {
 		}
 		assetTypes = append(assetTypes, a.String())
 	}
-	return tmpl.Execute(w, struct {
+	return s.templates.ExecuteTemplate(w, "add_asset.html", struct {
 		CurrentDate string
 		AssetTypes  []string
 	}{
@@ -276,17 +275,9 @@ func RenderAddAssetTemplate(w io.Writer, templatePath string, s *Store) error {
 	})
 }
 
-func RenderPositionsTemplate(w io.Writer, templatePath string, style PositionDisplayStyle, date time.Time, s *Store) error {
-	data, err := os.ReadFile(templatePath)
-	if err != nil {
-		return err
-	}
-	tmpl, err := template.New("positions").Funcs(commonFuncs()).Parse(string(data))
-	if err != nil {
-		return err
-	}
-	positions := PositionTableRows(s, date, style)
-	return tmpl.Execute(w, struct {
+func (s *Server) renderPositionsTemplate(w io.Writer, style PositionDisplayStyle, date time.Time, store *Store) error {
+	positions := PositionTableRows(store, date, style)
+	return s.templates.ExecuteTemplate(w, "positions.html", struct {
 		Date                       string
 		CurrentDate                string
 		ShowMaturingSecurityFields bool
@@ -306,7 +297,7 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	err = RenderLedgerTemplate(&buf, "./templates/ledger.html", store)
+	err = s.renderLedgerTemplate(&buf, store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -322,7 +313,7 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	err = RenderAddEntryTemplate(&buf, "./templates/add_entry.html", store)
+	err = s.renderAddEntryTemplate(&buf, store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -332,14 +323,8 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
-	store, err := LoadStore(s.ledgerPath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 	var buf bytes.Buffer
-	err = RenderAddAssetTemplate(&buf, "./templates/add_asset.html", store)
-	if err != nil {
+	if err := s.renderAddAssetTemplate(&buf); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -379,7 +364,7 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	err = RenderPositionsTemplate(&buf, "./templates/positions.html", style, date, store)
+	err = s.renderPositionsTemplate(&buf, style, date, store)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -485,7 +470,7 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Serve static resources like CSS from resources/ dir.
-	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesPath))))
+	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesDir))))
 
 	mux.HandleFunc("/kontoo/ledger", s.handleLedger)
 	mux.HandleFunc("/kontoo/entries/new", s.handleEntriesNew)
