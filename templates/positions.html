@@ -9,24 +9,45 @@
 <body>
     <h1>Positions</h1>
     <table>
+        {{$showMaturingSecurityFields := .ShowMaturingSecurityFields}}
         <thead>
             <tr>
                 <th>Name</th>
+                <th>Code</th>
+                <th>Type</th>
                 <th>Currency</th>
-                <th>Value</th>
+                <th>Market value</th>
+                {{if $showMaturingSecurityFields}}
+                <th>Purchase price</th>
+                <th>Nominal value</th>
+                <th>Interest rate</th>
+                <th>Issue date</th>
+                <th>Maturity date</th>
+                <th>Years to maturity</th>
+                {{end}}
             </tr>
         </thead>
         <tbody>
             {{range .TableRows}}
             <tr>
                 <td>{{ .Name }}</td>
+                <td>{{ .ID }}</td>
+                <td>{{ .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign">{{ .Value }}</td>
+                {{if $showMaturingSecurityFields}}
+                <td class="ralign">{{ .PurchasePrice }}</td>
+                <td class="ralign">{{ .NominalValue }}</td>
+                <td class="ralign">{{ printf "%.2f%%" .InterestRate }}</td>
+                <td>{{ .IssueDate }}</td>
+                <td>{{ .MaturityDate }}</td>
+                <td class="ralign">{{ printf "%.1f" .YearsToMaturity }}</td>
+                {{end}}
             </tr>
             {{end}}
         </tbody>
     </table>    
-    <p>
+    <p class="footer">
         Report date: {{.Date}} (generated {{.CurrentDate}})
     </p>
 </body>

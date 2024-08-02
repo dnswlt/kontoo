@@ -14,6 +14,9 @@ import (
 func DateVal(year int, month time.Month, day int) Date {
 	return Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
+func NewDate(year int, month time.Month, day int) *Date {
+	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
+}
 
 func (d *Date) UnmarshalJSON(data []byte) error {
 	s := strings.Trim(string(data), "\"")
@@ -222,30 +225,34 @@ func (s *Store) Add(e *LedgerEntry) error {
 }
 
 func (s *Store) AddAsset(a *Asset) error {
-	if a.ID() == "" {
+	id := a.ID()
+	if id == "" {
 		return fmt.Errorf("Asset must have an ID")
 	}
 	if strings.TrimSpace(a.Name) == "" {
 		return fmt.Errorf("Asset name must not be empty")
 	}
 	if a.MaturityDate != nil && a.MaturityDate.IsZero() {
-		return fmt.Errorf("MaturityDate must not be nil or non-zero")
+		return fmt.Errorf("MaturityDate must be nil or non-zero")
 	}
 	if a.IssueDate != nil && a.IssueDate.IsZero() {
-		return fmt.Errorf("IssueDate must not be nil or non-zero")
+		return fmt.Errorf("IssueDate must be nil or non-zero")
 	}
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
 	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
-		return fmt.Errorf("Currency must use ISO code (3 uppercase letter)")
+		return fmt.Errorf("Currency must use ISO code (3 uppercase letters)")
 	}
+	if _, ok := s.assetMap[id]; ok {
+		return fmt.Errorf("duplicate asset ID %q", id)
+	}
+	s.assetMap[id] = a
 	s.L.Assets = append(s.L.Assets, a)
 	return nil
 }
 
 type AssetPosition struct {
-	// If Asset is nil, AssetGroup must be populated.
 	Asset           *Asset
 	LastPriceUpdate Date
 	LastValueUpdate Date

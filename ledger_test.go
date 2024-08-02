@@ -91,6 +91,109 @@ func TestStoreAdd(t *testing.T) {
 	}
 }
 
+func TestStoreAddAsset(t *testing.T) {
+	tests := []struct {
+		A *Asset
+	}{
+		{
+			A: &Asset{
+				Type:         GovernmentBond,
+				ISIN:         "DE123",
+				Name:         "Bund123",
+				Currency:     "EUR",
+				IssueDate:    NewDate(2023, 1, 1),
+				MaturityDate: NewDate(2030, 1, 1),
+			},
+		},
+		{
+			A: &Asset{
+				Type:     SavingsAccount,
+				IBAN:     "DE999",
+				Name:     "Sparkonto",
+				Currency: "CHF",
+			},
+		},
+	}
+	s, err := NewStore(&Ledger{}, "")
+	if err != nil {
+		t.Fatalf("Failed to create Store: %v", err)
+	}
+	for i, tc := range tests {
+		err = s.AddAsset(tc.A)
+		if err != nil {
+			t.Fatalf("Failed to add entry: %v", err)
+		}
+		if len(s.L.Assets) != i+1 {
+			t.Fatalf("Entry was not added, len(l.Assets) = %d", len(s.L.Assets))
+		}
+		got := s.L.Assets[i]
+		if got != tc.A {
+			t.Error("Assets are not pointer equal")
+		}
+		_, found := s.assetMap[tc.A.ID()]
+		if !found {
+			t.Fatalf("Asset not found for ID %q", tc.A.ID())
+		}
+	}
+}
+
+func TestStoreAddAssetFail(t *testing.T) {
+	tests := []struct {
+		name string
+		A    *Asset
+	}{
+		{
+			name: "maturity_before_issue",
+			A: &Asset{
+				Type:         GovernmentBond,
+				ISIN:         "DE123",
+				Name:         "Bund123",
+				Currency:     "EUR",
+				IssueDate:    NewDate(2023, 1, 1),
+				MaturityDate: NewDate(2021, 1, 1),
+			},
+		},
+		{
+			name: "missing_name",
+			A: &Asset{
+				Type:     SavingsAccount,
+				IBAN:     "DE999",
+				Currency: "CHF",
+			},
+		},
+		{
+			name: "missing_id",
+			A: &Asset{
+				Type:     SavingsAccount,
+				Currency: "CHF",
+				Name:     "Test",
+			},
+		},
+		{
+			name: "invalid_currency",
+			A: &Asset{
+				Type:     SavingsAccount,
+				IBAN:     "DE999",
+				Name:     "Sparkonto",
+				Currency: "chf",
+			},
+		},
+	}
+	s, err := NewStore(&Ledger{}, "")
+	if err != nil {
+		t.Fatalf("Failed to create Store: %v", err)
+	}
+	for _, tc := range tests {
+		err = s.AddAsset(tc.A)
+		if err == nil {
+			t.Errorf("%s: expected error, got none", tc.name)
+		}
+		if len(s.L.Assets) != 0 {
+			t.Errorf("%s: errorneous entry was added, len(l.Assets) = %d", tc.name, len(s.L.Assets))
+		}
+	}
+}
+
 func TestPositionsAtSingleAsset(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{
