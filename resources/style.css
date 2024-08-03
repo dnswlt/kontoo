@@ -16,6 +16,12 @@ th {
     text-align: right;
 }
 
+.warning {
+    color: #a52a2a;
+    background-color: #ffe6e6;
+    /* color: #da2424; */
+}
+
 .footer {
     font-style: italic;
     font-size: 10pt;
@@ -59,7 +65,7 @@ textarea {
 }
 
 .callout-err {
-    border-color: brown;
+    border-color: #a52a2a;
     background-color: #ffe6e6;
 }
 

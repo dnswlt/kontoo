@@ -42,7 +42,7 @@
                 <td class="ralign">{{ percent .InterestRate }}</td>
                 <td>{{ .IssueDate }}</td>
                 <td>{{ .MaturityDate }}</td>
-                <td class="ralign">{{ printf "%.1f" .YearsToMaturity }}</td>
+                <td class="ralign {{if lt .YearsToMaturity 0.0}}warning{{end}}">{{ printf "%.1f" .YearsToMaturity }}</td>
                 {{end}}
             </tr>
             {{end}}

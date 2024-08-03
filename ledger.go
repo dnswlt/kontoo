@@ -189,7 +189,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 	if e.PriceMicros < 0 {
 		return fmt.Errorf("PriceMicros must not be negative")
 	}
-	if allZero(e.ValueMicros, e.QuantityMicros, e.PriceMicros) {
+	if allZero(e.ValueMicros, e.QuantityMicros, e.PriceMicros) && e.Type != AssetMaturity {
 		return fmt.Errorf("entry must have at least one non-zero value")
 	}
 	switch e.Type {
@@ -276,6 +276,7 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 			return a.ValueDate.Time.Compare(b.ValueDate.Time)
 		})
 	}
+	// Calculate position values at date.
 	var res []*AssetPosition
 	for assetId, es := range byAsset {
 		asset, ok := s.assetMap[assetId]
@@ -288,7 +289,9 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 		for _, e := range es {
 			pos.Update(e)
 		}
-		res = append(res, pos)
+		if pos.CalculatedValueMicros() != 0 {
+			res = append(res, pos)
+		}
 	}
 	return res
 }

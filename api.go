@@ -131,3 +131,23 @@ const (
 	USD Currency = "USD"
 	EUR Currency = "EUR"
 )
+
+func (d *Date) String() string {
+	if d == nil {
+		return ""
+	}
+	return d.Format("2006-01-02")
+}
+
+func (d *Date) Compare(other *Date) int {
+	if d == nil {
+		if other == nil {
+			return 0
+		}
+		return -1
+	}
+	if other == nil {
+		return 1
+	}
+	return d.Time.Compare(other.Time)
+}

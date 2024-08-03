@@ -71,15 +71,8 @@ type LedgerEntryRow struct {
 	A *Asset
 }
 
-func (d *Date) String() string {
-	if d == nil {
-		return ""
-	}
-	return d.Format("2006-01-02")
-}
-
-func (e *LedgerEntryRow) ValueDate() string {
-	return e.E.ValueDate.String()
+func (e *LedgerEntryRow) ValueDate() Date {
+	return e.E.ValueDate
 }
 func (e *LedgerEntryRow) EntryType() string {
 	return e.E.Type.String()
@@ -158,9 +151,19 @@ const (
 
 func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
-	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+	sortFunc := func(a, b *AssetPosition) int {
 		return strings.Compare(a.Name(), b.Name())
-	})
+	}
+	if style == DisplayStyleMaturingSecurities {
+		sortFunc = func(a, b *AssetPosition) int {
+			c := a.Asset.MaturityDate.Compare(b.Asset.MaturityDate)
+			if c != 0 {
+				return c
+			}
+			return strings.Compare(a.Name(), b.Name())
+		}
+	}
+	slices.SortFunc(positions, sortFunc)
 	var res []*PositionTableRow
 	for _, p := range positions {
 		a := p.Asset
