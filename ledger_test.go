@@ -358,6 +358,105 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	}
 }
 
+func TestAssetPositionUpdateStock(t *testing.T) {
+	asset := &Asset{
+		Type:         Stock,
+		Name:         "Microsoft Corporation",
+		TickerSymbol: "MSFT",
+		Currency:     "USD",
+	}
+	const u = UnitValue
+	tests := []struct {
+		E *LedgerEntry
+		P *AssetPosition
+	}{
+		{
+			E: &LedgerEntry{
+				Type:           BuyTransaction,
+				AssetID:        "MSFT",
+				ValueDate:      DateVal(2024, 1, 1),
+				QuantityMicros: 10 * u,
+				PriceMicros:    2 * u,
+				CostMicros:     5 * u,
+			},
+			P: &AssetPosition{
+				Asset:           asset,
+				LastPriceUpdate: DateVal(2024, 1, 1),
+				QuantityMicros:  10 * u,
+				PriceMicros:     2 * u,
+				Items: []AssetPositionItem{
+					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+				},
+			},
+		},
+		{
+			E: &LedgerEntry{
+				Type:           BuyTransaction,
+				AssetID:        "MSFT",
+				ValueDate:      DateVal(2024, 1, 2),
+				QuantityMicros: 20 * u,
+				PriceMicros:    3 * u,
+				CostMicros:     12 * u,
+			},
+			P: &AssetPosition{
+				Asset:           asset,
+				LastPriceUpdate: DateVal(2024, 1, 2),
+				QuantityMicros:  30 * u,
+				PriceMicros:     3 * u,
+				Items: []AssetPositionItem{
+					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+					{QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
+				},
+			},
+		},
+		{
+			// Sell 20, i.e. 10 of the first purchase and 10 of the second one.
+			E: &LedgerEntry{
+				Type:           SellTransaction,
+				AssetID:        "MSFT",
+				ValueDate:      DateVal(2024, 1, 3),
+				QuantityMicros: 20 * u,
+				PriceMicros:    3 * u,
+				CostMicros:     10 * u,
+			},
+			P: &AssetPosition{
+				Asset:           asset,
+				LastPriceUpdate: DateVal(2024, 1, 3),
+				QuantityMicros:  10 * u,
+				PriceMicros:     3 * u,
+				Items: []AssetPositionItem{
+					{QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
+				},
+			},
+		},
+		{
+			// Sell the rest.
+			E: &LedgerEntry{
+				Type:           SellTransaction,
+				AssetID:        "MSFT",
+				ValueDate:      DateVal(2024, 1, 4),
+				QuantityMicros: 10 * u,
+				PriceMicros:    3 * u,
+				CostMicros:     10 * u,
+			},
+			P: &AssetPosition{
+				Asset:           asset,
+				LastPriceUpdate: DateVal(2024, 1, 4),
+				QuantityMicros:  0 * u,
+				PriceMicros:     3 * u,
+				Items:           nil,
+			},
+		},
+	}
+	p := &AssetPosition{Asset: asset}
+	for i, tc := range tests {
+		p.Update(tc.E)
+		if diff := cmp.Diff(tc.P, p); diff != "" {
+			t.Errorf("Update mismatch at element %d (-want, +got): %s", i, diff)
+		}
+	}
+}
+
 func TestSaveLoad(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{

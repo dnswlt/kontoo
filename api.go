@@ -85,12 +85,12 @@ type LedgerEntry struct {
 	// 1'000'000 in ValueMicros equals 1.00 CHF (or whatever the Currency),
 	// 500'000 PriceMicros of a bond equal a price of 50% of the nominal value.
 
-	// Value in micros of the currency. 1'000'000 CHF in ValueMicros equal 1 CHF.
+	// Value in micros of the currency. For currency CHF, 1'000'000 ValueMicros equals 1 CHF.
 	// Except for accounts, ValueMicros is only informational. The current value of other asset positions
 	// is calculated from its QuantityMicros and its PriceMicros.
 	ValueMicros    Micros `json:"Value,omitempty"`    // Account balance or asset value as calculated from quantity and price.
 	QuantityMicros Micros `json:"Quantity,omitempty"` // Number of stocks, oz of gold, nominal value of a bond
-	PriceMicros    Micros `json:"Price,omitempty"`    // Price of a single quantity of the asset.
+	PriceMicros    Micros `json:"Price,omitempty"`    // Price of a single quantity of the asset. (1 * UnitValue) means 100% for prices specified in percent.
 	CostMicros     Micros `json:"Cost,omitempty"`     // Cost incurred by the transaction.
 
 	Comment string `json:",omitempty"`
@@ -112,12 +112,6 @@ type Ledger struct {
 	Entries     []*LedgerEntry `json:",omitempty"`
 }
 
-type PVal struct {
-	ValueMicros    Micros
-	QuantityMicros Micros
-	PriceMicros    Micros
-}
-
 const (
 	Millis    = 1_000
 	UnitValue = 1_000_000
@@ -132,22 +126,24 @@ const (
 	EUR Currency = "EUR"
 )
 
-func (d *Date) String() string {
-	if d == nil {
-		return ""
-	}
+func (d Date) String() string {
 	return d.Format("2006-01-02")
 }
 
-func (d *Date) Compare(other *Date) int {
-	if d == nil {
-		if other == nil {
+func (d Date) Compare(other Date) int {
+	return d.Time.Compare(other.Time)
+}
+
+// Convenience function for sorting *Date.
+func CompareDatePtr(l, r *Date) int {
+	if l == nil {
+		if r == nil {
 			return 0
 		}
 		return -1
 	}
-	if other == nil {
+	if r == nil {
 		return 1
 	}
-	return d.Time.Compare(other.Time)
+	return l.Compare(*r)
 }

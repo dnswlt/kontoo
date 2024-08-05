@@ -29,6 +29,15 @@ func (a Micros) MulTrunc(b Micros) Micros {
 	return Micros(math.Trunc(x * y))
 }
 
+// Calculates the fraction numer/denom of this Micros value.
+func (a Micros) Frac(numer, denom Micros) Micros {
+	f := big.NewRat(int64(numer), int64(denom))
+	x := big.NewRat(int64(a), 1)
+	x.Mul(x, f)
+	v, _ := x.Float64()
+	return Micros(math.Trunc(v))
+}
+
 func (m Micros) SplitFrac() (int64, int) {
 	return int64(m / 1_000_000), int(m % 1_000_000)
 }
@@ -148,7 +157,7 @@ func (m Micros) MarshalJSON() ([]byte, error) {
 			return fmt.Sprintf(`"%s%d"`, sign, i)
 		}
 		if f%10_000 == 0 {
-			return fmt.Sprintf(`"%s%d.%02d"`, sign, i, f)
+			return fmt.Sprintf(`"%s%d.%02d"`, sign, i, f/10_000)
 		}
 		return fmt.Sprintf(`"%s%d.%06d"`, sign, i, f)
 	}()

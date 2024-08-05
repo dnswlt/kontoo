@@ -252,11 +252,28 @@ func (s *Store) AddAsset(a *Asset) error {
 	return nil
 }
 
+// AssetPositionItem tracks an individual purchase that is part of the
+// accumulated asset position.
+type AssetPositionItem struct {
+	QuantityMicros Micros
+	PriceMicros    Micros
+	CostMicros     Micros
+}
+
+// AssetPosition represents the "current" asset position.
+// It is typically calculated from ledger entries for the given asset.
 type AssetPosition struct {
 	Asset           *Asset
 	LastPriceUpdate Date
 	LastValueUpdate Date
-	PVal
+	ValueMicros     Micros
+	QuantityMicros  Micros
+	PriceMicros     Micros
+	// Items are the constituent parts of the accumulated asset position.
+	// The are stored in chronological order (latest comes last) and can
+	// be used to determine profits and losses (P&L) and to update the
+	// accumulated values when an asset is partially sold.
+	Items []AssetPositionItem
 }
 
 func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
@@ -309,15 +326,37 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
 		p.LastPriceUpdate = e.ValueDate
+		p.Items = append(p.Items, AssetPositionItem{
+			QuantityMicros: e.QuantityMicros,
+			PriceMicros:    e.PriceMicros,
+			CostMicros:     e.CostMicros,
+		})
 	case SellTransaction:
 		p.QuantityMicros -= e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
 		p.LastPriceUpdate = e.ValueDate
+		// Remove items
+		qty := e.QuantityMicros
+		for len(p.Items) > 0 {
+			hd := &p.Items[0]
+			if hd.QuantityMicros > qty {
+				oldQ := hd.QuantityMicros
+				hd.QuantityMicros -= qty
+				hd.CostMicros = hd.CostMicros.Frac(hd.QuantityMicros, oldQ)
+				break
+			}
+			qty -= hd.QuantityMicros
+			p.Items = p.Items[1:]
+		}
+		if len(p.Items) == 0 {
+			p.Items = nil // allow GC of Items
+		}
 	case AssetMaturity:
 		p.ValueMicros = 0
 		p.QuantityMicros = 0
 		p.PriceMicros = 0
 		p.LastValueUpdate = e.ValueDate
+		p.Items = nil
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
 		p.LastPriceUpdate = e.ValueDate
@@ -329,17 +368,46 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			p.PriceMicros = e.PriceMicros
 			p.LastPriceUpdate = e.ValueDate
 		}
-		p.ValueMicros = e.ValueMicros
-		p.QuantityMicros = e.QuantityMicros
-		p.LastValueUpdate = e.ValueDate
+		if e.QuantityMicros != p.QuantityMicros {
+			// Only update position if the quantity has changed,
+			// otherwise consider it an informational ledger entry.
+			p.ValueMicros = e.ValueMicros
+			p.QuantityMicros = e.QuantityMicros
+			p.LastValueUpdate = e.ValueDate
+			p.Items = nil
+			if e.QuantityMicros > 0 {
+				p.Items = append(p.Items, AssetPositionItem{
+					QuantityMicros: e.QuantityMicros,
+					PriceMicros:    e.PriceMicros,
+					CostMicros:     e.CostMicros,
+				})
+			}
+		}
 	}
 }
 
-func (v *PVal) CalculatedValueMicros() Micros {
-	if v.ValueMicros != 0 {
-		return v.ValueMicros
+func (p *AssetPosition) CostMicros() Micros {
+	var cost Micros
+	for _, item := range p.Items {
+		cost += item.CostMicros
 	}
-	return v.QuantityMicros.MulTrunc(v.PriceMicros)
+	return cost
+}
+
+func (p *AssetPosition) PurchasePrice() Micros {
+	var price Micros
+	for _, item := range p.Items {
+		price += item.CostMicros
+		price += item.QuantityMicros.MulTrunc(item.PriceMicros)
+	}
+	return price
+}
+
+func (p *AssetPosition) CalculatedValueMicros() Micros {
+	if p.QuantityMicros != 0 {
+		return p.QuantityMicros.MulTrunc(p.PriceMicros)
+	}
+	return p.ValueMicros
 }
 
 func (l *Ledger) Save(path string) error {

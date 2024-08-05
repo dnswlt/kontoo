@@ -36,6 +36,7 @@ type Server struct {
 	resourcesDir string
 	templatesDir string
 	templates    *template.Template
+	debugMode    bool
 }
 
 func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, error) {
@@ -55,6 +56,10 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 		return nil, err
 	}
 	return s, nil
+}
+
+func (s *Server) DebugMode(enabled bool) {
+	s.debugMode = enabled
 }
 
 func (s *Server) reloadTemplates() error {
@@ -156,7 +161,7 @@ func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*
 	}
 	if style == DisplayStyleMaturingSecurities {
 		sortFunc = func(a, b *AssetPosition) int {
-			c := a.Asset.MaturityDate.Compare(b.Asset.MaturityDate)
+			c := CompareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
 			if c != 0 {
 				return c
 			}
@@ -178,7 +183,7 @@ func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*
 			Value:    p.CalculatedValueMicros(),
 		}
 		if style == DisplayStyleMaturingSecurities {
-			row.PurchasePrice = 0 // TODO: calculate
+			row.PurchasePrice = p.PurchasePrice()
 			row.NominalValue = p.QuantityMicros
 			row.InterestRate = a.InterestMicros
 			row.IssueDate = a.IssueDate
@@ -357,7 +362,7 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	style := DisplayStyleAll
-	if r.Form.Get("f") == "maturity" {
+	if r.Form.Get("f") == "maturing" {
 		style = DisplayStyleMaturingSecurities
 	}
 	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
@@ -470,21 +475,30 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) reloadHandler(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.debugMode {
+			s.reloadTemplates()
+		}
+		h.ServeHTTP(w, r)
+	}
+}
+
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Serve static resources like CSS from resources/ dir.
 	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesDir))))
 
-	mux.HandleFunc("/kontoo/ledger", s.handleLedger)
-	mux.HandleFunc("/kontoo/entries/new", s.handleEntriesNew)
-	mux.HandleFunc("GET /kontoo/assets/new", s.handleAssetsNew)
+	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
+	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
+	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
 	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {
 		now := time.Now()
 		http.Redirect(w, r, fmt.Sprintf("/kontoo/positions/%d/%d/%d", now.Year(), now.Month(), now.Day()), http.StatusSeeOther)
 	})
-	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}", s.handlePositions)
+	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}", s.reloadHandler(s.handlePositions))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
 	})

@@ -1,0 +1,131 @@
+{
+  "chart": {
+    "error": null,
+    "result": [
+      {
+        "indicators": {
+          "adjclose": [
+            {
+              "adjclose": [
+                217.9600067138672,
+                218.24000549316406,
+                218.8000030517578,
+                222.0800018310547,
+                218.36000061035156,
+                219.86000061035156
+              ]
+            }
+          ],
+          "quote": [
+            {
+              "close": [
+                217.9600067138672,
+                218.24000549316406,
+                218.8000030517578,
+                222.0800018310547,
+                218.36000061035156,
+                219.86000061035156
+              ],
+              "high": [
+                219.49000549316406,
+                219.3000030517578,
+                220.3300018310547,
+                223.82000732421875,
+                224.47999572753906,
+                225.60000610351562
+              ],
+              "low": [
+                216.00999450683594,
+                215.75,
+                216.1199951171875,
+                220.6300048828125,
+                217.02000427246094,
+                217.7100067138672
+              ],
+              "open": [
+                218.6999969482422,
+                216.9600067138672,
+                219.19000244140625,
+                221.44000244140625,
+                224.3699951171875,
+                219.14999389648438
+              ],
+              "volume": [
+                41601300,
+                36311800,
+                41643800,
+                50036300,
+                62501000,
+                98480100
+              ]
+            }
+          ]
+        },
+        "meta": {
+          "chartPreviousClose": 217.96,
+          "currency": "USD",
+          "currentTradingPeriod": {
+            "post": {
+              "end": 1722643200,
+              "gmtoffset": -14400,
+              "start": 1722628800,
+              "timezone": "EDT"
+            },
+            "pre": {
+              "end": 1722605400,
+              "gmtoffset": -14400,
+              "start": 1722585600,
+              "timezone": "EDT"
+            },
+            "regular": {
+              "end": 1722628800,
+              "gmtoffset": -14400,
+              "start": 1722605400,
+              "timezone": "EDT"
+            }
+          },
+          "dataGranularity": "1d",
+          "exchangeName": "NMS",
+          "exchangeTimezoneName": "America/New_York",
+          "fiftyTwoWeekHigh": 225.6,
+          "fiftyTwoWeekLow": 217.71,
+          "firstTradeDate": 345479400,
+          "fullExchangeName": "NasdaqGS",
+          "gmtoffset": -14400,
+          "hasPrePostMarketData": true,
+          "instrumentType": "EQUITY",
+          "priceHint": 2,
+          "range": "",
+          "regularMarketDayHigh": 225.6,
+          "regularMarketDayLow": 217.71,
+          "regularMarketPrice": 219.86,
+          "regularMarketTime": 1722628802,
+          "regularMarketVolume": 98083537,
+          "symbol": "AAPL",
+          "timezone": "EDT",
+          "validRanges": [
+            "1d",
+            "5d",
+            "1mo",
+            "3mo",
+            "6mo",
+            "1y",
+            "2y",
+            "5y",
+            "10y",
+            "ytd",
+            "max"
+          ]
+        },
+        "timestamp": [
+          1722000600,
+          1722259800,
+          1722346200,
+          1722432600,
+          1722519000,
+          1722605400
+        ]
+      }
+    ]
+  }
+}

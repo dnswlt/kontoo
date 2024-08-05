@@ -89,16 +89,33 @@ textarea {
     padding: 0px;
     margin: 0px;
 }
+
 #navbar li {
     display: inline;
 }
+
 #navbar a {
     color: white;
     text-decoration: none;
-    padding: 14px 14px; /* Padding for clickable area */
-    display: block; /* Make the whole area clickable */
-    transition: background-color 0.3s; /* Smooth transition for hover effect */
+    padding: 14px 14px;
+    /* Padding for clickable area */
+    display: block;
+    /* Make the whole area clickable */
+    transition: background-color 0.3s;
+    /* Smooth transition for hover effect */
 }
+
 #navbar a:hover {
     background-color: #575757;
+}
+
+
+ul.horizontal-list {
+    list-style-type: none;
+    padding: 0;
+}
+
+ul.horizontal-list li {
+    display: inline;
+    margin-right: 0.5ex;
 }

@@ -9,6 +9,13 @@
 <body>
     {{template "nav.html"}}
     <h1>Positions</h1>
+    <div>
+        <ul class="horizontal-list">
+            <li><a id="filter-all" href="#">All</a></li>
+            <li><a id="filter-maturing" href="#">Maturing</a></li>
+            <li><a id="filter-equity" href="#">Equity</a></li>
+        </ul>
+    </div>
     <table>
         {{$showMaturingSecurityFields := .ShowMaturingSecurityFields}}
         <thead>
@@ -51,5 +58,14 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.CurrentDate}})
     </p>
+    <script>
+        const url = new URL(window.location.href);
+        url.searchParams.set('f', 'all');
+        document.getElementById("filter-all").href = url.toString();
+        url.searchParams.set('f', 'equity');
+        document.getElementById("filter-equity").href = url.toString();
+        url.searchParams.set('f', 'maturing');
+        document.getElementById("filter-maturing").href = url.toString();
+    </script>
 </body>
 </html>

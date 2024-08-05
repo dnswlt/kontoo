@@ -39,6 +39,7 @@ func ProcessServe(args []string) error {
 	ledgerPath := fs.String("ledger", "./ledger.json", "Path to the ledger.json file")
 	resourcesDir := fs.String("resources", "./resources", "Directory from which static resources are served")
 	templatesDir := fs.String("templates", "./templates", "Directory from which (HTML) templates are served")
+	debugMode := fs.Bool("debug", false, "Enable debug mode")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("parse error for serve flags: %w", err)
 	}
@@ -46,6 +47,7 @@ func ProcessServe(args []string) error {
 	if err != nil {
 		return err
 	}
+	s.DebugMode(*debugMode)
 	return s.Serve()
 }
 

@@ -29,6 +29,30 @@ func TestMicrosMul(t *testing.T) {
 	}
 }
 
+func TestMicrosFrac(t *testing.T) {
+	tests := []struct {
+		a     Micros
+		numer Micros
+		denom Micros
+		want  Micros
+	}{
+		{1 * UnitValue, 1, 2, 500 * Millis},
+		{1 * UnitValue, 1 * UnitValue, 2 * UnitValue, 500 * Millis},
+		{70 * UnitValue, 500 * Millis, 700 * Millis, 50 * UnitValue},
+		{1 * UnitValue, 1, 3, 333_333},
+		{-1 * UnitValue, 1, 3, -333_333},
+		{-1 * UnitValue, -1, 3, 333_333},
+		{1, 3, 2, 1},
+		{1 * Millis, 3, 2, 1_500},
+	}
+	for _, tc := range tests {
+		got := tc.a.Frac(tc.numer, tc.denom)
+		if got != tc.want {
+			t.Errorf("%v.Frac(%v, %v): got %v, want %v", tc.a, tc.numer, tc.denom, got, tc.want)
+		}
+	}
+}
+
 func TestMicrosSplitFrac(t *testing.T) {
 	tests := []struct {
 		a        Micros
