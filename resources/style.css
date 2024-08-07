@@ -119,3 +119,19 @@ ul.horizontal-list li {
     display: inline;
     margin-right: 0.5ex;
 }
+
+/* Upload drag&drop area */
+#upload-drop-area {
+    width: 300px;
+    height: 200px;
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 50px auto;
+    text-align: center;
+}
+#upload-drop-area.highlight {
+    border-color: purple;
+}

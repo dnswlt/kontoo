@@ -41,10 +41,13 @@ type Asset struct {
 	ISIN           string `json:",omitempty"`
 	WKN            string `json:",omitempty"`
 	TickerSymbol   string `json:",omitempty"`
-	CustomID       string `json:",omitempty"`
-	Currency       Currency
-	AssetGroup     string `json:",omitempty"`
-	Comment        string `json:",omitempty"`
+	// More ticker symbols, to get stock quotes online.
+	// Keyed by quote service. Not used as ID.
+	QuoteServiceSymbols map[string]string `json:",omitempty"`
+	CustomID            string            `json:",omitempty"`
+	Currency            Currency
+	AssetGroup          string `json:",omitempty"`
+	Comment             string `json:",omitempty"`
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false

@@ -116,6 +116,14 @@
         </div>
         <div class="field">
             <div class="field-label">
+                <label for="YFSymbol">y!finance symbol</label>
+            </div>
+            <div class="field-value">
+                <input id="YFSymbol" name="QuoteServiceSymbols" type="text">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
                 <label for="CustomID">Custom ID</label>
             </div>
             <div class="field-value">
@@ -152,6 +160,11 @@
             formData.append(clickedButton.name, clickedButton.value);
             if (!formData.get("Type")) {
                 formData.set("Type", "Stock");
+            }
+            const quoteServiceSymbols = formData.get("QuoteServiceSymbols");
+            if (quoteServiceSymbols) {
+                // Prepend key, so that backend can process it as a "dict" arg.
+                formData.set("QuoteServiceSymbols", `YF=${quoteServiceSymbols}`);
             }
             try {
                 const response = await fetch("/kontoo/assets", {

@@ -96,3 +96,51 @@ func TestRequestChartNotFound(t *testing.T) {
 		t.Errorf("Expected ErrTickerNotFound, got %v", err)
 	}
 }
+
+// func TestDateTruncate(t *testing.T) {
+// 	// Dates in cache entries are supposed to be YYYY-MM-DD dates only.
+// 	// Make sure we're dealing with time-zone insanities properly.
+// 	layout := time.RFC3339
+// 	t1, _ := time.Parse(layout, "2024-07-01T13:00:00-07:00")
+// 	t2, _ := time.Parse(layout, "2024-07-01T23:59:59-07:00")
+// 	t1 = t1.Truncate(24 * time.Hour)
+// 	t2 = t2.Truncate(24 * time.Hour)
+// 	s1 := t1.Format(layout)
+// 	if s1 != "2024-06-30T17:00:00-07:00" {
+// 		t.Errorf("Unexpected time: %s", s1)
+// 	}
+// 	if s := t1.In(time.UTC).Format(layout); s != "FOO" {
+// 		t.Errorf("Unexpected time: %s", s)
+// 	}
+// 	if !t1.Equal(t2) {
+// 		t.Errorf("Times not equal: %v vs %v", t1, t2)
+// 	}
+// }
+
+func TestHistoryCache(t *testing.T) {
+	c := NewPriceHistoryCache(defaultCacheDir())
+	hist := &PriceHistory{
+		Ticker:   "FOO",
+		Currency: "CHF",
+		History: []PriceHistoryItem{
+			{
+				Date:         time.Date(2024, 1, 2, 17, 0, 0, 0, time.UTC),
+				ClosingPrice: Micros(1_000_000),
+			},
+		},
+	}
+	if err := c.Add(hist); err != nil {
+		t.Fatalf("failed to add cache entry: %v", err)
+	}
+}
+
+func TestReadCsv(t *testing.T) {
+	f := os.Getenv("HOME") + "/Downloads/depotuebersicht_1023663812_20240806-0842.csv"
+	rows, err := ReadDepotExportCSVFile(f)
+	if err != nil {
+		t.Fatalf("failed to read CSV: %v", err)
+	}
+	if len(rows) != 10 {
+		t.Errorf("wrong number of rows: %d", len(rows))
+	}
+}

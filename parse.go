@@ -301,6 +301,22 @@ func (s *argSpec) str(name string, out *string) {
 	}
 }
 
+func (s *argSpec) dict(name string, d *map[string]string) {
+	s.args[name] = func(xs []string) error {
+		if *d == nil {
+			*d = make(map[string]string)
+		}
+		for _, arg := range xs {
+			key, val, found := strings.Cut(arg, "=")
+			if !found {
+				return fmt.Errorf("dict arg must have a key and a value, separated by =, got %q", arg)
+			}
+			(*d)[key] = val
+		}
+		return nil
+	}
+}
+
 func subseq(s, t string) bool {
 	if len(s) < len(t) {
 		return false
@@ -411,6 +427,7 @@ func assetArgSpec(a *Asset) *argSpec {
 	s.str("ISIN", &a.ISIN)
 	s.str("WKN", &a.WKN)
 	s.str("TickerSymbol", &a.TickerSymbol)
+	s.dict("QuoteServiceSymbols", &a.QuoteServiceSymbols)
 	s.str("CustomID", &a.CustomID)
 	s.currency("Currency", &a.Currency)
 	s.str("AssetGroup", &a.AssetGroup)

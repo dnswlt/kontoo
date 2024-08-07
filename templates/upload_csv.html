@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kontoo</title>
+    <link href="/kontoo/resources/style.css" rel="stylesheet">
+</head>
+
+<body>
+    {{template "nav.html"}}
+    <h1>Upload CSV</h1>
+    <div id="upload-drop-area">Put your money on me!</div>
+    <div>
+        <ul id="filelist"></ul>
+    </div>
+    <button id="upload">Upload</button>
+    <div>
+        <table id="results" class="hidden">
+            <thead>
+                <th>Value date</th>
+                <th>Code</th>
+                <th>Quantity</th>
+                <th>Currency</th>
+                <th>Price</th>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </div>
+    <script>
+        const dropArea = document.getElementById("upload-drop-area");
+        let files = [];
+
+        // Prevent default drag behaviors
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        // Highlight drop area when item is dragged over it
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropArea.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropArea.addEventListener(eventName, unhighlight, false);
+        });
+
+        // Handle dropped files
+        dropArea.addEventListener('drop', handleDrop, false);
+
+        const uploadButton = document.getElementById("upload");
+        uploadButton.addEventListener("click", () => {
+            files.forEach(uploadFile);
+            files = [];
+            document.getElementById("filelist").innerHTML = "";
+        });
+
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append("file", file);
+            try {
+                const resp = await fetch("/kontoo/csv", {
+                    method: "POST",
+                    body: formData,
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    console.error("Upload failed: ", resp.status, text);
+                }
+                const data = await resp.json();
+                handleUploadReponse(data);
+            }
+            catch (error) {
+                console.error("Error during upload:", error);
+            }
+        }
+
+        function handleUploadReponse(data) {
+            const rows = document.createDocumentFragment();
+            console.log(`Received ${data.entries.length} entries`);
+            for (const entry of data.entries) {
+                console.log(entry);
+                const tr = document.createElement("tr");
+                const tdValueDate = tr.appendChild(document.createElement("td"));
+                tdValueDate.textContent = entry.ValueDate;
+                const tdCode = tr.appendChild(document.createElement("td"));
+                tdCode.textContent = entry.AssetID;
+                const tdQuantity = tr.appendChild(document.createElement("td"));
+                tdQuantity.textContent = entry.Quantity;
+                const tdCurrency = tr.appendChild(document.createElement("td"));
+                tdCurrency.textContent = entry.Currency;
+                const tdPrice = tr.appendChild(document.createElement("td"));
+                tdPrice.textContent = entry.Price;
+                rows.appendChild(tr);
+            }
+            document.querySelector("#results > tbody").appendChild(rows);
+            document.getElementById("results").classList.remove("hidden");
+        }
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        function highlight(e) {
+            dropArea.classList.add('highlight');
+        }
+
+        function unhighlight(e) {
+            dropArea.classList.remove('highlight');
+        }
+
+        function handleDrop(e) {
+            files = [...e.dataTransfer.files];
+            document.getElementById("results").classList.add("hidden");
+            const filelist = document.getElementById("filelist");
+            const items = document.createDocumentFragment();
+            for (const file of files) {
+                const li = document.createElement("li");
+                li.textContent = file.name;
+                items.appendChild(li);
+            }
+            filelist.replaceChildren(items);
+        }
+
+    </script>
+</body>
+
+</html>

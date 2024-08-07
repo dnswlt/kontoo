@@ -6,13 +6,17 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // JSON API for server requests and responses.
@@ -26,6 +30,12 @@ type AddAssetResponse struct {
 	Status  string `json:"status"`
 	AssetID string `json:"assetId,omitempty"`
 	Error   string `json:"error,omitempty"`
+}
+
+type CsvUploadResponse struct {
+	Status  string         `json:"status"`
+	Error   string         `json:"error,omitempty"`
+	Entries []*LedgerEntry `json:"entries,omitempty"`
 }
 
 // END JSON API
@@ -298,6 +308,10 @@ func (s *Server) renderPositionsTemplate(w io.Writer, style PositionDisplayStyle
 	})
 }
 
+func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
+	return s.templates.ExecuteTemplate(w, "upload_csv.html", struct{}{})
+}
+
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	store, err := LoadStore(s.ledgerPath)
 	if err != nil {
@@ -381,6 +395,75 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
+func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
+	var buf bytes.Buffer
+	err := s.renderUploadCsvTemplate(&buf)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(4 * (1 << 20)); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	store, err := LoadStore(s.ledgerPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	var ledgerEntries []*LedgerEntry
+	var errors []string
+	for _, file := range r.MultipartForm.File["file"] {
+		ext := strings.ToLower(filepath.Ext(file.Filename))
+		if ext != ".csv" && ext != ".txt" {
+			http.Error(w, fmt.Sprintf("Invalid file extension: %s", ext), http.StatusBadRequest)
+			return
+		}
+		f, err := file.Open()
+		if err != nil {
+			http.Error(w, fmt.Sprintf("invalid form data: %v", err), http.StatusBadRequest)
+			return
+		}
+		// Assume ISO 8859-15 encoding.
+		enc := charmap.ISO8859_15.NewDecoder().Reader(f)
+		items, err := ReadDepotExportCSV(enc)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("error processing CSV: %v", err), http.StatusBadRequest)
+			return
+		}
+		log.Printf("Received file %s with %d items\n", file.Filename, len(items))
+		for _, item := range items {
+			e, err := DepotExportToLedgerEntry(store, item)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+			ledgerEntries = append(ledgerEntries, e)
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	status := "OK"
+	if len(errors) > 0 {
+		if len(ledgerEntries) > 0 {
+			status = "Partial Success"
+		} else {
+			status = "Error"
+		}
+	}
+	err = json.NewEncoder(w).Encode(CsvUploadResponse{
+		Status:  status,
+		Error:   strings.Join(errors, "\n"),
+		Entries: ledgerEntries,
+	})
+	if err != nil {
+		log.Fatalf("Cannot encode my own JSON: %s", err)
+	}
+}
+
 func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
@@ -422,10 +505,13 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AddLedgerEntryResponse{
+	err = json.NewEncoder(w).Encode(AddLedgerEntryResponse{
 		Status:      "OK",
 		SequenceNum: e.SequenceNum,
 	})
+	if err != nil {
+		log.Fatalf("Cannot encode my own JSON: %s", err)
+	}
 }
 
 func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
@@ -492,6 +578,8 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
+	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
+	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
 	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {

@@ -1,17 +1,25 @@
 package kontoo
 
 import (
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 type PriceHistoryItem struct {
@@ -99,6 +107,7 @@ func NewYFinance() (*YFinance, error) {
 var (
 	ErrCookiesExpired = errors.New("cookies in cookie jar expired")
 	ErrTickerNotFound = errors.New("ticker symbol not found")
+	ErrNotCached      = errors.New("requested entry not found in cache")
 )
 
 func (yf *YFinance) cookieJarFile() string {
@@ -259,7 +268,7 @@ func (yf *YFinance) GetPriceHistory(ticker string, start, end time.Time) (*Price
 	} else if len(yresp.Chart.Result) != 1 ||
 		yresp.Chart.Result[0].Indicators == nil ||
 		len(yresp.Chart.Result[0].Indicators.Quote) != 1 ||
-		len(yresp.Chart.Result[0].Timestamps) != len(yresp.Chart.Result[0].Indicators.Quote[0].Close) {
+		len(yresp.Chart.Result[0].Timestamps) < len(yresp.Chart.Result[0].Indicators.Quote[0].Close) {
 		log.Printf("Unexpected response structure: %s", string(body))
 		return nil, fmt.Errorf("YFChartResponse is missing expected data")
 	}
@@ -332,4 +341,219 @@ func PrintQuote(client *http.Client, ticker string, jar *CookieJar) error {
 	}
 	fmt.Println(string(j))
 	return nil
+}
+
+type PriceHistoryCacheEntry struct {
+	Ticker       string
+	Currency     string
+	Date         string // Format YYYY-MM-DD
+	ClosingPrice Micros
+}
+
+type PriceHistoryCache struct {
+	cacheDir string
+}
+
+func NewPriceHistoryCache(cacheDir string) *PriceHistoryCache {
+	return &PriceHistoryCache{cacheDir: cacheDir}
+}
+
+func (c *PriceHistoryCache) Add(hist *PriceHistory) error {
+	f := filepath.Join(c.cacheDir, "prices.jsonl")
+	out, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	enc := json.NewEncoder(out)
+	for _, h := range hist.History {
+		e := PriceHistoryCacheEntry{
+			Ticker:       hist.Ticker,
+			Currency:     hist.Currency,
+			ClosingPrice: h.ClosingPrice,
+			Date:         h.Date.Format("2006-01-02"),
+		}
+		if err := enc.Encode(&e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *PriceHistoryCache) Get(ticker string, date time.Time) (*PriceHistoryCacheEntry, error) {
+	f := filepath.Join(c.cacheDir, "prices.jsonl")
+	in, err := os.Open(f)
+	if err != nil {
+		return nil, err
+	}
+	defer in.Close()
+	dateStr := date.Format("2006-01-02")
+	dec := json.NewDecoder(in)
+	for {
+		var e PriceHistoryCacheEntry
+		if err := dec.Decode(&e); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, ErrNotCached
+			}
+			return nil, fmt.Errorf("error reading from cache: %w", err)
+		}
+		if e.Ticker == ticker && e.Date == dateStr {
+			return &e, nil
+		}
+	}
+}
+
+func defaultCacheDir() string {
+	dir := os.Getenv("KONTOO_CACHE")
+	if dir == "off" {
+		return ""
+	}
+	if dir != "" {
+		return dir
+	}
+	switch runtime.GOOS {
+	case "windows":
+		dir = os.Getenv("LocalAppData")
+		if dir == "" {
+			return ""
+		}
+	case "darwin":
+		dir = os.Getenv("HOME")
+		if dir == "" {
+			return ""
+		}
+		dir += "/Library/Caches"
+	default: // Unix
+		dir = os.Getenv("HOME")
+		if dir == "" {
+			return ""
+		}
+		dir += "/.cache"
+	}
+	dir = filepath.Join(dir, "kontoo")
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		return ""
+	}
+	return dir
+}
+
+type DepotExportItem struct {
+	QuantityMicros Micros   `json:"quantity"`
+	WKN            string   `json:"wkn"`
+	Currency       Currency `json:"currency"`
+	PriceMicros    Micros   `json:"price"`
+	ValueMicros    Micros   `json:"value"`
+	ValueDate      Date     `json:"valueDate"`
+}
+
+func parseCSVFloat(s string) (Micros, error) {
+	s = strings.ReplaceAll(s, ".", "")
+	s = strings.ReplaceAll(s, ",", ".")
+	t := strings.TrimSuffix(s, "%")
+	var p float64 = 1
+	if t != s {
+		p = 100
+	}
+	f, err := strconv.ParseFloat(t, 64)
+	if err != nil {
+		return 0, err
+	}
+	return Micros(math.Round(f / p * 1e6)), nil
+}
+
+func ReadDepotExportCSVFile(path string) ([]*DepotExportItem, error) {
+	in, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open CSV file: %v", err)
+	}
+	defer in.Close()
+	encIn := charmap.ISO8859_15.NewDecoder().Reader(in)
+	return ReadDepotExportCSV(encIn)
+}
+
+func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
+	r := csv.NewReader(reader)
+	r.Comma = ';'
+	firstRow := true
+	colIdx := make(map[string]int)
+	knownHdr := map[string]string{
+		"Stück/Nom.":  "Quantity",
+		"WKN":         "WKN",
+		"Währung":     "Currency",
+		"Akt. Kurs":   "Price",
+		"Wert in EUR": "Value",
+		"Datum":       "ValueDate",
+	}
+	var result []*DepotExportItem
+	currencyRegexp := regexp.MustCompile("^[A-Z]{3}$")
+	for {
+		row, err := r.Read()
+		if err == io.EOF || errors.Is(err, csv.ErrFieldCount) {
+			// ErrFieldCount occurs if trailing rows in the export have fewer columns.
+			break
+		} else if err != nil {
+			return nil, fmt.Errorf("error reading CSV file: %w", err)
+		}
+		if firstRow {
+			for i, h := range row {
+				if s, ok := knownHdr[h]; ok {
+					colIdx[s] = i
+				}
+			}
+			if len(colIdx) != len(knownHdr) {
+				return nil, fmt.Errorf("not all expected headers present: %v", colIdx)
+			}
+			firstRow = false
+			continue
+		}
+		qty, err := parseCSVFloat(row[colIdx["Quantity"]])
+		if err != nil {
+			return nil, fmt.Errorf("invalid quantity: %w", err)
+		}
+		price, err := parseCSVFloat(row[colIdx["Price"]])
+		if err != nil {
+			return nil, fmt.Errorf("invalid price: %w", err)
+		}
+		value, err := parseCSVFloat(row[colIdx["Value"]])
+		if err != nil {
+			return nil, fmt.Errorf("invalid value: %w", err)
+		}
+		valueDate, err := time.Parse("02.01.2006", row[colIdx["ValueDate"]])
+		if err != nil {
+			return nil, fmt.Errorf("invalid date: %w", err)
+		}
+		currency := row[colIdx["Currency"]]
+		if !currencyRegexp.MatchString(currency) {
+			return nil, fmt.Errorf("invalid currency: %s", currency)
+		}
+		result = append(result, &DepotExportItem{
+			QuantityMicros: qty,
+			WKN:            row[colIdx["WKN"]],
+			Currency:       Currency(currency),
+			PriceMicros:    price,
+			ValueMicros:    value,
+			ValueDate:      Date{valueDate},
+		})
+	}
+	return result, nil
+}
+
+func DepotExportToLedgerEntry(s *Store, item *DepotExportItem) (*LedgerEntry, error) {
+	asset, found := s.FindAssetByWKN(item.WKN)
+	if !found {
+		return nil, fmt.Errorf("no asset with WKN %s", item.WKN)
+	}
+	if item.Currency != "" && asset.Currency != item.Currency {
+		return nil, fmt.Errorf("currency mismatch: asset has %s, item has %s", asset.Currency, item.Currency)
+	}
+	return &LedgerEntry{
+		Type:           AssetPrice,
+		ValueDate:      item.ValueDate,
+		AssetID:        asset.ID(),
+		PriceMicros:    item.PriceMicros,
+		QuantityMicros: item.QuantityMicros,
+		Currency:       asset.Currency,
+		ValueMicros:    item.ValueMicros,
+		Comment:        "Imported",
+	}, nil
 }

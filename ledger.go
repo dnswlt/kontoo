@@ -105,6 +105,18 @@ func (s *Store) NextSequenceNum() int64 {
 	return s.L.Entries[len(s.L.Entries)-1].SequenceNum + 1
 }
 
+func (s *Store) FindAssetByWKN(wkn string) (*Asset, bool) {
+	if wkn == "" {
+		return nil, false
+	}
+	for _, asset := range s.L.Assets {
+		if asset.WKN == wkn {
+			return asset, true
+		}
+	}
+	return nil, false
+}
+
 func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
 	var res *Asset
 	for _, asset := range s.L.Assets {
