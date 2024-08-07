@@ -537,23 +537,3 @@ func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 	}
 	return result, nil
 }
-
-func DepotExportToLedgerEntry(s *Store, item *DepotExportItem) (*LedgerEntry, error) {
-	asset, found := s.FindAssetByWKN(item.WKN)
-	if !found {
-		return nil, fmt.Errorf("no asset with WKN %s", item.WKN)
-	}
-	if item.Currency != "" && asset.Currency != item.Currency {
-		return nil, fmt.Errorf("currency mismatch: asset has %s, item has %s", asset.Currency, item.Currency)
-	}
-	return &LedgerEntry{
-		Type:           AssetPrice,
-		ValueDate:      item.ValueDate,
-		AssetID:        asset.ID(),
-		PriceMicros:    item.PriceMicros,
-		QuantityMicros: item.QuantityMicros,
-		Currency:       asset.Currency,
-		ValueMicros:    item.ValueMicros,
-		Comment:        "Imported",
-	}, nil
-}

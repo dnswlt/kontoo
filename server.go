@@ -2,6 +2,8 @@ package kontoo
 
 import (
 	"bytes"
+	crand "crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -33,9 +35,10 @@ type AddAssetResponse struct {
 }
 
 type CsvUploadResponse struct {
-	Status  string         `json:"status"`
-	Error   string         `json:"error,omitempty"`
-	Entries []*LedgerEntry `json:"entries,omitempty"`
+	Status    string         `json:"status"`
+	Error     string         `json:"error,omitempty"`
+	Entries   []*LedgerEntry `json:"entries,omitempty"`
+	InnerHTML string         `json:"innerHTML"`
 }
 
 // END JSON API
@@ -405,6 +408,45 @@ func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
+func newUID() string {
+	p := make([]byte, 16)
+	crand.Read(p)
+	return hex.EncodeToString(p)
+}
+
+func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
+	type Row struct {
+		*LedgerEntry
+		AssetName string
+	}
+	var rows []*Row
+	for _, entry := range entries {
+		asset := store.assetMap[entry.AssetID]
+		if asset == nil {
+			continue
+		}
+		rows = append(rows, &Row{
+			LedgerEntry: entry,
+			AssetName:   asset.Name,
+		})
+	}
+	slices.Sort(skipped)
+	suffix := ""
+	if len(skipped) > 5 {
+		skipped = skipped[:5]
+		suffix = ", ..."
+	}
+	return s.templates.ExecuteTemplate(w, "snip_upload_results.html", struct {
+		Entries        []*Row
+		Skipped        string
+		ConfirmationID string
+	}{
+		Entries:        rows,
+		Skipped:        strings.Join(skipped, ", ") + suffix,
+		ConfirmationID: newUID(),
+	})
+}
+
 func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseMultipartForm(4 * (1 << 20)); err != nil {
 		http.Error(w, "invalid form", http.StatusBadRequest)
@@ -415,8 +457,8 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	var ledgerEntries []*LedgerEntry
-	var errors []string
+	var entries []*LedgerEntry
+	var skippedWKNs []string
 	for _, file := range r.MultipartForm.File["file"] {
 		ext := strings.ToLower(filepath.Ext(file.Filename))
 		if ext != ".csv" && ext != ".txt" {
@@ -437,27 +479,44 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("Received file %s with %d items\n", file.Filename, len(items))
 		for _, item := range items {
-			e, err := DepotExportToLedgerEntry(store, item)
-			if err != nil {
-				errors = append(errors, err.Error())
+			asset, found := store.FindAssetByWKN(item.WKN)
+			if !found || item.Currency != "" && asset.Currency != item.Currency {
+				skippedWKNs = append(skippedWKNs, item.WKN)
 				continue
 			}
-			ledgerEntries = append(ledgerEntries, e)
+			entries = append(entries, &LedgerEntry{
+				Type:        AssetPrice,
+				ValueDate:   item.ValueDate,
+				AssetID:     asset.ID(),
+				Currency:    asset.Currency,
+				PriceMicros: item.PriceMicros,
+				Comment:     "CSV import",
+			})
 		}
 	}
 	w.Header().Set("Content-Type", "application/json")
+	var buf bytes.Buffer
+	err = s.renderSnippetUploadResults(&buf, entries, skippedWKNs, store)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
 	status := "OK"
-	if len(errors) > 0 {
-		if len(ledgerEntries) > 0 {
+	if len(skippedWKNs) > 0 {
+		if len(entries) > 0 {
 			status = "Partial Success"
 		} else {
 			status = "Error"
 		}
 	}
+	error := ""
+	if len(skippedWKNs) > 0 {
+		error = fmt.Sprintf("Skipped WKNs: %s", strings.Join(skippedWKNs, "\n"))
+	}
 	err = json.NewEncoder(w).Encode(CsvUploadResponse{
-		Status:  status,
-		Error:   strings.Join(errors, "\n"),
-		Entries: ledgerEntries,
+		Status:    status,
+		Error:     error,
+		InnerHTML: buf.String(),
 	})
 	if err != nil {
 		log.Fatalf("Cannot encode my own JSON: %s", err)

@@ -1,0 +1,32 @@
+{{if .Entries }}
+{{if .Skipped}}
+<div id="status-callout" class="callout-err">
+    Skipped WKNs: {{.Skipped}}
+</div>
+{{end}}
+<table id="results">
+    <thead>
+        <th>Value date</th>
+        <th>Code</th>
+        <th>Name</th>
+        <th>Currency</th>
+        <th>Price</th>
+    </thead>
+    <tbody>
+        {{range .Entries}}
+        <tr>
+            <td>{{.ValueDate}}</td>
+            <td>{{.AssetID}}</td>
+            <td>{{.AssetName}}</td>
+            <td>{{.Currency}}</td>
+            <td>{{price .PriceMicros}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+<button id="confirm" onclick="confirm('{{.ConfirmationID}}')">Confirm and submit</button>
+{{else}}
+<div id="status-callout" class="callout-err">
+    No valid entries in CSV.
+</div>
+{{end}}

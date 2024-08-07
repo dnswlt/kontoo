@@ -15,22 +15,9 @@
     <div>
         <ul id="filelist"></ul>
     </div>
-    <button id="upload">Upload</button>
-    <div>
-        <table id="results" class="hidden">
-            <thead>
-                <th>Value date</th>
-                <th>Code</th>
-                <th>Quantity</th>
-                <th>Currency</th>
-                <th>Price</th>
-            </thead>
-            <tbody></tbody>
-        </table>
-    </div>
+    <div id="results-section" class="hidden"></div>
     <script>
         const dropArea = document.getElementById("upload-drop-area");
-        let files = [];
 
         // Prevent default drag behaviors
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -50,16 +37,9 @@
         // Handle dropped files
         dropArea.addEventListener('drop', handleDrop, false);
 
-        const uploadButton = document.getElementById("upload");
-        uploadButton.addEventListener("click", () => {
-            files.forEach(uploadFile);
-            files = [];
-            document.getElementById("filelist").innerHTML = "";
-        });
-
-        async function uploadFile(file) {
+        async function uploadFiles(files) {
             const formData = new FormData();
-            formData.append("file", file);
+            files.forEach(file => formData.append("file", file));
             try {
                 const resp = await fetch("/kontoo/csv", {
                     method: "POST",
@@ -78,25 +58,14 @@
         }
 
         function handleUploadReponse(data) {
-            const rows = document.createDocumentFragment();
-            console.log(`Received ${data.entries.length} entries`);
-            for (const entry of data.entries) {
-                console.log(entry);
-                const tr = document.createElement("tr");
-                const tdValueDate = tr.appendChild(document.createElement("td"));
-                tdValueDate.textContent = entry.ValueDate;
-                const tdCode = tr.appendChild(document.createElement("td"));
-                tdCode.textContent = entry.AssetID;
-                const tdQuantity = tr.appendChild(document.createElement("td"));
-                tdQuantity.textContent = entry.Quantity;
-                const tdCurrency = tr.appendChild(document.createElement("td"));
-                tdCurrency.textContent = entry.Currency;
-                const tdPrice = tr.appendChild(document.createElement("td"));
-                tdPrice.textContent = entry.Price;
-                rows.appendChild(tr);
+            if (!data.innerHTML) {
+                console.log("Upload response contained no innerHTML");
+                return;
             }
-            document.querySelector("#results > tbody").appendChild(rows);
-            document.getElementById("results").classList.remove("hidden");
+            const div = document.getElementById("results-section");
+            div.classList.remove("hidden");
+            div.innerHTML = data.innerHTML;
+            return;
         }
 
         function preventDefaults(e) {
@@ -113,18 +82,27 @@
         }
 
         function handleDrop(e) {
-            files = [...e.dataTransfer.files];
-            document.getElementById("results").classList.add("hidden");
-            const filelist = document.getElementById("filelist");
-            const items = document.createDocumentFragment();
-            for (const file of files) {
-                const li = document.createElement("li");
-                li.textContent = file.name;
-                items.appendChild(li);
-            }
-            filelist.replaceChildren(items);
+            const files = [...e.dataTransfer.files];
+            uploadFiles(files);
         }
 
+        async function confirm(confirmationId) {
+            try {
+                const formData = new FormData();
+                formData.append("ConfirmationID", confirmationId);
+                const resp = await fetch("/kontoo/csv/confirm", {
+                    method: "POST",
+                    body: formData,
+                });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    console.error("Confirmation failed: ", resp.status, text);
+                }
+            }
+            catch (error) {
+                console.error("Error during confirmation:", error);
+            }
+        }
     </script>
 </body>
 
