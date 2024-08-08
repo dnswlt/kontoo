@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kontoo</title>
+    <link href="/kontoo/resources/style.css" rel="stylesheet">
+</head>
+
+<body>
+    {{template "nav.html"}}
+    <h1>Stock quotes</h1>
+    <div>
+        <p class="quote-line" style="font-weight: bold; font-size: 120%;"><a href="https://finance.yahoo.com/quote/MSFT/">MSFT</a></p>
+        <p class="quote-line" style="color: #777;">Microsoft Corporation</p>
+        <p class="quote-line" style="font-weight: bold; font-size: 120%;">398.43</p>
+    </div>
+
+    <hr>
+    <div>
+        <p class="quote-line">
+            <span style="font-weight: bold; font-size: 120%;"><a href="https://finance.yahoo.com/quote/MSFT/">MSFT</a></span>
+            <span style="color: #777;">Microsoft Corporation</span>    
+        </p>
+        <p class="quote-line">
+            <span style="font-weight: bold; font-size: 120%;">398.43</span>
+        </p>
+    </div>
+
+    {{if .Equities }}
+    {{range .Equities}}
+    {{end}}
+    {{else}}
+    <div id="status-callout" class="callout-err">
+        No equities have a y!finance ticker symbol. Consider adding them to enable the online quote service.
+    </div>
+    {{end}}
+
+</body>
+
+</html>

@@ -135,3 +135,8 @@ ul.horizontal-list li {
 #upload-drop-area.highlight {
     border-color: purple;
 }
+
+/* Stock quotes */
+.quote-line {
+    margin: 0;
+}

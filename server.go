@@ -16,6 +16,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -43,13 +44,23 @@ type CsvUploadResponse struct {
 
 // END JSON API
 
+type PendingLedgerEntries struct {
+	Entries []*LedgerEntry
+	Created time.Time
+}
+
 type Server struct {
 	addr         string
 	ledgerPath   string
 	resourcesDir string
 	templatesDir string
 	templates    *template.Template
+	store        *Store
 	debugMode    bool
+	// In-memory cache of recent CSV uploads waiting for confirmation
+	cacheCh           chan struct{}
+	pendingEntries    map[string]PendingLedgerEntries
+	mutPendingEntries sync.Mutex
 }
 
 func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, error) {
@@ -59,16 +70,50 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 	if _, err := os.Stat(path.Join(templatesDir, "ledger.html")); err != nil {
 		return nil, fmt.Errorf("invalid templatesDir: %w", err)
 	}
-	s := &Server{
-		addr:         addr,
-		ledgerPath:   ledgerPath,
-		resourcesDir: resourcesDir,
-		templatesDir: templatesDir,
+	store, err := LoadStore(ledgerPath)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load store: %w", err)
 	}
+	ch := make(chan struct{})
+	s := &Server{
+		addr:           addr,
+		ledgerPath:     ledgerPath,
+		resourcesDir:   resourcesDir,
+		templatesDir:   templatesDir,
+		store:          store,
+		cacheCh:        ch,
+		pendingEntries: make(map[string]PendingLedgerEntries),
+	}
+	go func() {
+		tick := time.NewTicker(1 * time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ch:
+				return
+			case now := <-tick.C:
+				func() {
+					s.mutPendingEntries.Lock()
+					defer s.mutPendingEntries.Unlock()
+					minCreated := now.Add(-10 * time.Minute)
+					for k, e := range s.pendingEntries {
+						if e.Created.Before(minCreated) {
+							log.Printf("Deleteing old cache entry %s", k)
+							delete(s.pendingEntries, k)
+						}
+					}
+				}()
+			}
+		}
+	}()
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
 	}
 	return s, nil
+}
+
+func (s *Server) Store() *Store {
+	return s.store
 }
 
 func (s *Server) DebugMode(enabled bool) {
@@ -296,6 +341,11 @@ func (s *Server) renderAddAssetTemplate(w io.Writer) error {
 	})
 }
 
+func (s *Server) renderQuotesTemplate(w io.Writer) error {
+
+	return s.templates.ExecuteTemplate(w, "quotes.html", nil)
+}
+
 func (s *Server) renderPositionsTemplate(w io.Writer, style PositionDisplayStyle, date time.Time, store *Store) error {
 	positions := PositionTableRows(store, date, style)
 	return s.templates.ExecuteTemplate(w, "positions.html", struct {
@@ -316,14 +366,8 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
 }
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
-	store, err := LoadStore(s.ledgerPath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 	var buf bytes.Buffer
-	err = s.renderLedgerTemplate(&buf, store)
-	if err != nil {
+	if err := s.renderLedgerTemplate(&buf, s.Store()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -332,14 +376,8 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
-	store, err := LoadStore(s.ledgerPath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 	var buf bytes.Buffer
-	err = s.renderAddEntryTemplate(&buf, store)
-	if err != nil {
+	if err := s.renderAddEntryTemplate(&buf, s.Store()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -350,6 +388,16 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
 	if err := s.renderAddAssetTemplate(&buf); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
+	var buf bytes.Buffer
+	if err := s.renderQuotesTemplate(&buf); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -383,13 +431,8 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 		style = DisplayStyleMaturingSecurities
 	}
 	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
-	store, err := LoadStore(s.ledgerPath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 	var buf bytes.Buffer
-	err = s.renderPositionsTemplate(&buf, style, date, store)
+	err = s.renderPositionsTemplate(&buf, style, date, s.Store())
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -408,13 +451,13 @@ func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func newUID() string {
+func generateUID() string {
 	p := make([]byte, 16)
 	crand.Read(p)
 	return hex.EncodeToString(p)
 }
 
-func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
+func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry, skipped []string, confirmationID string, store *Store) error {
 	type Row struct {
 		*LedgerEntry
 		AssetName string
@@ -443,8 +486,16 @@ func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry,
 	}{
 		Entries:        rows,
 		Skipped:        strings.Join(skipped, ", ") + suffix,
-		ConfirmationID: newUID(),
+		ConfirmationID: confirmationID,
 	})
+}
+
+func (s *Server) jsonResponse(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(v)
+	if err != nil {
+		log.Fatalf("Cannot encode my own JSON: %s", err)
+	}
 }
 
 func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
@@ -452,13 +503,9 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	store, err := LoadStore(s.ledgerPath)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 	var entries []*LedgerEntry
 	var skippedWKNs []string
+	store := s.Store()
 	for _, file := range r.MultipartForm.File["file"] {
 		ext := strings.ToLower(filepath.Ext(file.Filename))
 		if ext != ".csv" && ext != ".txt" {
@@ -494,12 +541,21 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	w.Header().Set("Content-Type", "application/json")
+	confirmationID := generateUID()
 	var buf bytes.Buffer
-	err = s.renderSnippetUploadResults(&buf, entries, skippedWKNs, store)
-	if err != nil {
+	if err := s.renderSnippetUploadResults(&buf, entries, skippedWKNs, confirmationID, store); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
+	}
+	if len(entries) > 0 {
+		func() {
+			s.mutPendingEntries.Lock()
+			defer s.mutPendingEntries.Unlock()
+			s.pendingEntries[confirmationID] = PendingLedgerEntries{
+				Entries: entries,
+				Created: time.Now(),
+			}
+		}()
 	}
 	status := "OK"
 	if len(skippedWKNs) > 0 {
@@ -513,13 +569,51 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 	if len(skippedWKNs) > 0 {
 		error = fmt.Sprintf("Skipped WKNs: %s", strings.Join(skippedWKNs, "\n"))
 	}
-	err = json.NewEncoder(w).Encode(CsvUploadResponse{
+	s.jsonResponse(w, CsvUploadResponse{
 		Status:    status,
 		Error:     error,
 		InnerHTML: buf.String(),
 	})
-	if err != nil {
-		log.Fatalf("Cannot encode my own JSON: %s", err)
+}
+
+func (s *Server) handleCsvConfirmPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	confirmationID := r.Form.Get("ConfirmationID")
+	if confirmationID == "" {
+		http.Error(w, "empty confirmation id", http.StatusBadRequest)
+		return
+	}
+	log.Printf("Received confirmation for %s", confirmationID)
+	p, found := func() (PendingLedgerEntries, bool) {
+		s.mutPendingEntries.Lock()
+		defer s.mutPendingEntries.Unlock()
+		p, found := s.pendingEntries[confirmationID]
+		delete(s.pendingEntries, confirmationID)
+		return p, found
+	}()
+	if !found {
+		http.Error(w, "no such id", http.StatusNotFound)
+		return
+	}
+	added := 0
+	for _, e := range p.Entries {
+		err := s.Store().Add(e)
+		if err != nil {
+			log.Printf("Could not add ledger entry %v: %v", e, err)
+			break
+		}
+		added++
+	}
+	if added != len(p.Entries) {
+		http.Error(w, "could not add all entries", http.StatusConflict)
+		return
+	}
+	if err := s.Store().Save(); err != nil {
+		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
+		return
 	}
 }
 
@@ -544,33 +638,23 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Cannot parse ledger: %v", err), http.StatusBadRequest)
 		return
 	}
-	store, err := LoadStore(s.ledgerPath)
+	err = s.Store().Add(e)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
-	err = store.Add(e)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(AddLedgerEntryResponse{
+		s.jsonResponse(w, AddLedgerEntryResponse{
 			Status: "INVALID_ARGUMENT",
 			Error:  err.Error(),
 		})
 		return
 	}
-	err = store.Save()
+	err = s.Store().Save()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(AddLedgerEntryResponse{
+	s.jsonResponse(w, AddLedgerEntryResponse{
 		Status:      "OK",
 		SequenceNum: e.SequenceNum,
 	})
-	if err != nil {
-		log.Fatalf("Cannot encode my own JSON: %s", err)
-	}
 }
 
 func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
@@ -594,27 +678,20 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Cannot parse asset: %v", err), http.StatusBadRequest)
 		return
 	}
-	store, err := LoadStore(s.ledgerPath)
+	err = s.Store().AddAsset(a)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error loading ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
-	err = store.AddAsset(a)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(AddAssetResponse{
+		s.jsonResponse(w, AddAssetResponse{
 			Status: "INVALID_ARGUMENT",
 			Error:  err.Error(),
 		})
 		return
 	}
-	err = store.Save()
+	err = s.Store().Save()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(AddAssetResponse{
+	s.jsonResponse(w, AddAssetResponse{
 		Status:  "OK",
 		AssetID: a.ID(),
 	})
@@ -637,8 +714,10 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
+	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
+	mux.HandleFunc("POST /kontoo/csv/confirm", s.handleCsvConfirmPost)
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
 	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {

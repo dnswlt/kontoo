@@ -88,11 +88,14 @@
 
         async function confirm(confirmationId) {
             try {
-                const formData = new FormData();
-                formData.append("ConfirmationID", confirmationId);
+                const data = new URLSearchParams();
+                data.append("ConfirmationID", confirmationId);
                 const resp = await fetch("/kontoo/csv/confirm", {
                     method: "POST",
-                    body: formData,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: data.toString(),
                 });
                 if (!resp.ok) {
                     const text = await resp.text();
