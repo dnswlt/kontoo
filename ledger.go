@@ -142,6 +142,17 @@ func (s *Store) LookupAsset(e *LedgerEntry) (*Asset, bool) {
 	return s.FindAssetByRef(e.AssetRef)
 }
 
+func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
+	// TODO: only return assets still in possession at a given date.
+	var assets []*Asset
+	for _, a := range s.L.Assets {
+		if _, ok := a.QuoteServiceSymbols[quoteService]; ok {
+			assets = append(assets, a)
+		}
+	}
+	return assets
+}
+
 func allZero(ms ...Micros) bool {
 	for _, m := range ms {
 		if m != 0 {

@@ -22,20 +22,17 @@ import (
 	"golang.org/x/text/encoding/charmap"
 )
 
-type PriceHistoryItem struct {
+type DailyQuote struct {
+	Symbol       string
+	Currency     Currency
 	Date         time.Time
 	ClosingPrice Micros
-}
-
-type PriceHistory struct {
-	Ticker   string
-	Currency string
-	History  []PriceHistoryItem
 }
 
 type YFinance struct {
 	client    *http.Client
 	cookieJar CookieJar
+	cache     *PriceHistoryCache
 }
 
 type SimpleCookie struct {
@@ -68,6 +65,7 @@ type YFChartResult struct {
 type YFMeta struct {
 	ExchangeTimezoneName string `json:"exchangeTimezoneName"`
 	Currency             string `json:"currency"`
+	Symbol               string `json:"symbol"`
 }
 type YFIndicators struct {
 	Quote []*YFQuote `json:"quote"`
@@ -76,11 +74,10 @@ type YFQuote struct {
 	Close []float64 `json:"close"`
 }
 
-// jq '{close: .chart.result[0].indicators.quote[0].close, timestamps: .chart.result[0].timestamp}' testdata/chart.json
-
 const (
 	userAgent       = `Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15`
 	cookieJarEnvVar = "YFCOOKIEJAR"
+	cacheDirEnvVar  = "KONTOO_CACHE"
 )
 
 func (j *CookieJar) AddCookies(req *http.Request) {
@@ -92,8 +89,13 @@ func (j *CookieJar) AddCookies(req *http.Request) {
 	}
 }
 
-func NewYFinance() (*YFinance, error) {
-	yf := &YFinance{client: &http.Client{}}
+func NewYFinanceCached(cacheDir string) (*YFinance, error) {
+	yf := &YFinance{
+		client: &http.Client{},
+	}
+	if cacheDir != "" {
+		yf.cache = NewPriceHistoryCache(cacheDir)
+	}
 	if err := yf.LoadCookieJar(); err != nil {
 		if os.IsNotExist(err) || errors.Is(err, ErrCookiesExpired) {
 			if err := yf.RefreshCookieJar(); err != nil {
@@ -102,6 +104,10 @@ func NewYFinance() (*YFinance, error) {
 		}
 	}
 	return yf, nil
+}
+
+func NewYFinance() (*YFinance, error) {
+	return NewYFinanceCached("")
 }
 
 var (
@@ -221,8 +227,45 @@ func (yf *YFinance) getCrumb() (string, error) {
 	return string(body), nil
 }
 
-func (yf *YFinance) GetPriceHistory(ticker string, start, end time.Time) (*PriceHistory, error) {
-	url, err := url.Parse("https://query2.finance.yahoo.com/v8/finance/chart/" + ticker)
+// Get closing prices of multiple stocks on a single day.
+func (yf *YFinance) GetDailyQuotes(symbols []string, date time.Time) ([]*DailyQuote, error) {
+	result := make([]*DailyQuote, len(symbols))
+	if yf.cache != nil {
+		for i, sym := range symbols {
+			cached, err := yf.cache.Get(sym, date)
+			if err != nil {
+				if errors.Is(err, ErrNotCached) {
+					continue
+				}
+				return nil, fmt.Errorf("failed to read from cache: %w", err)
+			}
+			result[i] = cached
+		}
+	}
+	for i, sym := range symbols {
+		if result[i] != nil {
+			continue // populated from cache
+		}
+		hist, err := yf.FetchPriceHistory(sym, date.AddDate(0, 0, -8), date)
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch price history for %s: %w", sym, err)
+		}
+		if len(hist) == 0 {
+			return nil, fmt.Errorf("no results when fetching price history for %s", sym)
+		}
+		err = yf.cache.AddAll(hist)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add price history to cache: %w", err)
+		}
+		// TODO: deal with non-trading days and add them to the cache.
+		// If we don't cache those, we'll always have to fetch data.
+		result[i] = hist[len(hist)-1]
+	}
+	return result, nil
+}
+
+func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*DailyQuote, error) {
+	url, err := url.Parse("https://query2.finance.yahoo.com/v8/finance/chart/" + symbol)
 	if err != nil {
 		log.Fatalf("Cannot parse URL: %v", err)
 	}
@@ -233,7 +276,7 @@ func (yf *YFinance) GetPriceHistory(ticker string, start, end time.Time) (*Price
 	q.Set("period1", fmt.Sprintf("%d", start.Unix()))
 	q.Set("period2", fmt.Sprintf("%d", end.Unix()))
 	q.Set("crumb", yf.cookieJar.Crumb)
-	q.Set("symbol", ticker)
+	q.Set("symbol", symbol)
 	q.Set("formatted", "false")
 	q.Set("corsDomain", "finance.yahoo.com")
 	url.RawQuery = q.Encode()
@@ -272,19 +315,23 @@ func (yf *YFinance) GetPriceHistory(ticker string, start, end time.Time) (*Price
 		log.Printf("Unexpected response structure: %s", string(body))
 		return nil, fmt.Errorf("YFChartResponse is missing expected data")
 	}
-	hist := &PriceHistory{
-		Ticker: ticker,
-	}
+	var hist []*DailyQuote
+	var currency Currency
 	res := yresp.Chart.Result[0]
 	timezone := time.UTC
 	if res.Meta != nil {
-		hist.Currency = res.Meta.Currency
+		currency = Currency(res.Meta.Currency)
 		if tz, err := time.LoadLocation(res.Meta.ExchangeTimezoneName); err == nil {
 			timezone = tz
 		}
+		if res.Meta.Symbol != symbol {
+			return nil, fmt.Errorf("response is for a different symbol: requested %q, received %q", symbol, res.Meta.Symbol)
+		}
 	}
 	for i, c := range res.Indicators.Quote[0].Close {
-		hist.History = append(hist.History, PriceHistoryItem{
+		hist = append(hist, &DailyQuote{
+			Symbol:       symbol,
+			Currency:     currency,
 			ClosingPrice: Micros(c * 1e6),
 			Date:         time.Unix(int64(res.Timestamps[i]), 0).In(timezone),
 		})
@@ -343,13 +390,6 @@ func PrintQuote(client *http.Client, ticker string, jar *CookieJar) error {
 	return nil
 }
 
-type PriceHistoryCacheEntry struct {
-	Ticker       string
-	Currency     string
-	Date         string // Format YYYY-MM-DD
-	ClosingPrice Micros
-}
-
 type PriceHistoryCache struct {
 	cacheDir string
 }
@@ -358,7 +398,7 @@ func NewPriceHistoryCache(cacheDir string) *PriceHistoryCache {
 	return &PriceHistoryCache{cacheDir: cacheDir}
 }
 
-func (c *PriceHistoryCache) Add(hist *PriceHistory) error {
+func (c *PriceHistoryCache) AddAll(hist []*DailyQuote) error {
 	f := filepath.Join(c.cacheDir, "prices.jsonl")
 	out, err := os.OpenFile(f, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
@@ -366,45 +406,38 @@ func (c *PriceHistoryCache) Add(hist *PriceHistory) error {
 	}
 	defer out.Close()
 	enc := json.NewEncoder(out)
-	for _, h := range hist.History {
-		e := PriceHistoryCacheEntry{
-			Ticker:       hist.Ticker,
-			Currency:     hist.Currency,
-			ClosingPrice: h.ClosingPrice,
-			Date:         h.Date.Format("2006-01-02"),
-		}
-		if err := enc.Encode(&e); err != nil {
+	for _, q := range hist {
+		if err := enc.Encode(q); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *PriceHistoryCache) Get(ticker string, date time.Time) (*PriceHistoryCacheEntry, error) {
+func (c *PriceHistoryCache) Get(symbol string, date time.Time) (*DailyQuote, error) {
 	f := filepath.Join(c.cacheDir, "prices.jsonl")
 	in, err := os.Open(f)
 	if err != nil {
 		return nil, err
 	}
 	defer in.Close()
-	dateStr := date.Format("2006-01-02")
 	dec := json.NewDecoder(in)
 	for {
-		var e PriceHistoryCacheEntry
+		var e DailyQuote
 		if err := dec.Decode(&e); err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil, ErrNotCached
 			}
 			return nil, fmt.Errorf("error reading from cache: %w", err)
 		}
-		if e.Ticker == ticker && e.Date == dateStr {
+		if e.Symbol == symbol && e.Date.Year() == date.Year() && e.Date.YearDay() == date.YearDay() {
 			return &e, nil
 		}
 	}
 }
 
-func defaultCacheDir() string {
-	dir := os.Getenv("KONTOO_CACHE")
+func CacheDir() string {
+	dir := os.Getenv(cacheDirEnvVar)
 	if dir == "off" {
 		return ""
 	}
@@ -436,6 +469,8 @@ func defaultCacheDir() string {
 	}
 	return dir
 }
+
+// CSV Export
 
 type DepotExportItem struct {
 	QuantityMicros Micros   `json:"quantity"`

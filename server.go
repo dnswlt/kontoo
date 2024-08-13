@@ -57,8 +57,10 @@ type Server struct {
 	templates    *template.Template
 	store        *Store
 	debugMode    bool
+	// Stock quote service
+	yFinance *YFinance
 	// In-memory cache of recent CSV uploads waiting for confirmation
-	cacheCh           chan struct{}
+	csvCacheCh        chan struct{}
 	pendingEntries    map[string]PendingLedgerEntries
 	mutPendingEntries sync.Mutex
 }
@@ -74,6 +76,11 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 	if err != nil {
 		return nil, fmt.Errorf("cannot load store: %w", err)
 	}
+	yf, err := NewYFinanceCached(CacheDir())
+	if err != nil {
+		log.Printf("Error creating YFinance. Stock quotes will not be available. Error: %v", err)
+		yf = nil // Should be nil anyway, but better be safe
+	}
 	ch := make(chan struct{})
 	s := &Server{
 		addr:           addr,
@@ -81,7 +88,8 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 		resourcesDir:   resourcesDir,
 		templatesDir:   templatesDir,
 		store:          store,
-		cacheCh:        ch,
+		yFinance:       yf,
+		csvCacheCh:     ch,
 		pendingEntries: make(map[string]PendingLedgerEntries),
 	}
 	go func() {
@@ -110,6 +118,11 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 		return nil, err
 	}
 	return s, nil
+}
+
+func (s *Server) Shutdown() {
+	// Trigger shutdown of the goroutine that clears the CSV cache.
+	close(s.csvCacheCh)
 }
 
 func (s *Server) Store() *Store {
@@ -341,9 +354,45 @@ func (s *Server) renderAddAssetTemplate(w io.Writer) error {
 	})
 }
 
-func (s *Server) renderQuotesTemplate(w io.Writer) error {
-
-	return s.templates.ExecuteTemplate(w, "quotes.html", nil)
+func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
+	type QuoteEntry struct {
+		AssetID      string
+		AssetName    string
+		Symbol       string
+		Currency     Currency
+		ClosingPrice Micros
+		Date         string
+	}
+	var entries []*QuoteEntry
+	if s.yFinance != nil {
+		assets := s.Store().FindAssetsForQuoteService("YF")
+		symbols := make([]string, len(assets))
+		for i, a := range assets {
+			symbols[i] = a.QuoteServiceSymbols["YF"]
+		}
+		hist, err := s.yFinance.GetDailyQuotes(symbols, date)
+		if err != nil {
+			log.Printf("Failed to get price history: %v", err)
+		}
+		for i, h := range hist {
+			a := assets[i]
+			entries = append(entries, &QuoteEntry{
+				AssetID:      a.ID(),
+				AssetName:    a.Name,
+				Symbol:       h.Symbol,
+				Currency:     h.Currency,
+				ClosingPrice: h.ClosingPrice,
+				Date:         h.Date.Format("2006-01-02"),
+			})
+		}
+	}
+	return s.templates.ExecuteTemplate(w, "quotes.html", struct {
+		Date    string
+		Entries []*QuoteEntry
+	}{
+		Date:    date.Format("2006-01-02"),
+		Entries: entries,
+	})
 }
 
 func (s *Server) renderPositionsTemplate(w io.Writer, style PositionDisplayStyle, date time.Time, store *Store) error {
@@ -396,8 +445,24 @@ func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "invalid form", http.StatusBadRequest)
+		return
+	}
+	d := r.Form.Get("d")
+	var date time.Time
+	if d == "" {
+		date = time.Now()
+	} else {
+		var err error
+		date, err = time.Parse("2006-01-02", r.Form.Get("d"))
+		if err != nil {
+			http.Error(w, "invalid value for d= parameter", http.StatusBadRequest)
+			return
+		}
+	}
 	var buf bytes.Buffer
-	if err := s.renderQuotesTemplate(&buf); err != nil {
+	if err := s.renderQuotesTemplate(&buf, date); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -739,6 +804,6 @@ func (s *Server) Serve() error {
 	}
 
 	fmt.Printf("Server listening on %s\n", s.addr)
-
+	defer s.Shutdown()
 	return srv.ListenAndServe()
 }
