@@ -10,30 +10,14 @@
 
 <body>
     {{template "nav.html"}}
+    <div id="status-callout" class="hidden"></div>
+
     <h1>Stock quotes</h1>
-    <!-- <div>
-        <p class="quote-line" style="font-weight: bold; font-size: 120%;"><a
-                href="https://finance.yahoo.com/quote/MSFT/">MSFT</a></p>
-        <p class="quote-line" style="color: #777;">Microsoft Corporation</p>
-        <p class="quote-line" style="font-weight: bold; font-size: 120%;">398.43</p>
-    </div>
-
-    <hr>
-    <div>
-        <p class="quote-line">
-            <span style="font-weight: bold; font-size: 120%;"><a
-                    href="https://finance.yahoo.com/quote/MSFT/">MSFT</a></span>
-            <span style="color: #777;">Microsoft Corporation</span>
-        </p>
-        <p class="quote-line">
-            <span style="font-weight: bold; font-size: 120%;">398.43</span>
-        </p>
-    </div> -->
-
     {{if .Entries }}
     <table>
         <thead>
             <tr>
+                <th></th>
                 <th>Code</th>
                 <th>Name</th>
                 <th>Ticker symbol</th>
@@ -45,21 +29,115 @@
         <tbody>
             {{range .Entries}}
             <tr>
+                <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .Date}}" data-price="{{.ClosingPrice}}"
+                        class="selector" type="checkbox" name="quote" checked></td>
                 <td>{{.AssetID}}</td>
                 <td>{{.AssetName}}</td>
                 <td>{{.Symbol}}</td>
                 <td>{{.Currency}}</td>
                 <td>{{money .ClosingPrice}}</td>
-                <td>{{.Date}}</td>
+                <td>{{yyyymmdd .Date}}</td>
             </tr>
             {{end}}
         </tbody>
     </table>
     {{else}}
-    <div id="status-callout" class="callout-err">
+    <div>
         No assets have a y!finance (YF) ticker symbol. Consider adding them to enable the online quote service.
     </div>
     {{end}}
+
+    {{if .ExchangeRates }}
+    <h1>Exchange rates</h1>
+    <table>
+        <thead>
+            <tr>
+                <th></th>
+                <th>Base currency</th>
+                <th>Quote currency</th>
+                <th>Closing price</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .ExchangeRates}}
+            <tr>
+                <td><input data-quotecurrency="{{.QuoteCurrency}}" data-basecurrency="{{.BaseCurrency}}" data-date="{{yyyymmdd .Timestamp}}"
+                        data-price="{{.ClosingPrice}}" class="selector" type="checkbox" name="exchangerate" checked>
+                </td>
+                <td>{{.BaseCurrency}}</td>
+                <td>{{.QuoteCurrency}}</td>
+                <td>{{price .ClosingPrice}}</td>
+                <td>{{yyyymmdd .Timestamp}}</td>
+            </tr>
+            {{end}}
+            <tr>
+                <td><input type="checkbox" id="select-all" checked></td>
+                <td colspan="4"><label for="select-all">Check/uncheck all</label></td>
+            </tr>
+        </tbody>
+    </table>
+    <button id="submit">Import to ledger</button>
+    {{end}}
+
+    <script>
+        const selectAll = document.getElementById("select-all");
+        selectAll.addEventListener("change", function (e) {
+            // Get state of clicked selectAll here, to set inputs all to this value.
+            const isChecked = e.target.checked;
+            const inputs = document.querySelectorAll("input.selector");
+            inputs.forEach(inp => inp.checked = isChecked);
+        });
+        const submit = document.getElementById("submit");
+        submit.addEventListener("click", async function (e) {
+            const inputs = document.querySelectorAll("input.selector:checked");
+            const request = {
+                quotes: [],
+                exchangeRates: [],
+            };
+            inputs.forEach(inp => {
+                if (inp.name === "quote") {
+                    request.quotes.push({
+                        assetID: inp.dataset.asset,
+                        date: inp.dataset.date,
+                        priceMicros: parseInt(inp.dataset.price)
+                    });
+                } else if (inp.name === "exchangerate") {
+                    request.exchangeRates.push({
+                        baseCurrency: inp.dataset.basecurrency,
+                        quoteCurrency: inp.dataset.quotecurrency,
+                        date: inp.dataset.date,
+                        priceMicros: parseInt(inp.dataset.price)
+                    });
+                }
+            });
+            console.log(request);
+            try {
+                const response = await fetch("/kontoo/quotes", {
+                    method: "POST",
+                    body: JSON.stringify(request),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                const statusDiv = document.getElementById("status-callout");
+                if (data.status !== "OK") {
+                    statusDiv.textContent = data.error;
+                    statusDiv.className = "callout-err";
+                } else {
+                    statusDiv.textContent = `Added ${data.itemsImported} quotes and exchange rates.`;
+                    statusDiv.className = "callout-ok";
+                }
+            }
+            catch (error) {
+                console.error("Error on submit:", error);
+            }
+        });
+    </script>
 </body>
 
 </html>

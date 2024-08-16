@@ -153,6 +153,19 @@ func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
 	return assets
 }
 
+func (s *Store) FindQuoteCurrencies() []Currency {
+	var currencies []Currency
+	seen := make(map[Currency]bool)
+	for _, a := range s.L.Assets {
+		if a.Currency == s.L.Header.BaseCurrency || seen[a.Currency] {
+			continue
+		}
+		seen[a.Currency] = true
+		currencies = append(currencies, a.Currency)
+	}
+	return currencies
+}
+
 func allZero(ms ...Micros) bool {
 	for _, m := range ms {
 		if m != 0 {

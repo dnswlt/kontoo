@@ -16,7 +16,7 @@ func main() {
 		fmt.Printf("Usage: %s <SYMBOL>...\n", filepath.Base(os.Args[0]))
 		os.Exit(1)
 	}
-	yf, err := kontoo.NewYFinanceCached(kontoo.CacheDir())
+	yf, err := kontoo.NewYFinance()
 	if err != nil {
 		log.Fatalf("Cannot create YFinance: %v", err)
 	}

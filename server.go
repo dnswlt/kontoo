@@ -42,6 +42,27 @@ type CsvUploadResponse struct {
 	InnerHTML string         `json:"innerHTML"`
 }
 
+type AddQuoteItem struct {
+	AssetID     string `json:"assetID"`
+	Date        Date   `json:"date"`
+	PriceMicros Micros `json:"priceMicros"`
+}
+type AddExchangeRateItem struct {
+	BaseCurrency  Currency `json:"baseCurrency"`
+	QuoteCurrency Currency `json:"quoteCurrency"`
+	Date          Date     `json:"date"`
+	PriceMicros   Micros   `json:"priceMicros"`
+}
+type AddQuotesRequest struct {
+	Quotes        []*AddQuoteItem        `json:"quotes"`
+	ExchangeRates []*AddExchangeRateItem `json:"exchangeRates"`
+}
+type AddQuotesResponse struct {
+	Status        string `json:"status"`
+	Error         string `json:"error,omitempty"`
+	ItemsImported int    `json:"itemsImported"`
+}
+
 // END JSON API
 
 type PendingLedgerEntries struct {
@@ -76,7 +97,7 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 	if err != nil {
 		return nil, fmt.Errorf("cannot load store: %w", err)
 	}
-	yf, err := NewYFinanceCached(CacheDir())
+	yf, err := NewYFinance()
 	if err != nil {
 		log.Printf("Error creating YFinance. Stock quotes will not be available. Error: %v", err)
 		yf = nil // Should be nil anyway, but better be safe
@@ -283,6 +304,9 @@ func commonFuncs() template.FuncMap {
 		"percent": func(m Micros) string {
 			return m.Format(".2%")
 		},
+		"yyyymmdd": func(t time.Time) string {
+			return t.Format("2006-01-02")
+		},
 	}
 }
 
@@ -361,37 +385,54 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 		Symbol       string
 		Currency     Currency
 		ClosingPrice Micros
-		Date         string
+		Date         time.Time
+	}
+	type TemplateData struct {
+		Date          string
+		Entries       []*QuoteEntry
+		ExchangeRates []*DailyExchangeRate
+	}
+	if s.yFinance == nil {
+		return s.templates.ExecuteTemplate(w, "quotes.html", TemplateData{
+			Date: date.Format("2006-01-02"),
+		})
 	}
 	var entries []*QuoteEntry
-	if s.yFinance != nil {
-		assets := s.Store().FindAssetsForQuoteService("YF")
-		symbols := make([]string, len(assets))
-		for i, a := range assets {
-			symbols[i] = a.QuoteServiceSymbols["YF"]
-		}
-		hist, err := s.yFinance.GetDailyQuotes(symbols, date)
+	var exchangeRates []*DailyExchangeRate
+	assets := s.Store().FindAssetsForQuoteService("YF")
+	symbols := make([]string, len(assets))
+	assetMap := make(map[string]*Asset)
+	for i, a := range assets {
+		symbols[i] = a.QuoteServiceSymbols["YF"]
+		assetMap[a.QuoteServiceSymbols["YF"]] = a
+	}
+	hist, err := s.yFinance.GetDailyQuotes(symbols, date)
+	if err != nil {
+		log.Printf("Failed to get price history: %v", err)
+	}
+	for _, h := range hist {
+		a := assetMap[h.Symbol]
+		entries = append(entries, &QuoteEntry{
+			AssetID:      a.ID(),
+			AssetName:    a.Name,
+			Symbol:       h.Symbol,
+			Currency:     h.Currency,
+			ClosingPrice: h.ClosingPrice,
+			Date:         h.Timestamp,
+		})
+	}
+	quoteCurrencies := s.Store().FindQuoteCurrencies()
+	if len(quoteCurrencies) > 0 {
+		var err error
+		exchangeRates, err = s.yFinance.GetDailyExchangeRates(s.Store().L.Header.BaseCurrency, quoteCurrencies, date)
 		if err != nil {
-			log.Printf("Failed to get price history: %v", err)
-		}
-		for i, h := range hist {
-			a := assets[i]
-			entries = append(entries, &QuoteEntry{
-				AssetID:      a.ID(),
-				AssetName:    a.Name,
-				Symbol:       h.Symbol,
-				Currency:     h.Currency,
-				ClosingPrice: h.ClosingPrice,
-				Date:         h.Date.Format("2006-01-02"),
-			})
+			log.Printf("Failed to get exchange rates: %v", err)
 		}
 	}
-	return s.templates.ExecuteTemplate(w, "quotes.html", struct {
-		Date    string
-		Entries []*QuoteEntry
-	}{
-		Date:    date.Format("2006-01-02"),
-		Entries: entries,
+	return s.templates.ExecuteTemplate(w, "quotes.html", TemplateData{
+		Date:          date.Format("2006-01-02"),
+		Entries:       entries,
+		ExchangeRates: exchangeRates,
 	})
 }
 
@@ -630,13 +671,13 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 			status = "Error"
 		}
 	}
-	error := ""
+	errorText := ""
 	if len(skippedWKNs) > 0 {
-		error = fmt.Sprintf("Skipped WKNs: %s", strings.Join(skippedWKNs, "\n"))
+		errorText = fmt.Sprintf("Skipped WKNs: %s", strings.Join(skippedWKNs, "\n"))
 	}
 	s.jsonResponse(w, CsvUploadResponse{
 		Status:    status,
-		Error:     error,
+		Error:     errorText,
 		InnerHTML: buf.String(),
 	})
 }
@@ -762,6 +803,88 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*LedgerEntry, error) {
+	result := make([]*LedgerEntry, 0, len(r.Quotes)+len(r.ExchangeRates))
+	for _, q := range r.Quotes {
+		a, ok := s.Store().assetMap[q.AssetID]
+		if !ok {
+			return nil, fmt.Errorf("asset %q does not exist", q.AssetID)
+		}
+		result = append(result, &LedgerEntry{
+			Type:        AssetPrice,
+			ValueDate:   q.Date,
+			AssetID:     q.AssetID,
+			Currency:    a.Currency,
+			PriceMicros: q.PriceMicros,
+		})
+
+	}
+	for _, e := range r.ExchangeRates {
+		if !currencyRegexp.MatchString(string(e.BaseCurrency)) {
+			return nil, fmt.Errorf("invalid currency: %q", e.BaseCurrency)
+		}
+		if !currencyRegexp.MatchString(string(e.QuoteCurrency)) {
+			return nil, fmt.Errorf("invalid currency: %q", e.QuoteCurrency)
+		}
+		if e.PriceMicros <= 0 {
+			return nil, fmt.Errorf("exchange rate must be postive: %v", e.PriceMicros)
+		}
+		result = append(result, &LedgerEntry{
+			Type:          ExchangeRate,
+			ValueDate:     e.Date,
+			Currency:      e.BaseCurrency,
+			QuoteCurrency: e.QuoteCurrency,
+			PriceMicros:   e.PriceMicros,
+		})
+	}
+	return result, nil
+}
+
+func (s *Server) handleQuotesPost(w http.ResponseWriter, r *http.Request) {
+	var req AddQuotesRequest
+	defer r.Body.Close()
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid input: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	entries, err := s.createLedgerEntries(&req)
+	if err != nil {
+		http.Error(w, "invalid request: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	imported := 0
+	var failures []string
+	for _, e := range entries {
+		if err := s.Store().Add(e); err != nil {
+			failures = append(failures, fmt.Sprintf("Failed to add entry: %s", err))
+			continue
+		}
+		imported++
+	}
+	if imported > 0 {
+		if err := s.Store().Save(); err != nil {
+			http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
+			return
+		}
+	}
+	if len(failures) > 0 {
+		status := "Error"
+		if imported > 0 {
+			status = "Partial Success"
+		}
+		s.jsonResponse(w, AddQuotesResponse{
+			Status:        status,
+			Error:         strings.Join(failures, ",\n"),
+			ItemsImported: imported,
+		})
+		return
+	}
+	s.jsonResponse(w, AddQuotesResponse{
+		Status:        "OK",
+		ItemsImported: imported,
+	})
+}
+
 func (s *Server) reloadHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.debugMode {
@@ -781,6 +904,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
+	mux.HandleFunc("POST /kontoo/quotes", s.handleQuotesPost)
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/csv/confirm", s.handleCsvConfirmPost)
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)

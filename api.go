@@ -1,6 +1,7 @@
 package kontoo
 
 import (
+	"regexp"
 	"time"
 )
 
@@ -127,6 +128,10 @@ const (
 	CHF Currency = "CHF"
 	USD Currency = "USD"
 	EUR Currency = "EUR"
+)
+
+var (
+	currencyRegexp = regexp.MustCompile("^[A-Z]{3}$")
 )
 
 func (d Date) String() string {

@@ -43,15 +43,6 @@ func (m Micros) SplitFrac() (int64, int) {
 }
 
 func (m Micros) Format(format string) string {
-	// #'##0.00
-	// #'##0.00;(#'##0.00)
-	// 0.000
-	// 0.00%
-	// Simpler: let's not invent or implement a formatting language. Use dedicated methods:
-	// Format(decimalPlaces int, thousandSeparator rune)
-	// Format(decimalPlaces int, thousandSeparator rune, negInBrackets bool)
-	// Format(decimalPlaces int, thousandSeparator rune, negInBrackets bool, percent bool)
-	//
 	// "()'.3"  "-.3"  ".3%"
 	// Must be a format string
 	rs := []rune(format)
@@ -169,8 +160,13 @@ func (m *Micros) UnmarshalJSON(data []byte) error {
 	if s == "null" {
 		return nil // Default behaviour for JSON unmarshalling of 'null'.
 	}
-	if len(s) < 2 || s[0] != '"' || s[len(s)-1] != '"' {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return ParseDecimalAsMicros(s[1:len(s)-1], m)
+	}
+	d, err := strconv.Atoi(s)
+	if err != nil {
 		return fmt.Errorf("invalid JSON string for Micros: %s", s)
 	}
-	return ParseDecimalAsMicros(s[1:len(data)-1], m)
+	*m = Micros(d)
+	return nil
 }
