@@ -2,8 +2,6 @@ package kontoo
 
 import (
 	"bytes"
-	crand "crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -16,7 +14,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -36,10 +33,9 @@ type AddAssetResponse struct {
 }
 
 type CsvUploadResponse struct {
-	Status    string         `json:"status"`
-	Error     string         `json:"error,omitempty"`
-	Entries   []*LedgerEntry `json:"entries,omitempty"`
-	InnerHTML string         `json:"innerHTML"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	InnerHTML string `json:"innerHTML"`
 }
 
 type AddQuoteItem struct {
@@ -65,11 +61,6 @@ type AddQuotesResponse struct {
 
 // END JSON API
 
-type PendingLedgerEntries struct {
-	Entries []*LedgerEntry
-	Created time.Time
-}
-
 type Server struct {
 	addr         string
 	ledgerPath   string
@@ -80,10 +71,6 @@ type Server struct {
 	debugMode    bool
 	// Stock quote service
 	yFinance *YFinance
-	// In-memory cache of recent CSV uploads waiting for confirmation
-	csvCacheCh        chan struct{}
-	pendingEntries    map[string]PendingLedgerEntries
-	mutPendingEntries sync.Mutex
 }
 
 func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, error) {
@@ -102,48 +89,18 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 		log.Printf("Error creating YFinance. Stock quotes will not be available. Error: %v", err)
 		yf = nil // Should be nil anyway, but better be safe
 	}
-	ch := make(chan struct{})
 	s := &Server{
-		addr:           addr,
-		ledgerPath:     ledgerPath,
-		resourcesDir:   resourcesDir,
-		templatesDir:   templatesDir,
-		store:          store,
-		yFinance:       yf,
-		csvCacheCh:     ch,
-		pendingEntries: make(map[string]PendingLedgerEntries),
+		addr:         addr,
+		ledgerPath:   ledgerPath,
+		resourcesDir: resourcesDir,
+		templatesDir: templatesDir,
+		store:        store,
+		yFinance:     yf,
 	}
-	go func() {
-		tick := time.NewTicker(1 * time.Second)
-		defer tick.Stop()
-		for {
-			select {
-			case <-ch:
-				return
-			case now := <-tick.C:
-				func() {
-					s.mutPendingEntries.Lock()
-					defer s.mutPendingEntries.Unlock()
-					minCreated := now.Add(-10 * time.Minute)
-					for k, e := range s.pendingEntries {
-						if e.Created.Before(minCreated) {
-							log.Printf("Deleteing old cache entry %s", k)
-							delete(s.pendingEntries, k)
-						}
-					}
-				}()
-			}
-		}
-	}()
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
 	}
 	return s, nil
-}
-
-func (s *Server) Shutdown() {
-	// Trigger shutdown of the goroutine that clears the CSV cache.
-	close(s.csvCacheCh)
 }
 
 func (s *Server) Store() *Store {
@@ -304,8 +261,14 @@ func commonFuncs() template.FuncMap {
 		"percent": func(m Micros) string {
 			return m.Format(".2%")
 		},
-		"yyyymmdd": func(t time.Time) string {
-			return t.Format("2006-01-02")
+		"yyyymmdd": func(t any) (string, error) {
+			switch d := t.(type) {
+			case time.Time:
+				return d.Format("2006-01-02"), nil
+			case Date:
+				return d.Time.Format("2006-01-02"), nil
+			}
+			return "", fmt.Errorf("yyyymmdd called with invalid type %t", t)
 		},
 	}
 }
@@ -557,13 +520,7 @@ func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func generateUID() string {
-	p := make([]byte, 16)
-	crand.Read(p)
-	return hex.EncodeToString(p)
-}
-
-func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry, skipped []string, confirmationID string, store *Store) error {
+func (s *Server) renderSnipUploadCsvData(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
 	type Row struct {
 		*LedgerEntry
 		AssetName string
@@ -585,14 +542,12 @@ func (s *Server) renderSnippetUploadResults(w io.Writer, entries []*LedgerEntry,
 		skipped = skipped[:5]
 		suffix = ", ..."
 	}
-	return s.templates.ExecuteTemplate(w, "snip_upload_results.html", struct {
-		Entries        []*Row
-		Skipped        string
-		ConfirmationID string
+	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", struct {
+		Entries []*Row
+		Skipped string
 	}{
-		Entries:        rows,
-		Skipped:        strings.Join(skipped, ", ") + suffix,
-		ConfirmationID: confirmationID,
+		Entries: rows,
+		Skipped: strings.Join(skipped, ", ") + suffix,
 	})
 }
 
@@ -634,6 +589,7 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			asset, found := store.FindAssetByWKN(item.WKN)
 			if !found || item.Currency != "" && asset.Currency != item.Currency {
+				log.Printf("CSV import: skipping item with WKN %q (found:%v)", item.WKN, found)
 				skippedWKNs = append(skippedWKNs, item.WKN)
 				continue
 			}
@@ -647,21 +603,10 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 	}
-	confirmationID := generateUID()
 	var buf bytes.Buffer
-	if err := s.renderSnippetUploadResults(&buf, entries, skippedWKNs, confirmationID, store); err != nil {
+	if err := s.renderSnipUploadCsvData(&buf, entries, skippedWKNs, store); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
-	}
-	if len(entries) > 0 {
-		func() {
-			s.mutPendingEntries.Lock()
-			defer s.mutPendingEntries.Unlock()
-			s.pendingEntries[confirmationID] = PendingLedgerEntries{
-				Entries: entries,
-				Created: time.Now(),
-			}
-		}()
 	}
 	status := "OK"
 	if len(skippedWKNs) > 0 {
@@ -680,47 +625,6 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		Error:     errorText,
 		InnerHTML: buf.String(),
 	})
-}
-
-func (s *Server) handleCsvConfirmPost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
-		return
-	}
-	confirmationID := r.Form.Get("ConfirmationID")
-	if confirmationID == "" {
-		http.Error(w, "empty confirmation id", http.StatusBadRequest)
-		return
-	}
-	log.Printf("Received confirmation for %s", confirmationID)
-	p, found := func() (PendingLedgerEntries, bool) {
-		s.mutPendingEntries.Lock()
-		defer s.mutPendingEntries.Unlock()
-		p, found := s.pendingEntries[confirmationID]
-		delete(s.pendingEntries, confirmationID)
-		return p, found
-	}()
-	if !found {
-		http.Error(w, "no such id", http.StatusNotFound)
-		return
-	}
-	added := 0
-	for _, e := range p.Entries {
-		err := s.Store().Add(e)
-		if err != nil {
-			log.Printf("Could not add ledger entry %v: %v", e, err)
-			break
-		}
-		added++
-	}
-	if added != len(p.Entries) {
-		http.Error(w, "could not add all entries", http.StatusConflict)
-		return
-	}
-	if err := s.Store().Save(); err != nil {
-		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
-		return
-	}
 }
 
 func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
@@ -906,7 +810,6 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	mux.HandleFunc("POST /kontoo/quotes", s.handleQuotesPost)
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
-	mux.HandleFunc("POST /kontoo/csv/confirm", s.handleCsvConfirmPost)
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
 	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {
@@ -928,6 +831,5 @@ func (s *Server) Serve() error {
 	}
 
 	fmt.Printf("Server listening on %s\n", s.addr)
-	defer s.Shutdown()
 	return srv.ListenAndServe()
 }

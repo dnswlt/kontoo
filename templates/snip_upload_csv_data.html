@@ -6,6 +6,7 @@
 {{end}}
 <table id="results">
     <thead>
+        <th></th>
         <th>Value date</th>
         <th>Code</th>
         <th>Name</th>
@@ -15,16 +16,22 @@
     <tbody>
         {{range .Entries}}
         <tr>
-            <td>{{.ValueDate}}</td>
+            <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{.PriceMicros}}"
+                    class="selector" type="checkbox" name="quote" checked></td>
+            <td>{{yyyymmdd .ValueDate}}</td>
             <td>{{.AssetID}}</td>
             <td>{{.AssetName}}</td>
             <td>{{.Currency}}</td>
             <td>{{price .PriceMicros}}</td>
         </tr>
         {{end}}
+        <tr>
+            <td><input type="checkbox" id="select-all" checked></td>
+            <td colspan="5"><label for="select-all">Check/uncheck all</label></td>
+        </tr>
     </tbody>
 </table>
-<button id="confirm" onclick="confirm('{{.ConfirmationID}}')">Confirm and submit</button>
+<button id="submit">Confirm and submit</button>
 {{else}}
 <div id="status-callout" class="callout-err">
     No valid entries in CSV.

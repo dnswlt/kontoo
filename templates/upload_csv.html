@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kontoo</title>
     <link href="/kontoo/resources/style.css" rel="stylesheet">
+    <script src="/kontoo/resources/shared.js"></script>
 </head>
 
 <body>
@@ -65,7 +66,7 @@
             const div = document.getElementById("results-section");
             div.classList.remove("hidden");
             div.innerHTML = data.innerHTML;
-            return;
+            registerQuotesSubmit();
         }
 
         function preventDefaults(e) {
@@ -86,26 +87,6 @@
             uploadFiles(files);
         }
 
-        async function confirm(confirmationId) {
-            try {
-                const data = new URLSearchParams();
-                data.append("ConfirmationID", confirmationId);
-                const resp = await fetch("/kontoo/csv/confirm", {
-                    method: "POST",
-                    headers: {
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: data.toString(),
-                });
-                if (!resp.ok) {
-                    const text = await resp.text();
-                    console.error("Confirmation failed: ", resp.status, text);
-                }
-            }
-            catch (error) {
-                console.error("Error during confirmation:", error);
-            }
-        }
     </script>
 </body>
 
