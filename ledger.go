@@ -434,14 +434,14 @@ func (p *AssetPosition) PurchasePrice() Micros {
 	var price Micros
 	for _, item := range p.Items {
 		price += item.CostMicros
-		price += item.QuantityMicros.MulTrunc(item.PriceMicros)
+		price += item.QuantityMicros.Mul(item.PriceMicros)
 	}
 	return price
 }
 
 func (p *AssetPosition) CalculatedValueMicros() Micros {
 	if p.QuantityMicros != 0 {
-		return p.QuantityMicros.MulTrunc(p.PriceMicros)
+		return p.QuantityMicros.Mul(p.PriceMicros)
 	}
 	return p.ValueMicros
 }

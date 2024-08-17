@@ -10,32 +10,55 @@ import (
 
 type Micros int64
 
+var (
+	bigMillion = big.NewInt(1_000_000)
+)
+
 // Returns the result of multiplying two values expressed in micros.
 // E.g., a == 2_000_000, b == 3_000_000 ==> Mul(a, b) == 6_000_000.
 func (a Micros) Mul(b Micros) Micros {
+	// Fast path, using a simple overflow check.
+	if a == 0 {
+		return 0
+	}
+	c := a * b
+	if c/a == b {
+		return c / 1_000_000
+	}
+	// Slow path
 	bigA := big.NewInt(int64(a))
 	bigB := big.NewInt(int64(b))
 	bigA.Mul(bigA, bigB)
-	bigA.Div(bigA, big.NewInt(1_000_000))
+	bigA.Quo(bigA, bigMillion)
 	if !bigA.IsInt64() {
-		panic(fmt.Sprintf("cannot represent %v as int64 micros", bigA))
+		panic(fmt.Sprintf("Mul: cannot represent %v as int64 micros", bigA))
 	}
 	return Micros(bigA.Int64())
 }
 
-func (a Micros) MulTrunc(b Micros) Micros {
-	x := float64(a)
-	y := float64(b) / 1e6
-	return Micros(math.Trunc(x * y))
-}
-
 // Calculates the fraction numer/denom of this Micros value.
 func (a Micros) Frac(numer, denom Micros) Micros {
-	f := big.NewRat(int64(numer), int64(denom))
-	x := big.NewRat(int64(a), 1)
-	x.Mul(x, f)
-	v, _ := x.Float64()
-	return Micros(math.Trunc(v))
+	if denom == 0 {
+		panic("Frac: zero denominator")
+	}
+	// Fast path: a * numer can be represented
+	if a == 0 {
+		return 0
+	}
+	c := a * numer
+	if c/a == numer {
+		return c / denom
+	}
+	// Slow path.
+	bigA := big.NewInt(int64(a))
+	bigN := big.NewInt(int64(numer))
+	bigD := big.NewInt(int64(denom))
+	bigA.Mul(bigA, bigN)
+	bigA.Quo(bigA, bigD)
+	if !bigA.IsInt64() {
+		panic(fmt.Sprintf("Frac: cannot represent %v as int64 micros", bigA))
+	}
+	return Micros(bigA.Int64())
 }
 
 func (m Micros) SplitFrac() (int64, int) {
@@ -157,9 +180,6 @@ func (m Micros) MarshalJSON() ([]byte, error) {
 
 func (m *Micros) UnmarshalJSON(data []byte) error {
 	s := string(data)
-	if s == "null" {
-		return nil // Default behaviour for JSON unmarshalling of 'null'.
-	}
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
 		return ParseDecimalAsMicros(s[1:len(s)-1], m)
 	}

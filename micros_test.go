@@ -5,6 +5,43 @@ import (
 	"testing"
 )
 
+func BenchmarkMicrosMulFastPath(b *testing.B) {
+	// m1 * m2 just fits into an int64.
+	m1 := Micros(2_000_000_000)
+	m2 := Micros(4_000_000_000)
+	for n := 0; n < b.N; n++ {
+		m1.Mul(m2)
+	}
+}
+
+func BenchmarkMicrosMulSlowPath(b *testing.B) {
+	// m1*m2 does not fit into an int64
+	m1 := Micros(4_000_000_000)
+	m2 := Micros(4_000_000_000)
+	for n := 0; n < b.N; n++ {
+		m1.Mul(m2)
+	}
+}
+
+func BenchmarkMicrosFracFastPath(b *testing.B) {
+	m1 := Micros(100 * UnitValue)
+	m2 := Micros(1 * UnitValue)
+	m3 := Micros(2 * UnitValue)
+	for n := 0; n < b.N; n++ {
+		m1.Frac(m2, m3)
+	}
+}
+
+func BenchmarkMicrosFracSlowPath(b *testing.B) {
+	// m1 * m2 does not fit into an int64.
+	m1 := Micros(4_000_000_000)
+	m2 := Micros(4_000_000_000)
+	m3 := Micros(2 * UnitValue)
+	for n := 0; n < b.N; n++ {
+		m1.Frac(m2, m3)
+	}
+}
+
 func TestMicrosMul(t *testing.T) {
 	tests := []struct {
 		a    Micros
@@ -12,10 +49,14 @@ func TestMicrosMul(t *testing.T) {
 		want Micros
 	}{
 		{1 * UnitValue, 1, 1},
+		{1 * UnitValue, 0, 0},
+		{0, 1 * UnitValue, 0},
 		{2 * UnitValue, 3 * UnitValue, 6 * UnitValue},
 		{2_000, 3_000, 6},
 		{math.MaxInt64, 1 * UnitValue, math.MaxInt64},
 		{math.MaxInt64, 1 * Millis, math.MaxInt64 / 1000},
+		{math.MinInt64, 1 * UnitValue, math.MinInt64},
+		{math.MinInt64, 1 * Millis, math.MinInt64 / 1000},
 		{1000 * UnitValue, 3 * Millis, 3 * UnitValue},
 		{-1000 * UnitValue, 3 * Millis, -3 * UnitValue},
 		{-1000 * UnitValue, -3 * Millis, 3 * UnitValue},
@@ -29,6 +70,17 @@ func TestMicrosMul(t *testing.T) {
 	}
 }
 
+func TestMicrosMulOverflow(t *testing.T) {
+	m := Micros(math.MaxInt64)
+	n := Micros(1_000_001)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Mul did not panic on overflow")
+		}
+	}()
+	m.Mul(n)
+}
+
 func TestMicrosFrac(t *testing.T) {
 	tests := []struct {
 		a     Micros
@@ -36,6 +88,12 @@ func TestMicrosFrac(t *testing.T) {
 		denom Micros
 		want  Micros
 	}{
+		{1 * UnitValue, 1, 1, 1 * UnitValue},
+		{0, 1, 1, 0},
+		{0, 0, 1, 0},
+		{1, 0, 1, 0},
+		{1, 1, 2, 0},  // Truncates to zero
+		{-1, 1, 2, 0}, // Truncates to zero
 		{1 * UnitValue, 1, 2, 500 * Millis},
 		{1 * UnitValue, 1 * UnitValue, 2 * UnitValue, 500 * Millis},
 		{70 * UnitValue, 500 * Millis, 700 * Millis, 50 * UnitValue},
@@ -44,6 +102,7 @@ func TestMicrosFrac(t *testing.T) {
 		{-1 * UnitValue, -1, 3, 333_333},
 		{1, 3, 2, 1},
 		{1 * Millis, 3, 2, 1_500},
+		{math.MinInt64, 2 * UnitValue, 1 << 62, -4 * UnitValue},
 	}
 	for _, tc := range tests {
 		got := tc.a.Frac(tc.numer, tc.denom)
@@ -51,6 +110,18 @@ func TestMicrosFrac(t *testing.T) {
 			t.Errorf("%v.Frac(%v, %v): got %v, want %v", tc.a, tc.numer, tc.denom, got, tc.want)
 		}
 	}
+}
+
+func TestMicrosFracOverflow(t *testing.T) {
+	m := Micros(math.MaxInt64)
+	n := Micros(2 * UnitValue)
+	d := Micros(1 * UnitValue)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("Frac did not panic on overflow")
+		}
+	}()
+	m.Frac(n, d)
 }
 
 func TestMicrosSplitFrac(t *testing.T) {
