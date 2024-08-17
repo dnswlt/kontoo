@@ -1,56 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kontoo</title>
-    <link href="/kontoo/resources/style.css" rel="stylesheet">
+    {{template "head_common.html"}}
 </head>
+
 <body>
     {{template "nav.html"}}
     <h1>Ledger</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Value Date</th>
-                <th>Entry Type</th>
-                <th>Asset ID</th>
-                <th>Asset Name</th>
-                <th>Asset Class</th>
-                <th>Currency</th>
-                <th>Value</th>
-                <th>Cost</th>
-                <th>Quantity</th>
-                <th>Price</th>
-                <th>Comment</th>
-            </tr>
-        </thead>
-        <tbody>
-            {{range .TableRows}}
-            <tr>
-                <td>{{ .ValueDate }}</td>
-                <td>{{ .EntryType }}</td>
-                {{if .HasAsset}}
-                <td>{{ .AssetID }}</td>
-                <td>{{ .AssetName }}</td>
-                <td>{{ .AssetType }}</td> 
-                {{else}}
-                <td></td>
-                <td>{{ .Label }}</td>
-                <td></td>
-                {{end}}
-                <td class="ralign">{{ .Currency }}</td>
-                <td class="ralign">{{ money .Value }}</td>
-                <td class="ralign">{{if nonzero .Cost}}{{ money .Cost }}{{end}}</td>
-                <td class="ralign">{{ quantity .Quantity }}</td>
-                <td class="ralign">{{ price .Price }}</td>
-                <td>{{ .Comment }}</td>
-            </tr>
-            {{end}}
-        </tbody>
-    </table>    
-    <p class="footer">
-        Report generated {{.CurrentDate}}
-    </p>
+    <div>
+        <input id="filter" type="text" class="filter">
+    </div>
+    <div id="ledger-table-div">
+        {{template "snip_ledger_table.html" .}}
+    </div>
+    <script>
+        const filter = document.getElementById("filter");
+        filter.addEventListener('keydown', async function (event) {
+            if (event.key !== 'Enter') {
+                return;
+            }
+            event.preventDefault();
+            const query = event.target.value;
+            try {
+                const params = new URLSearchParams({
+                    snippet: true,
+                    q: query,
+                });
+                const response = await fetch(`/kontoo/ledger?${params}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const html = await response.text();
+                const div = document.getElementById("ledger-table-div");
+                div.innerHTML = html;
+                params.delete("snippet"); // Request the full page in the browser's history.
+                history.pushState(null, "", `/kontoo/ledger?${params}`);
+            }
+            catch (error) {
+                console.error("Error in query:", error);
+            }
+        });
+    </script>
 </body>
+
 </html>

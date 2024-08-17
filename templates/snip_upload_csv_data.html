@@ -1,9 +1,4 @@
 {{if .Entries }}
-{{if .Skipped}}
-<div id="status-callout" class="callout-err">
-    Skipped WKNs: {{.Skipped}}
-</div>
-{{end}}
 <table id="results">
     <thead>
         <th></th>
@@ -32,8 +27,4 @@
     </tbody>
 </table>
 <button id="submit">Confirm and submit</button>
-{{else}}
-<div id="status-callout" class="callout-err">
-    No valid entries in CSV.
-</div>
 {{end}}

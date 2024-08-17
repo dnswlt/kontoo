@@ -1,3 +1,32 @@
+// Shared functions used by one or more HTML templates and snippets.
+
+function callout(text, className = "callout-ok", elementId = "status-callout") {
+    const div = document.getElementById(elementId);
+    if (!div) {
+        console.log(`No callout element with ID ${elementId}`);
+        return;
+    }
+    div.textContent = text;
+    div.classList.remove("hidden", "callout-ok", "callout-err", "callout-warn");
+    div.classList.add(className);
+}
+function calloutError(text, elementId) {
+    callout(text, "callout-err", elementId);
+}
+function calloutWarning(text, elementId) {
+    callout(text, "callout-warn", elementId);
+}
+function calloutStatus(status, text, elementId) {
+    let className = "callout-err";
+    if (status === "OK") {
+        className = "callout-ok";
+    } else if (status === "PARTIAL_SUCCESS") {
+        className = "callout-warn";
+    }
+    callout(text, className, elementId);
+}
+
+// Used as part of registerQuotesSubmit() below.
 async function handleQuotesSubmit(e) {
     const inputs = document.querySelectorAll("input.selector:checked");
     const request = {
@@ -32,15 +61,11 @@ async function handleQuotesSubmit(e) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        const statusDiv = document.getElementById("status-callout");
-        if (statusDiv) {
-            if (data.status !== "OK") {
-                statusDiv.textContent = data.error;
-                statusDiv.className = "callout-err";
-            } else {
-                statusDiv.textContent = `Added ${data.itemsImported} quotes and/or exchange rates.`;
-                statusDiv.className = "callout-ok";
-            }    
+        if (data.status === "OK") {
+            callout(`Added ${data.itemsImported} quotes and/or exchange rates.`);
+            inputs.forEach(inp => inp.checked = false);
+        } else {
+            calloutStatus(data.status, data.error);
         }
     }
     catch (error) {
@@ -64,7 +89,7 @@ function registerQuotesSubmit() {
             const isChecked = e.target.checked;
             const inputs = document.querySelectorAll("input.selector");
             inputs.forEach(inp => inp.checked = isChecked);
-        });    
+        });
     }
     const submit = document.getElementById("submit");
     if (submit) {

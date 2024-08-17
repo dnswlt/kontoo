@@ -8,26 +8,29 @@ import (
 //go:generate go-enum -type=AssetType -string -json -all=false
 type AssetType int32
 
+// Values for AssetType constants may change over time. Only the name
+// should be assumed constant (and persisted in the JSON ledger).
 const (
-	UnspecifiedAssetType    AssetType = 0
-	Stock                   AssetType = 1  // Aktie
-	StockExchangeTradedFund AssetType = 2  // Aktienfonds (ETF)
-	StockMutualFund         AssetType = 3  // Aktienfonds (Investment)
-	BondExchangeTradedFund  AssetType = 4  // Rentenfonds (ETF)
-	BondMutualFund          AssetType = 5  // Rentenfonds (Investment)
-	CorporateBond           AssetType = 6  // Unternehmensanleihe
-	GovernmentBond          AssetType = 7  // Staatsanleihe
-	FixedDepositAccount     AssetType = 8  // Festgeldkonto
-	MoneyMarketAccount      AssetType = 9  // Tagesgeldkonto
-	SavingsAccount          AssetType = 10 // Sparkonto
-	CheckingAccount         AssetType = 11 // Girokonto
-	PensionAccount          AssetType = 12 // Altersvorsorgekonten (z.B. Säule 3a)
-	Commodity               AssetType = 13 // Edelmetalle, Rohstoffe
-	Cash                    AssetType = 14 // Bargeld
-	TaxLiability            AssetType = 15 // Steuerschuld
-	CreditCardDebt          AssetType = 16 // Schulden auf Kreditkarte
-	OtherDebt               AssetType = 17 // allg. Schulden
-	OtherAssetType          AssetType = 999
+	UnspecifiedAssetType AssetType = iota
+
+	Stock                   // Aktie
+	StockExchangeTradedFund // Aktienfonds (ETF)
+	StockMutualFund         // Aktienfonds (Investment)
+	BondExchangeTradedFund  // Rentenfonds (ETF)
+	BondMutualFund          // Rentenfonds (Investment)
+	CorporateBond           // Unternehmensanleihe
+	GovernmentBond          // Staatsanleihe
+	FixedDepositAccount     // Festgeldkonto
+	MoneyMarketAccount      // Tagesgeldkonto
+	SavingsAccount          // Sparkonto
+	CheckingAccount         // Girokonto
+	BrokerageAccount        // Verrechnungskonto
+	PensionAccount          // Altersvorsorgekonten (z.B. Säule 3a)
+	Commodity               // Edelmetalle, Rohstoffe
+	Cash                    // Bargeld
+	TaxLiability            // Steuerschuld
+	CreditCardDebt          // Schulden auf Kreditkarte
+	OtherDebt               // allg. Schulden
 )
 
 type Asset struct {

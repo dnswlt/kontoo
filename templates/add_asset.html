@@ -2,16 +2,13 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kontoo</title>
-    <link href="/kontoo/resources/style.css" rel="stylesheet">
+    {{template "head_common.html"}}
 </head>
 
 <body>
     {{template "nav.html"}}
     <h1>Add asset</h1>
-    <div id="status-callout" class="hidden"></div>
+    <div id="status-callout" class="callout hidden"></div>
     <form class="columnar" id="asset-form" method="post" action="/kontoo/assets">
         <div class="field">
             <div class="field-label">
@@ -140,8 +137,7 @@
             </div>
         </div>
         <div>
-            <input type="submit" name="Submit" value="Save">
-            <input id="submit-next" type="submit" name="SubmitNext" value="Save &amp; enter next">
+            <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
         </div>
     </form>
 
@@ -175,17 +171,11 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
-                const statusDiv = document.getElementById("status-callout");
-                if (data.status !== "OK") {
-                    statusDiv.textContent = data.error;
-                    statusDiv.className = "callout-err";
-                } else {
-                    statusDiv.textContent = `Successfully added asset ${data.assetId}.`;
-                    statusDiv.className = "callout-ok";
+                if (data.status === "OK") {
+                    callout(`Successfully added asset ${data.assetId}.`);
                     this.reset();
-                }
-                if (clickedButton.name === "Submit") {
-                    window.location.href = "/kontoo/assets";
+                } else {
+                    calloutStatus(data.status, data.error);
                 }
             }
             catch (error) {

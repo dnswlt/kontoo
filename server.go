@@ -21,21 +21,22 @@ import (
 
 // JSON API for server requests and responses.
 type AddLedgerEntryResponse struct {
-	Status      string `json:"status"`
-	SequenceNum int64  `json:"sequenceNum"`
-	Error       string `json:"error,omitempty"`
+	Status      StatusCode `json:"status"`
+	Error       string     `json:"error,omitempty"`
+	SequenceNum int64      `json:"sequenceNum"`
 }
 
 type AddAssetResponse struct {
-	Status  string `json:"status"`
-	AssetID string `json:"assetId,omitempty"`
-	Error   string `json:"error,omitempty"`
+	Status  StatusCode `json:"status"`
+	Error   string     `json:"error,omitempty"`
+	AssetID string     `json:"assetId,omitempty"`
 }
 
 type CsvUploadResponse struct {
-	Status    string `json:"status"`
-	Error     string `json:"error,omitempty"`
-	InnerHTML string `json:"innerHTML"`
+	Status     StatusCode `json:"status"`
+	Error      string     `json:"error,omitempty"`
+	NumEntries int        `json:"numEntries"`
+	InnerHTML  string     `json:"innerHTML"`
 }
 
 type AddQuoteItem struct {
@@ -54,10 +55,18 @@ type AddQuotesRequest struct {
 	ExchangeRates []*AddExchangeRateItem `json:"exchangeRates"`
 }
 type AddQuotesResponse struct {
-	Status        string `json:"status"`
-	Error         string `json:"error,omitempty"`
-	ItemsImported int    `json:"itemsImported"`
+	Status        StatusCode `json:"status"`
+	Error         string     `json:"error,omitempty"`
+	ItemsImported int        `json:"itemsImported"`
 }
+
+type StatusCode string
+
+const (
+	StatusOK              StatusCode = "OK"
+	StatusPartialSuccess  StatusCode = "PARTIAL_SUCCESS"
+	StatusInvalidArgument StatusCode = "INVALID_ARGUMENT"
+)
 
 // END JSON API
 
@@ -171,13 +180,64 @@ func (e *LedgerEntryRow) Comment() string {
 	return e.E.Comment
 }
 
-func LedgerEntryRows(s *Store) []*LedgerEntryRow {
+type Query struct {
+	raw   string
+	terms []string
+}
+
+func (q *Query) Empty() bool {
+	return len(q.terms) == 0
+}
+
+func NewQuery(rawQuery string) *Query {
+	r := strings.ToLower(strings.TrimSpace(rawQuery))
+	ts := strings.Fields(r)
+	return &Query{
+		raw:   rawQuery,
+		terms: ts,
+	}
+}
+
+// Returns true if s to lower case contains t, which is expected to be in lower case.
+func matchLower(s, t string) bool {
+	return strings.Contains(strings.ToLower(s), t)
+}
+
+func matchAsset(t string, a *Asset) bool {
+	return matchLower(a.AccountNumber, t) ||
+		matchLower(a.IBAN, t) || matchLower(a.ISIN, t) ||
+		matchLower(a.Name, t) || matchLower(a.ShortName, t) ||
+		matchLower(a.TickerSymbol, t) || matchLower(a.WKN, t) ||
+		matchLower(a.CustomID, t) || matchLower(a.Comment, t)
+}
+
+func (q *Query) Match(e *LedgerEntryRow) bool {
+	if q.Empty() {
+		return true
+	}
+	for _, t := range q.terms {
+		if matchLower(e.Comment(), t) {
+			continue
+		}
+		if e.A != nil && matchAsset(t, e.A) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 	var res []*LedgerEntryRow
 	for _, e := range s.L.Entries {
-		res = append(res, &LedgerEntryRow{
+		r := &LedgerEntryRow{
 			E: e,
 			A: s.assetMap[e.AssetID],
-		})
+		}
+		if !query.Match(r) {
+			continue
+		}
+		res = append(res, r)
 	}
 	return res
 }
@@ -273,8 +333,8 @@ func commonFuncs() template.FuncMap {
 	}
 }
 
-func (s *Server) renderLedgerTemplate(w io.Writer, store *Store) error {
-	rows := LedgerEntryRows(store)
+func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, snippet bool) error {
+	rows := LedgerEntryRows(store, query)
 	// Sort ledger rows by (ValueDate, Created) for output table.
 	slices.SortFunc(rows, func(a, b *LedgerEntryRow) int {
 		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
@@ -283,7 +343,11 @@ func (s *Server) renderLedgerTemplate(w io.Writer, store *Store) error {
 		}
 		return a.E.Created.Compare(b.E.Created)
 	})
-	return s.templates.ExecuteTemplate(w, "ledger.html", struct {
+	tmpl := "ledger.html"
+	if snippet {
+		tmpl = "snip_ledger_table.html"
+	}
+	return s.templates.ExecuteTemplate(w, tmpl, struct {
 		TableRows   []*LedgerEntryRow
 		CurrentDate string
 	}{
@@ -419,8 +483,11 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
 }
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	query := NewQuery(q.Get("q"))
+	snippet := q.Get("snippet") == "true"
 	var buf bytes.Buffer
-	if err := s.renderLedgerTemplate(&buf, s.Store()); err != nil {
+	if err := s.renderLedgerTemplate(&buf, s.Store(), query, snippet); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -608,22 +675,24 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
-	status := "OK"
+	status := StatusOK
 	if len(skippedWKNs) > 0 {
 		if len(entries) > 0 {
-			status = "Partial Success"
+			status = StatusPartialSuccess
 		} else {
-			status = "Error"
+			status = StatusInvalidArgument
 		}
 	}
 	errorText := ""
 	if len(skippedWKNs) > 0 {
-		errorText = fmt.Sprintf("Skipped WKNs: %s", strings.Join(skippedWKNs, "\n"))
+		errorText = fmt.Sprintf("Successfully read %d rows. Skipped WKNs: %s", len(entries),
+			strings.Join(skippedWKNs, ", "))
 	}
 	s.jsonResponse(w, CsvUploadResponse{
-		Status:    status,
-		Error:     errorText,
-		InnerHTML: buf.String(),
+		Status:     status,
+		Error:      errorText,
+		NumEntries: len(entries),
+		InnerHTML:  buf.String(),
 	})
 }
 
@@ -651,7 +720,7 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	err = s.Store().Add(e)
 	if err != nil {
 		s.jsonResponse(w, AddLedgerEntryResponse{
-			Status: "INVALID_ARGUMENT",
+			Status: StatusInvalidArgument,
 			Error:  err.Error(),
 		})
 		return
@@ -662,7 +731,7 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.jsonResponse(w, AddLedgerEntryResponse{
-		Status:      "OK",
+		Status:      StatusOK,
 		SequenceNum: e.SequenceNum,
 	})
 }
@@ -691,7 +760,7 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	err = s.Store().AddAsset(a)
 	if err != nil {
 		s.jsonResponse(w, AddAssetResponse{
-			Status: "INVALID_ARGUMENT",
+			Status: StatusInvalidArgument,
 			Error:  err.Error(),
 		})
 		return
@@ -702,7 +771,7 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.jsonResponse(w, AddAssetResponse{
-		Status:  "OK",
+		Status:  StatusOK,
 		AssetID: a.ID(),
 	})
 }
@@ -772,9 +841,9 @@ func (s *Server) handleQuotesPost(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(failures) > 0 {
-		status := "Error"
+		status := StatusInvalidArgument
 		if imported > 0 {
-			status = "Partial Success"
+			status = StatusPartialSuccess
 		}
 		s.jsonResponse(w, AddQuotesResponse{
 			Status:        status,
@@ -784,7 +853,7 @@ func (s *Server) handleQuotesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.jsonResponse(w, AddQuotesResponse{
-		Status:        "OK",
+		Status:        StatusOK,
 		ItemsImported: imported,
 	})
 }

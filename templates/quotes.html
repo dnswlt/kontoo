@@ -2,16 +2,12 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kontoo</title>
-    <link href="/kontoo/resources/style.css" rel="stylesheet">
-    <script src="/kontoo/resources/shared.js"></script>
+    {{template "head_common.html"}}
 </head>
 
 <body>
     {{template "nav.html"}}
-    <div id="status-callout" class="hidden"></div>
+    <div id="status-callout" class="callout hidden"></div>
 
     <h1>Stock quotes</h1>
     {{if .Entries }}

@@ -2,16 +2,13 @@
 <html lang="en">
 
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kontoo</title>
-    <link href="/kontoo/resources/style.css" rel="stylesheet">
+    {{template "head_common.html"}}
 </head>
 
 <body>
     {{template "nav.html"}}
     <h1>Add entry</h1>
-    <div id="status-callout" class="hidden"></div>
+    <div id="status-callout" class="callout hidden"></div>
     <form class="columnar" id="entry-form" method="post" action="/kontoo/entries">
         <div class="field">
             <div class="field-label">
@@ -113,8 +110,7 @@
             </div>
         </div>
         <div>
-            <input type="submit" name="Submit" value="Save">
-            <input id="submit-next" type="submit" name="SubmitNext" value="Save &amp; enter next">
+            <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
         </div>
     </form>
 
@@ -143,17 +139,11 @@
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
-                const statusDiv = document.getElementById("status-callout");
-                if (data.status !== "OK") {
-                    statusDiv.textContent = data.error;
-                    statusDiv.className = "callout-err";
-                } else {
-                    statusDiv.textContent = `Added ledger entry with sequence number ${data.sequenceNum}.`;
-                    statusDiv.className = "callout-ok";
+                if (data.status === "OK") {
+                    callout(`Added ledger entry with sequence number ${data.sequenceNum}.`);
                     this.reset();
-                }
-                if (clickedButton.name === "Submit") {
-                    window.location.href = "/kontoo/ledger";
+                } else {
+                    calloutStatus(data.status, data.error);
                 }
             }
             catch (error) {

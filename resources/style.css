@@ -12,6 +12,10 @@ th {
     padding-right: 1ex;
 }
 
+.nowrap {
+    white-space: nowrap;
+}
+
 .ralign {
     text-align: right;
 }
@@ -55,9 +59,14 @@ textarea {
     font-family: sans-serif;
 }
 
+.filter {
+    width: 16em;
+    margin-bottom: 1ex;
+}
+
 /* Callouts */
 
-#status-callout {
+.callout {
     padding: 1ex;
     margin: 1ex 0;
     border: 1px solid;
@@ -72,6 +81,11 @@ textarea {
 .callout-ok {
     border-color: #008000;
     background-color: #e6ffe6;
+}
+
+.callout-warn {
+    border-color: #ffae42;
+    background-color: #fff4e5;
 }
 
 /* Visibility */
@@ -132,6 +146,7 @@ ul.horizontal-list li {
     margin: 50px auto;
     text-align: center;
 }
+
 #upload-drop-area.highlight {
     border-color: purple;
 }

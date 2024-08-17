@@ -25,57 +25,56 @@ func _() {
 	_ = x[MoneyMarketAccount-9]
 	_ = x[SavingsAccount-10]
 	_ = x[CheckingAccount-11]
-	_ = x[PensionAccount-12]
-	_ = x[Commodity-13]
-	_ = x[Cash-14]
-	_ = x[TaxLiability-15]
-	_ = x[CreditCardDebt-16]
-	_ = x[OtherDebt-17]
-	_ = x[OtherAssetType-999]
+	_ = x[BrokerageAccount-12]
+	_ = x[PensionAccount-13]
+	_ = x[Commodity-14]
+	_ = x[Cash-15]
+	_ = x[TaxLiability-16]
+	_ = x[CreditCardDebt-17]
+	_ = x[OtherDebt-18]
 }
 
-const (
-	_AssetType_name_0 = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountPensionAccountCommodityCashTaxLiabilityCreditCardDebtOtherDebt"
-	_AssetType_name_1 = "OtherAssetType"
-)
+const _AssetType_name = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountBrokerageAccountPensionAccountCommodityCashTaxLiabilityCreditCardDebtOtherDebt"
 
-var (
-	_AssetType_index_0 = [...]uint8{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 206, 215, 219, 231, 245, 254}
-)
+var _AssetType_index = [...]uint16{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 208, 222, 231, 235, 247, 261, 270}
+
+func _() {
+	var _nil_AssetType_value = func() (val AssetType) { return }()
+
+	// An "cannot convert AssetType literal (type AssetType) to type fmt.Stringer" compiler error signifies that the base type have changed.
+	// Re-run the go-enum command to generate them again.
+	var _ fmt.Stringer = _nil_AssetType_value
+}
 
 func (i AssetType) String() string {
-	switch {
-	case 0 <= i && i <= 17:
-		return _AssetType_name_0[_AssetType_index_0[i]:_AssetType_index_0[i+1]]
-	case i == 999:
-		return _AssetType_name_1
-	default:
+	if i < 0 || i >= AssetType(len(_AssetType_index)-1) {
 		return "AssetType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	return _AssetType_name[_AssetType_index[i]:_AssetType_index[i+1]]
 }
 
-var _AssetType_values = []AssetType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 999}
+var _AssetType_values = []AssetType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}
 
 var _AssetType_name_to_values = map[string]AssetType{
-	_AssetType_name_0[0:20]:    0,
-	_AssetType_name_0[20:25]:   1,
-	_AssetType_name_0[25:48]:   2,
-	_AssetType_name_0[48:63]:   3,
-	_AssetType_name_0[63:85]:   4,
-	_AssetType_name_0[85:99]:   5,
-	_AssetType_name_0[99:112]:  6,
-	_AssetType_name_0[112:126]: 7,
-	_AssetType_name_0[126:145]: 8,
-	_AssetType_name_0[145:163]: 9,
-	_AssetType_name_0[163:177]: 10,
-	_AssetType_name_0[177:192]: 11,
-	_AssetType_name_0[192:206]: 12,
-	_AssetType_name_0[206:215]: 13,
-	_AssetType_name_0[215:219]: 14,
-	_AssetType_name_0[219:231]: 15,
-	_AssetType_name_0[231:245]: 16,
-	_AssetType_name_0[245:254]: 17,
-	_AssetType_name_1[0:14]:    999,
+	_AssetType_name[0:20]:    0,
+	_AssetType_name[20:25]:   1,
+	_AssetType_name[25:48]:   2,
+	_AssetType_name[48:63]:   3,
+	_AssetType_name[63:85]:   4,
+	_AssetType_name[85:99]:   5,
+	_AssetType_name[99:112]:  6,
+	_AssetType_name[112:126]: 7,
+	_AssetType_name[126:145]: 8,
+	_AssetType_name[145:163]: 9,
+	_AssetType_name[163:177]: 10,
+	_AssetType_name[177:192]: 11,
+	_AssetType_name[192:208]: 12,
+	_AssetType_name[208:222]: 13,
+	_AssetType_name[222:231]: 14,
+	_AssetType_name[231:235]: 15,
+	_AssetType_name[235:247]: 16,
+	_AssetType_name[247:261]: 17,
+	_AssetType_name[261:270]: 18,
 }
 
 // ParseAssetTypeString retrieves an enum value from the enum constants string name.
