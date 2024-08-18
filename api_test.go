@@ -67,3 +67,14 @@ func TestDateCompare(t *testing.T) {
 		}
 	}
 }
+
+func TestAssetTypeMap(t *testing.T) {
+	for _, v := range AssetTypeValues() {
+		if v == UnspecifiedAssetType {
+			continue
+		}
+		if _, ok := assetTypeInfos[v]; !ok {
+			t.Fatalf("Missing entry in assetTypeInfos: %v", v)
+		}
+	}
+}

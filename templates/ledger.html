@@ -9,7 +9,7 @@
     {{template "nav.html"}}
     <h1>Ledger</h1>
     <div>
-        <input id="filter" type="text" class="filter">
+        <input id="filter" type="text" class="filter" value="{{.Query}}">
     </div>
     <div id="ledger-table-div">
         {{template "snip_ledger_table.html" .}}
@@ -35,10 +35,22 @@
                 const div = document.getElementById("ledger-table-div");
                 div.innerHTML = html;
                 params.delete("snippet"); // Request the full page in the browser's history.
-                history.pushState(null, "", `/kontoo/ledger?${params}`);
+                history.pushState({html: html, query: query}, "", `/kontoo/ledger?${params}`);
             }
             catch (error) {
                 console.error("Error in query:", error);
+            }
+        });
+        window.addEventListener("popstate", (event) => {
+            if (event.state) {
+                const state = event.state;
+                const div = document.getElementById("ledger-table-div");
+                div.innerHTML = state.html;
+                const input = document.getElementById("filter");
+                input.value = state.query;
+            } else {
+                // No state => just refresh the page
+                location.reload();
             }
         });
     </script>

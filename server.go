@@ -180,53 +180,6 @@ func (e *LedgerEntryRow) Comment() string {
 	return e.E.Comment
 }
 
-type Query struct {
-	raw   string
-	terms []string
-}
-
-func (q *Query) Empty() bool {
-	return len(q.terms) == 0
-}
-
-func NewQuery(rawQuery string) *Query {
-	r := strings.ToLower(strings.TrimSpace(rawQuery))
-	ts := strings.Fields(r)
-	return &Query{
-		raw:   rawQuery,
-		terms: ts,
-	}
-}
-
-// Returns true if s to lower case contains t, which is expected to be in lower case.
-func matchLower(s, t string) bool {
-	return strings.Contains(strings.ToLower(s), t)
-}
-
-func matchAsset(t string, a *Asset) bool {
-	return matchLower(a.AccountNumber, t) ||
-		matchLower(a.IBAN, t) || matchLower(a.ISIN, t) ||
-		matchLower(a.Name, t) || matchLower(a.ShortName, t) ||
-		matchLower(a.TickerSymbol, t) || matchLower(a.WKN, t) ||
-		matchLower(a.CustomID, t) || matchLower(a.Comment, t)
-}
-
-func (q *Query) Match(e *LedgerEntryRow) bool {
-	if q.Empty() {
-		return true
-	}
-	for _, t := range q.terms {
-		if matchLower(e.Comment(), t) {
-			continue
-		}
-		if e.A != nil && matchAsset(t, e.A) {
-			continue
-		}
-		return false
-	}
-	return true
-}
-
 func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 	var res []*LedgerEntryRow
 	for _, e := range s.L.Entries {
@@ -266,6 +219,14 @@ const (
 func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	sortFunc := func(a, b *AssetPosition) int {
+		c := strings.Compare(assetTypeInfos[a.Asset.Type].category, assetTypeInfos[b.Asset.Type].category)
+		if c != 0 {
+			return c
+		}
+		c = int(a.Asset.Type) - int(b.Asset.Type)
+		if c != 0 {
+			return c
+		}
 		return strings.Compare(a.Name(), b.Name())
 	}
 	if style == DisplayStyleMaturingSecurities {
@@ -349,9 +310,11 @@ func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, s
 	}
 	return s.templates.ExecuteTemplate(w, tmpl, struct {
 		TableRows   []*LedgerEntryRow
+		Query       string
 		CurrentDate string
 	}{
 		TableRows:   rows,
+		Query:       query.raw,
 		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
@@ -484,7 +447,11 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	query := NewQuery(q.Get("q"))
+	query, err := ParseQuery(q.Get("q"))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Invalid query: %v", err), http.StatusBadRequest)
+		return
+	}
 	snippet := q.Get("snippet") == "true"
 	var buf bytes.Buffer
 	if err := s.renderLedgerTemplate(&buf, s.Store(), query, snippet); err != nil {

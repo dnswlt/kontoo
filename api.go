@@ -29,9 +29,127 @@ const (
 	Commodity               // Edelmetalle, Rohstoffe
 	Cash                    // Bargeld
 	TaxLiability            // Steuerschuld
+	TaxPrepayment           // Steuervorauszahlung
 	CreditCardDebt          // Schulden auf Kreditkarte
 	OtherDebt               // allg. Schulden
 )
+
+type AssetCategory string
+
+type assetTypeInfo struct {
+	typ         AssetType
+	category    string
+	displayName string
+}
+
+var (
+	assetTypeInfoList = []assetTypeInfo{
+		{
+			typ:         Stock,
+			category:    "Equity",
+			displayName: "Stock",
+		},
+		{
+			typ:         StockExchangeTradedFund,
+			category:    "Equity",
+			displayName: "ETF",
+		},
+		{
+			typ:         StockMutualFund,
+			category:    "Equity",
+			displayName: "Mutual fund",
+		},
+		{
+			typ:         BondExchangeTradedFund,
+			category:    "Fixed-income",
+			displayName: "Bond ETF",
+		},
+		{
+			typ:         BondMutualFund,
+			category:    "Fixed-income",
+			displayName: "Bond mutual fund",
+		},
+		{
+			typ:         CorporateBond,
+			category:    "Fixed-income",
+			displayName: "Corp bond",
+		},
+		{
+			typ:         GovernmentBond,
+			category:    "Fixed-income",
+			displayName: "Gov bond",
+		},
+		{
+			typ:         FixedDepositAccount,
+			category:    "Account",
+			displayName: "Fixed deposit",
+		},
+		{
+			typ:         MoneyMarketAccount,
+			category:    "Account",
+			displayName: "Money market account",
+		},
+		{
+			typ:         SavingsAccount,
+			category:    "Account",
+			displayName: "Savings account",
+		},
+		{
+			typ:         CheckingAccount,
+			category:    "Account",
+			displayName: "Checking account",
+		},
+		{
+			typ:         BrokerageAccount,
+			category:    "Account",
+			displayName: "Brokerage account",
+		},
+		{
+			typ:         PensionAccount,
+			category:    "Account",
+			displayName: "Pension account",
+		},
+		{
+			typ:         Commodity,
+			category:    "Commodity",
+			displayName: "Commodity",
+		},
+		{
+			typ:         Cash,
+			category:    "Cash",
+			displayName: "Cash",
+		},
+		{
+			typ:         TaxLiability,
+			category:    "Taxes",
+			displayName: "Tax liability",
+		},
+		{
+			typ:         TaxPrepayment,
+			category:    "Taxes",
+			displayName: "Tax prepayment",
+		},
+		{
+			typ:         CreditCardDebt,
+			category:    "Debt",
+			displayName: "Credit card",
+		},
+		{
+			typ:         OtherDebt,
+			category:    "Debt",
+			displayName: "Other debt",
+		},
+	}
+	// Map for fast lookup, populated in init():
+	assetTypeInfos = make(map[AssetType]*assetTypeInfo)
+)
+
+func init() {
+	for i := range assetTypeInfoList {
+		a := &assetTypeInfoList[i]
+		assetTypeInfos[a.typ] = a
+	}
+}
 
 type Asset struct {
 	Type           AssetType
