@@ -242,6 +242,21 @@ func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	return res
 }
 
+type PositionTableRowGroup struct {
+	Label string
+	Rows  []*PositionTableRow
+}
+
+func (g *PositionTableRowGroup) Value() Micros {
+	var sum Micros
+	for _, r := range g.Rows {
+		sum += r.Value
+	}
+	return sum
+}
+
+type groupingFunc func(*PositionTableRow) string
+
 func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
@@ -255,17 +270,41 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 		}
 		return strings.Compare(a.Name(), b.Name())
 	})
-	var res []*PositionTableRow
-	for _, p := range positions {
+	res := make([]*PositionTableRow, len(positions))
+	for i, p := range positions {
 		a := p.Asset
-		row := &PositionTableRow{
+		res[i] = &PositionTableRow{
 			ID:       a.ID(),
 			Name:     a.Name,
 			Type:     a.Type,
 			Currency: a.Currency,
 			Value:    p.CalculatedValueMicros(),
 		}
-		res = append(res, row)
+	}
+	return res
+}
+
+func positionTableRowGroups(rows []*PositionTableRow, groupKey groupingFunc) []*PositionTableRowGroup {
+	var res []*PositionTableRowGroup
+	if len(rows) == 0 {
+		return res
+	}
+	label := groupKey(rows[0])
+	res = append(res, &PositionTableRowGroup{
+		Label: label,
+		Rows:  []*PositionTableRow{rows[0]},
+	})
+	for _, row := range rows[1:] {
+		l := groupKey(row)
+		if l == label {
+			res[len(res)-1].Rows = append(res[len(res)-1].Rows, row)
+		} else {
+			res = append(res, &PositionTableRowGroup{
+				Label: l,
+				Rows:  []*PositionTableRow{row},
+			})
+			label = l
+		}
 	}
 	return res
 }
@@ -345,7 +384,7 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
 	quoteCurrenciesMap := make(map[Currency]bool)
 	var quoteCurrencies []Currency
 	for _, a := range assets {
-		if a.Currency == store.L.Header.BaseCurrency {
+		if a.Currency == store.BaseCurrency() {
 			continue
 		}
 		if _, ok := quoteCurrenciesMap[a.Currency]; !ok {
@@ -362,7 +401,7 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
 	}{
 		CurrentDate:     time.Now().Format("2006-01-02"),
 		Assets:          assets,
-		BaseCurrency:    store.L.Header.BaseCurrency,
+		BaseCurrency:    store.BaseCurrency(),
 		QuoteCurrencies: quoteCurrencies,
 	})
 }
@@ -431,7 +470,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 	quoteCurrencies := s.Store().FindQuoteCurrencies()
 	if len(quoteCurrencies) > 0 {
 		var err error
-		exchangeRates, err = s.yFinance.GetDailyExchangeRates(s.Store().L.Header.BaseCurrency, quoteCurrencies, date)
+		exchangeRates, err = s.yFinance.GetDailyExchangeRates(s.Store().BaseCurrency(), quoteCurrencies, date)
 		if err != nil {
 			log.Printf("Failed to get exchange rates: %v", err)
 		}
@@ -445,16 +484,21 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 
 func (s *Server) renderPositionsTemplate(w io.Writer, date time.Time) error {
 	positions := positionTableRows(s.Store(), date)
+	groups := positionTableRowGroups(positions, func(r *PositionTableRow) string {
+		return assetTypeInfos[r.Type].category
+	})
 	return s.templates.ExecuteTemplate(w, "positions.html", struct {
-		Date        string
-		DatePath    string // "YYYY/M/D"
-		CurrentDate string
-		TableRows   []*PositionTableRow
+		Date         string
+		DatePath     string // "YYYY/M/D"
+		CurrentDate  string
+		BaseCurrency Currency
+		Groups       []*PositionTableRowGroup
 	}{
-		Date:        date.Format("2006-01-02"),
-		DatePath:    date.Format("2006/1/2"),
-		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
-		TableRows:   positions,
+		Date:         date.Format("2006-01-02"),
+		DatePath:     date.Format("2006/1/2"),
+		CurrentDate:  time.Now().Format("2006-01-02 15:04:05"),
+		BaseCurrency: s.Store().BaseCurrency(),
+		Groups:       groups,
 	})
 }
 

@@ -81,37 +81,37 @@ var (
 		},
 		{
 			typ:         FixedDepositAccount,
-			category:    "Account",
+			category:    "Fixed-income",
 			displayName: "Fixed deposit",
 		},
 		{
 			typ:         MoneyMarketAccount,
-			category:    "Account",
+			category:    "Cash equivalents",
 			displayName: "Money market account",
 		},
 		{
 			typ:         SavingsAccount,
-			category:    "Account",
+			category:    "Cash equivalents",
 			displayName: "Savings account",
 		},
 		{
 			typ:         CheckingAccount,
-			category:    "Account",
+			category:    "Cash equivalents",
 			displayName: "Checking account",
 		},
 		{
 			typ:         BrokerageAccount,
-			category:    "Account",
+			category:    "Cash equivalents",
 			displayName: "Brokerage account",
 		},
 		{
 			typ:         PensionAccount,
-			category:    "Account",
+			category:    "Retirement savings",
 			displayName: "Pension account",
 		},
 		{
 			typ:         Commodity,
-			category:    "Commodity",
+			category:    "Commodities",
 			displayName: "Commodity",
 		},
 		{

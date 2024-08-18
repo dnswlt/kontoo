@@ -7,6 +7,10 @@ th {
     text-align: left;
 }
 
+table {
+    border-collapse: collapse;
+}
+
 td,
 th {
     padding-right: 1ex;
@@ -18,6 +22,10 @@ th {
 
 .ralign {
     text-align: right;
+}
+
+tr.subtotal {
+    background-color: #ddd;
 }
 
 .warning {

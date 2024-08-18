@@ -7,6 +7,7 @@
     {{template "nav.html"}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
+    {{ $baseCurrency := .BaseCurrency }}
     <table>
         <thead>
             <tr>
@@ -19,13 +20,23 @@
             </tr>
         </thead>
         <tbody>
-            {{range .TableRows}}
+            {{range .Groups}}
+            {{range .Rows}}
             <tr>
                 <td>{{ .Name }}</td>
                 <td>{{ .ID }}</td>
                 <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
+                <td class="ralign">{{ money .Value }}</td>
+            </tr>
+            {{end}}
+            <tr class="subtotal">
+                <td>Subtotal</td>
+                <td></td>
+                <td>{{.Label}}</td>
+                <td></td>
+                <td class="ralign">{{ $baseCurrency }}</td>
                 <td class="ralign">{{ money .Value }}</td>
             </tr>
             {{end}}

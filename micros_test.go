@@ -203,3 +203,12 @@ func TestMicrosFormat(t *testing.T) {
 		}
 	}
 }
+
+func TestOverflowInt64(t *testing.T) {
+	x := math.MaxInt64
+	y := x
+	z := x + y
+	if z != 0 {
+		t.Errorf("Want negative, got %v", z)
+	}
+}

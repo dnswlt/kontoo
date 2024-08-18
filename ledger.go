@@ -42,6 +42,10 @@ type Store struct {
 	path     string            // Path to the ledger JSON.
 }
 
+func (s *Store) BaseCurrency() Currency {
+	return s.L.Header.BaseCurrency
+}
+
 func LoadStore(path string) (*Store, error) {
 	l := &Ledger{}
 	if err := l.Load(path); err != nil {
