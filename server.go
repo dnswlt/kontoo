@@ -209,16 +209,42 @@ type PositionTableRow struct {
 	YearsToMaturity float64
 }
 
-type PositionDisplayStyle int
-
-const (
-	DisplayStyleAll PositionDisplayStyle = iota
-	DisplayStyleMaturingSecurities
-)
-
-func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*PositionTableRow {
+func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
-	sortFunc := func(a, b *AssetPosition) int {
+	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+		c := CompareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
+		if c != 0 {
+			return c
+		}
+		return strings.Compare(a.Name(), b.Name())
+	})
+	var res []*PositionTableRow
+	for _, p := range positions {
+		a := p.Asset
+		if a.MaturityDate == nil {
+			continue
+		}
+		row := &PositionTableRow{
+			ID:              a.ID(),
+			Name:            a.Name,
+			Type:            a.Type,
+			Currency:        a.Currency,
+			Value:           p.CalculatedValueMicros(),
+			PurchasePrice:   p.PurchasePrice(),
+			NominalValue:    p.QuantityMicros,
+			InterestRate:    a.InterestMicros,
+			IssueDate:       a.IssueDate,
+			MaturityDate:    a.MaturityDate,
+			YearsToMaturity: a.MaturityDate.Sub(date).Hours() / 24 / 365,
+		}
+		res = append(res, row)
+	}
+	return res
+}
+
+func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
+	positions := s.AssetPositionsAt(date)
+	slices.SortFunc(positions, func(a, b *AssetPosition) int {
 		c := strings.Compare(assetTypeInfos[a.Asset.Type].category, assetTypeInfos[b.Asset.Type].category)
 		if c != 0 {
 			return c
@@ -228,37 +254,16 @@ func PositionTableRows(s *Store, date time.Time, style PositionDisplayStyle) []*
 			return c
 		}
 		return strings.Compare(a.Name(), b.Name())
-	}
-	if style == DisplayStyleMaturingSecurities {
-		sortFunc = func(a, b *AssetPosition) int {
-			c := CompareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
-			if c != 0 {
-				return c
-			}
-			return strings.Compare(a.Name(), b.Name())
-		}
-	}
-	slices.SortFunc(positions, sortFunc)
+	})
 	var res []*PositionTableRow
 	for _, p := range positions {
 		a := p.Asset
-		if style == DisplayStyleMaturingSecurities && a.MaturityDate == nil {
-			continue
-		}
 		row := &PositionTableRow{
 			ID:       a.ID(),
 			Name:     a.Name,
 			Type:     a.Type,
 			Currency: a.Currency,
 			Value:    p.CalculatedValueMicros(),
-		}
-		if style == DisplayStyleMaturingSecurities {
-			row.PurchasePrice = p.PurchasePrice()
-			row.NominalValue = p.QuantityMicros
-			row.InterestRate = a.InterestMicros
-			row.IssueDate = a.IssueDate
-			row.MaturityDate = a.MaturityDate
-			row.YearsToMaturity = a.MaturityDate.Sub(date).Hours() / 24 / 365
 		}
 		res = append(res, row)
 	}
@@ -290,6 +295,18 @@ func commonFuncs() template.FuncMap {
 				return d.Time.Format("2006-01-02"), nil
 			}
 			return "", fmt.Errorf("yyyymmdd called with invalid type %t", t)
+		},
+		"assetType": func(t AssetType) (string, error) {
+			if a, ok := assetTypeInfos[t]; ok {
+				return a.displayName, nil
+			}
+			return "", fmt.Errorf("no display name for asset type %v", t)
+		},
+		"assetCategory": func(t AssetType) (string, error) {
+			if a, ok := assetTypeInfos[t]; ok {
+				return a.category, nil
+			}
+			return "", fmt.Errorf("no category for asset type %v", t)
 		},
 	}
 }
@@ -426,18 +443,33 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 	})
 }
 
-func (s *Server) renderPositionsTemplate(w io.Writer, style PositionDisplayStyle, date time.Time, store *Store) error {
-	positions := PositionTableRows(store, date, style)
+func (s *Server) renderPositionsTemplate(w io.Writer, date time.Time) error {
+	positions := positionTableRows(s.Store(), date)
 	return s.templates.ExecuteTemplate(w, "positions.html", struct {
-		Date                       string
-		CurrentDate                string
-		ShowMaturingSecurityFields bool
-		TableRows                  []*PositionTableRow
+		Date        string
+		DatePath    string // "YYYY/M/D"
+		CurrentDate string
+		TableRows   []*PositionTableRow
 	}{
-		Date:                       date.Format("2006-01-02"),
-		CurrentDate:                time.Now().Format("2006-01-02 15:04:05"),
-		ShowMaturingSecurityFields: style == DisplayStyleMaturingSecurities,
-		TableRows:                  positions,
+		Date:        date.Format("2006-01-02"),
+		DatePath:    date.Format("2006/1/2"),
+		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
+		TableRows:   positions,
+	})
+}
+
+func (s *Server) renderMaturingPositionsTemplate(w io.Writer, date time.Time) error {
+	positions := maturingPositionTableRows(s.Store(), date)
+	return s.templates.ExecuteTemplate(w, "positions_maturing.html", struct {
+		Date        string
+		DatePath    string // "YYYY/M/D"
+		CurrentDate string
+		TableRows   []*PositionTableRow
+	}{
+		Date:        date.Format("2006-01-02"),
+		DatePath:    date.Format("2006/1/2"),
+		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
+		TableRows:   positions,
 	})
 }
 
@@ -508,34 +540,47 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
+func dateFromPath(r *http.Request) (time.Time, error) {
 	var year, month, day int
 	year, err := strconv.Atoi(r.PathValue("year"))
 	if err != nil || year < 1970 || year > 9999 {
-		http.Error(w, "", http.StatusNotFound)
-		return
+		return time.Time{}, fmt.Errorf("invalid year: %v", err)
 	}
 	month, err = strconv.Atoi(r.PathValue("month"))
 	if err != nil || month < 1 || month > 12 {
-		http.Error(w, "", http.StatusNotFound)
-		return
+		return time.Time{}, fmt.Errorf("invalid month: %v", err)
 	}
 	day, err = strconv.Atoi(r.PathValue("day"))
 	if err != nil || day < 1 || day > 31 {
-		http.Error(w, "", http.StatusNotFound)
+		return time.Time{}, fmt.Errorf("invalid day: %v", err)
+	}
+	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), nil
+}
+
+func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
+	date, err := dateFromPath(r)
+	if err != nil {
+		http.Error(w, "invalid date in path: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form data", http.StatusBadRequest)
-		return
-	}
-	style := DisplayStyleAll
-	if r.Form.Get("f") == "maturing" {
-		style = DisplayStyleMaturingSecurities
-	}
-	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
 	var buf bytes.Buffer
-	err = s.renderPositionsTemplate(&buf, style, date, s.Store())
+	err = s.renderPositionsTemplate(&buf, date)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request) {
+	date, err := dateFromPath(r)
+	if err != nil {
+		http.Error(w, "invalid date in path: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var buf bytes.Buffer
+	err = s.renderMaturingPositionsTemplate(&buf, date)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -853,6 +898,7 @@ func (s *Server) createMux() *http.ServeMux {
 		http.Redirect(w, r, fmt.Sprintf("/kontoo/positions/%d/%d/%d", now.Year(), now.Month(), now.Day()), http.StatusSeeOther)
 	})
 	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}", s.reloadHandler(s.handlePositions))
+	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}/maturing", s.reloadHandler(s.handleMaturingPositions))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
 	})
