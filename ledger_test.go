@@ -194,6 +194,125 @@ func TestStoreAddAssetFail(t *testing.T) {
 	}
 }
 
+func TestExchangeRatesAdd(t *testing.T) {
+	dates := func(entries []*LedgerEntry) []Date {
+		r := make([]Date, len(entries))
+		for i, e := range entries {
+			r[i] = e.ValueDate
+		}
+		return r
+	}
+	l := &Ledger{
+		Header: &LedgerHeader{
+			BaseCurrency: "EUR",
+		},
+	}
+	s, _ := NewStore(l, "test")
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   1_241_000,
+		ValueDate:     DateVal(2024, 1, 1),
+	})
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2024, 1, 1)}) {
+		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
+	}
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   1_243_000,
+		ValueDate:     DateVal(2024, 3, 1),
+	})
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2024, 1, 1), DateVal(2024, 3, 1)}) {
+		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
+	}
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   1_231_200,
+		ValueDate:     DateVal(2023, 12, 1),
+	})
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2023, 12, 1), DateVal(2024, 1, 1), DateVal(2024, 3, 1)}) {
+		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
+	}
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   1_242_000,
+		ValueDate:     DateVal(2024, 2, 1),
+	})
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2023, 12, 1), DateVal(2024, 1, 1), DateVal(2024, 2, 1), DateVal(2024, 3, 1)}) {
+		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
+	}
+}
+
+func TestExchangeRatesLookup(t *testing.T) {
+	tests := []struct {
+		date     Date
+		wantDate Date
+		wantRate Micros
+		wantErr  bool
+	}{
+		{date: DateVal(2024, 1, 1), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantErr: false},
+		{date: DateVal(2023, 12, 31), wantErr: true},
+		{date: DateVal(2024, 1, 15), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantErr: false},
+		{date: DateVal(2024, 2, 1), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantErr: false},
+		{date: DateVal(2024, 2, 15), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantErr: false},
+		{date: DateVal(2024, 3, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantErr: false},
+		{date: DateVal(2024, 4, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantErr: false},
+	}
+	l := &Ledger{
+		Header: &LedgerHeader{
+			BaseCurrency: "EUR",
+		},
+	}
+	s, _ := NewStore(l, "test")
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   20240101,
+		ValueDate:     DateVal(2024, 1, 1),
+	})
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   20240201,
+		ValueDate:     DateVal(2024, 2, 1),
+	})
+	s.Add(&LedgerEntry{
+		Type:          ExchangeRate,
+		Currency:      "EUR",
+		QuoteCurrency: "USD",
+		PriceMicros:   20240301,
+		ValueDate:     DateVal(2024, 3, 1),
+	})
+	for _, tc := range tests {
+		rate, date, err := s.ExchangeRateAt("USD", tc.date)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("Want error, got none for %v", tc.date)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("Cannot get exchange rate: %s", err)
+			continue
+		}
+		if rate != tc.wantRate {
+			t.Errorf("Wrong rate: %v", rate)
+		}
+		if !date.Equal(tc.wantDate) {
+			t.Errorf("Wrong date: %v", date)
+		}
+	}
+}
+
 func TestPositionsAtSingleAsset(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{

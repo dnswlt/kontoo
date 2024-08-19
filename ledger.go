@@ -7,7 +7,9 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -37,13 +39,43 @@ func (d Date) Equal(e Date) bool {
 }
 
 type Store struct {
-	L        *Ledger
-	assetMap map[string]*Asset // Maps the ledger's assets by ID.
-	path     string            // Path to the ledger JSON.
+	L             *Ledger
+	path          string                      // Path to the ledger JSON.
+	assetMap      map[string]*Asset           // Maps the ledger's assets by ID.
+	exchangeRates map[Currency][]*LedgerEntry // exchange rates from Base Currency to other currencies, ordered chronologically
+	mut           sync.Mutex
 }
 
 func (s *Store) BaseCurrency() Currency {
-	return s.L.Header.BaseCurrency
+	return s.L.GetHeader().BaseCurrency
+}
+
+// Always returns a non-nil value. Useful to avoid nil checks for missing headers all around.
+func (l *Ledger) GetHeader() *LedgerHeader {
+	if l.Header == nil {
+		return &LedgerHeader{}
+	}
+	return l.Header
+}
+
+// ExchangeRateAt returns the BaseCurrency/QuoteCurrency exchange rate at the given time.
+// A value of 1.50 means that for 1 BaseCurrency you get 1.50 QuoteCurrency c.
+// The rate is derived from ExchangeRate entries in the ledger; the most recent rate
+// before t is used and its date is returned as the second return value.
+// If no exchange rate between the given currency c and the base currency is known at t,
+// an error is returned.
+func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, error) {
+	rs, ok := s.exchangeRates[c]
+	if !ok || len(rs) == 0 {
+		return 0, Date{}, fmt.Errorf("no exchange rates for currency %s", c)
+	}
+	i := sort.Search(len(rs), func(i int) bool {
+		return rs[i].ValueDate.Compare(t) > 0
+	})
+	if i == 0 {
+		return 0, Date{}, fmt.Errorf("no exchange rates for currency %s at %v", c, t)
+	}
+	return rs[i-1].PriceMicros, rs[i-1].ValueDate, nil
 }
 
 func LoadStore(path string) (*Store, error) {
@@ -63,14 +95,29 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		}
 		m[asset.ID()] = asset
 	}
+	rs := make(map[Currency][]*LedgerEntry)
+	baseCurrency := ledger.GetHeader().BaseCurrency
+	for _, e := range ledger.Entries {
+		if e.Type == ExchangeRate && e.Currency == baseCurrency {
+			rs[e.QuoteCurrency] = append(rs[e.QuoteCurrency], e)
+		}
+	}
+	for k := range rs {
+		slices.SortFunc(rs[k], func(a, b *LedgerEntry) int {
+			return a.ValueDate.Compare(b.ValueDate)
+		})
+	}
 	return &Store{
-		L:        ledger,
-		assetMap: m,
-		path:     path,
+		L:             ledger,
+		path:          path,
+		assetMap:      m,
+		exchangeRates: rs,
 	}, nil
 }
 
 func (s *Store) Save() error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
 	return s.L.Save(s.path)
 }
 
@@ -102,7 +149,7 @@ func (a *Asset) MatchRef(ref string) bool {
 		a.ShortName == ref || a.Name == ref
 }
 
-func (s *Store) NextSequenceNum() int64 {
+func (s *Store) nextSequenceNum() int64 {
 	if len(s.L.Entries) == 0 {
 		return 0
 	}
@@ -183,11 +230,27 @@ func (s *Store) append(e *LedgerEntry) {
 	if e.Created.IsZero() {
 		e.Created = time.Now()
 	}
-	e.SequenceNum = s.NextSequenceNum()
+	e.SequenceNum = s.nextSequenceNum()
 	s.L.Entries = append(s.L.Entries, e)
+	if e.Type == ExchangeRate {
+		// Insert rate, maintain chronological order.
+		rs := s.exchangeRates[e.QuoteCurrency]
+		l := len(rs)
+		rs = append(rs, e)
+		i := sort.Search(l, func(i int) bool {
+			return rs[i].ValueDate.Compare(e.ValueDate) > 0
+		})
+		if i < l {
+			copy(rs[i+1:], rs[i:l])
+			rs[i] = e
+		}
+		s.exchangeRates[e.QuoteCurrency] = rs
+	}
 }
 
 func (s *Store) Add(e *LedgerEntry) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
@@ -265,6 +328,8 @@ func (s *Store) Add(e *LedgerEntry) error {
 }
 
 func (s *Store) AddAsset(a *Asset) error {
+	s.mut.Lock()
+	defer s.mut.Unlock()
 	id := a.ID()
 	if id == "" {
 		return fmt.Errorf("Asset must have an ID")
