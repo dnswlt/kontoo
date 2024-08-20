@@ -40,6 +40,14 @@ tr.subtotal {
     color: #6f6f6f;
 }
 
+/* Links */
+a.plain {
+    /* Inherit the color from the parent element */
+    color: inherit;
+    /* Remove underline */
+    text-decoration: none;
+}
+
 /* Forms */
 
 .field-label {
@@ -131,17 +139,6 @@ textarea {
     background-color: #575757;
 }
 
-
-ul.horizontal-list {
-    list-style-type: none;
-    padding: 0;
-}
-
-ul.horizontal-list li {
-    display: inline;
-    margin-right: 0.5ex;
-}
-
 /* Upload drag&drop area */
 #upload-drop-area {
     width: 300px;
@@ -162,4 +159,104 @@ ul.horizontal-list li {
 /* Stock quotes */
 .quote-line {
     margin: 0;
+}
+
+/* Tooltips */
+.tooltip {
+    position: relative;
+    cursor: default;
+}
+
+.tooltip .tooltiptext {
+    visibility: hidden;
+    width: 12em;
+    background-color: #575757;
+    color: #fff;
+    text-align: left;
+    border-radius: 6px;
+    padding: 5px;
+    position: absolute;
+    z-index: 1;
+    bottom: 100%;
+    /* Position the tooltip above the text */
+    left: 0%;
+    opacity: 0;
+    transition: opacity 0.3s;
+}
+
+.tooltip:hover .tooltiptext {
+    visibility: visible;
+    opacity: 1;
+}
+
+.tooltiptext p {
+    margin: 0;
+    font-size: 10pt;
+}
+
+/* Filter chips */
+
+ul.filter-chips {
+    list-style-type: none;
+    padding: 0;
+}
+
+ul.filter-chips li {
+    display: inline-block;
+    margin: 0 0.5ex 0 0;
+    background-color: #ddd;
+    border-radius: 20px;
+}
+
+ul.filter-chips li.active-chip {
+    background-color: #aaa;
+}
+
+ul.filter-chips a {
+    text-decoration: none;
+    color: inherit;
+    display: inline-block;
+    padding: 6px 12px;
+}
+
+/* Dropdown chips */
+
+.combo-box {
+    position: relative;
+    display: inline-block;
+    width: 4em;
+}
+
+.combo-button {
+    width: 100%;
+    padding: 10px;
+    background-color: #aaa;
+    color: black;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.combo-options {
+    display: none;
+    position: absolute;
+    width: 100%;
+    border: 1px solid #aaa;
+    border-radius: 4px;
+    background-color: white;
+    z-index: 1;
+}
+
+.combo-option {
+    padding: 10px;
+    cursor: pointer;
+}
+
+.combo-option:hover {
+    background-color: #ddd;
+}
+
+.combo-box.open .combo-options {
+    display: block;
 }

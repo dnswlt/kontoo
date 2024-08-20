@@ -96,3 +96,30 @@ function registerQuotesSubmit() {
         submit.addEventListener("click", handleQuotesSubmit);
     }
 }
+
+// Registers a dropdown widget. callback will be called with the
+// clicked option div as the only argument.
+function registerDropdown(id, callback) {
+    // Open the drowndown on click.
+    document.querySelector(`#${id} .combo-button`).addEventListener('click', function () {
+        this.parentNode.classList.toggle('open');
+    });
+    // Set the dropdown value on select and hide the dropdown options.
+    document.querySelectorAll(`#${id} .combo-option`).forEach(function (option) {
+        option.addEventListener('click', function () {
+            const button = document.querySelector(`#${id} .combo-button`);
+            button.textContent = this.textContent;
+            button.dataset.value = this.dataset.value;
+            document.querySelector(`#${id}`).classList.remove('open');
+            callback(this);
+        });
+    });
+
+    // Close the dropdown when clicking outside.
+    document.addEventListener('click', function (event) {
+        const dropdown = document.getElementById(id);
+        if (!dropdown.contains(event.target)) {
+            dropdown.classList.remove('open');
+        }
+    });
+}

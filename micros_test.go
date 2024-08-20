@@ -205,10 +205,11 @@ func TestMicrosFormat(t *testing.T) {
 }
 
 func TestOverflowInt64(t *testing.T) {
+	// Quick check that whatever large ints you add, an overflow will always be negative.
 	x := math.MaxInt64
 	y := x
 	z := x + y
-	if z != 0 {
-		t.Errorf("Want negative, got %v", z)
+	if z != -2 {
+		t.Errorf("Want -2, got %v", z)
 	}
 }

@@ -50,6 +50,16 @@ func (s *Store) BaseCurrency() Currency {
 	return s.L.GetHeader().BaseCurrency
 }
 
+func (s *Store) MaxValueDate() Date {
+	var max Date
+	for _, e := range s.L.Entries {
+		if e.ValueDate.After(max.Time) {
+			max = e.ValueDate
+		}
+	}
+	return max
+}
+
 // Always returns a non-nil value. Useful to avoid nil checks for missing headers all around.
 func (l *Ledger) GetHeader() *LedgerHeader {
 	if l.Header == nil {

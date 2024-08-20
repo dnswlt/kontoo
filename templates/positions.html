@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     {{template "head_common.html"}}
 </head>
+
 <body>
     {{template "nav.html"}}
     <h1>Positions</h1>
@@ -23,12 +25,15 @@
             {{range .Groups}}
             {{range .Rows}}
             <tr>
-                <td>{{ .Name }}</td>
+                <td><a class="plain" href="/kontoo/ledger?q=id%3A{{urlquery .ID}}">{{ .Name }}</a></td>
                 <td>{{ .ID }}</td>
                 <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
-                <td class="ralign">{{ money .Value }}</td>
+                <td class="ralign tooltip">
+                    {{ money .Value }}
+                    <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
+                </td>
             </tr>
             {{end}}
             <tr class="subtotal">
@@ -37,13 +42,19 @@
                 <td>{{.Label}}</td>
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
-                <td class="ralign">{{ money .Value }}</td>
+                <td class="ralign">{{ money .ValueBaseCurrency }}</td>
             </tr>
             {{end}}
         </tbody>
-    </table>    
+    </table>
     <p class="footer">
         Report date: {{.Date}} (generated {{.CurrentDate}})
     </p>
+    <script>
+        registerDropdown("months-dropdown", (item) => {
+            window.location.href = item.dataset.url;
+        });
+    </script>
 </body>
+
 </html>

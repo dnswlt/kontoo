@@ -8,11 +8,11 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -196,11 +196,17 @@ func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 }
 
 type PositionTableRow struct {
-	ID              string
-	Name            string
-	Type            AssetType
-	Currency        Currency
-	Value           Micros
+	ID       string
+	Name     string
+	Type     AssetType
+	Currency Currency
+	Value    Micros
+	// The value expressed in the base currency, converted using
+	// the latest available exchange rate. 0 if no exchange rate
+	// was available.
+	ValueBaseCurrency Micros
+	Notes             []string
+
 	PurchasePrice   Micros
 	NominalValue    Micros
 	InterestRate    Micros
@@ -247,10 +253,10 @@ type PositionTableRowGroup struct {
 	Rows  []*PositionTableRow
 }
 
-func (g *PositionTableRowGroup) Value() Micros {
+func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
 	var sum Micros
 	for _, r := range g.Rows {
-		sum += r.Value
+		sum += r.ValueBaseCurrency
 	}
 	return sum
 }
@@ -273,12 +279,34 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	res := make([]*PositionTableRow, len(positions))
 	for i, p := range positions {
 		a := p.Asset
+		var notes []string
+		val := p.CalculatedValueMicros()
+		if !p.LastPriceUpdate.IsZero() {
+			notes = append(notes, fmt.Sprintf("Price date: %s", p.LastPriceUpdate))
+		}
+		if !p.LastValueUpdate.IsZero() {
+			notes = append(notes, fmt.Sprintf("Value date: %s", p.LastValueUpdate))
+		}
+		bval := val
+		if a.Currency != s.BaseCurrency() {
+			rate, rdate, err := s.ExchangeRateAt(a.Currency, Date{utcDate(date)})
+			if err != nil {
+				// TODO: add error info to row
+				log.Printf("No exchange rate at %v for %s: %s", date, a.Currency, err)
+				bval = 0
+			} else {
+				bval = val.Frac(UnitValue, rate)
+				notes = append(notes, fmt.Sprintf("Exch. rate date: %s", rdate))
+			}
+		}
 		res[i] = &PositionTableRow{
-			ID:       a.ID(),
-			Name:     a.Name,
-			Type:     a.Type,
-			Currency: a.Currency,
-			Value:    p.CalculatedValueMicros(),
+			ID:                a.ID(),
+			Name:              a.Name,
+			Type:              a.Type,
+			Currency:          a.Currency,
+			Value:             val,
+			ValueBaseCurrency: bval,
+			Notes:             notes,
 		}
 	}
 	return res
@@ -346,6 +374,9 @@ func commonFuncs() template.FuncMap {
 				return a.category, nil
 			}
 			return "", fmt.Errorf("no category for asset type %v", t)
+		},
+		"join": func(elems []string, sep string) string {
+			return strings.Join(elems, sep)
 		},
 	}
 }
@@ -482,38 +513,73 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 	})
 }
 
-func (s *Server) renderPositionsTemplate(w io.Writer, date time.Time) error {
+type NamedOption struct {
+	Name  string
+	Value any
+	Data  map[string]any
+}
+
+func monthOptions(url *url.URL, date time.Time, maxDate Date) (selected NamedOption, options []NamedOption) {
+	months := []string{
+		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+	}
+	selected = NamedOption{
+		Name:  months[date.Month()-1],
+		Value: int(date.Month()),
+	}
+	if date.Year() > maxDate.Year() {
+		return
+	}
+	maxMonth := 12
+	if maxDate.Year() == date.Year() {
+		maxMonth = int(maxDate.Month())
+	}
+	u := *url
+	for i := 0; i < maxMonth; i++ {
+		d := DateVal(date.Year(), time.Month(i+1), 1).AddDate(0, 1, -1)
+		q := u.Query()
+		q.Set("date", d.Format("2006-01-02"))
+		u.RawQuery = q.Encode()
+		options = append(options, NamedOption{
+			Name:  months[i],
+			Value: i + 1,
+			Data: map[string]any{
+				"URL": u.String(),
+			},
+		})
+	}
+	return
+}
+
+func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
 	positions := positionTableRows(s.Store(), date)
 	groups := positionTableRowGroups(positions, func(r *PositionTableRow) string {
 		return assetTypeInfos[r.Type].category
 	})
-	return s.templates.ExecuteTemplate(w, "positions.html", struct {
-		Date         string
-		DatePath     string // "YYYY/M/D"
-		CurrentDate  string
-		BaseCurrency Currency
-		Groups       []*PositionTableRowGroup
-	}{
-		Date:         date.Format("2006-01-02"),
-		DatePath:     date.Format("2006/1/2"),
-		CurrentDate:  time.Now().Format("2006-01-02 15:04:05"),
-		BaseCurrency: s.Store().BaseCurrency(),
-		Groups:       groups,
+	selected, options := monthOptions(r.URL, date, s.Store().MaxValueDate())
+	return s.templates.ExecuteTemplate(w, "positions.html", map[string]any{
+		"Date":         date.Format("2006-01-02"),
+		"CurrentDate":  time.Now().Format("2006-01-02 15:04:05"),
+		"BaseCurrency": s.Store().BaseCurrency(),
+		"Groups":       groups,
+		"ActiveChips": map[string]bool{
+			"all": true,
+		},
+		"SelectedMonth": selected,
+		"MonthOptions":  options,
 	})
 }
 
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, date time.Time) error {
 	positions := maturingPositionTableRows(s.Store(), date)
-	return s.templates.ExecuteTemplate(w, "positions_maturing.html", struct {
-		Date        string
-		DatePath    string // "YYYY/M/D"
-		CurrentDate string
-		TableRows   []*PositionTableRow
-	}{
-		Date:        date.Format("2006-01-02"),
-		DatePath:    date.Format("2006/1/2"),
-		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
-		TableRows:   positions,
+	return s.templates.ExecuteTemplate(w, "positions_maturing.html", map[string]any{
+		"Date":        date.Format("2006-01-02"),
+		"CurrentDate": time.Now().Format("2006-01-02 15:04:05"),
+		"TableRows":   positions,
+		"ActiveChips": map[string]bool{
+			"maturing": true,
+		},
 	})
 }
 
@@ -584,31 +650,31 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func dateFromPath(r *http.Request) (time.Time, error) {
-	var year, month, day int
-	year, err := strconv.Atoi(r.PathValue("year"))
-	if err != nil || year < 1970 || year > 9999 {
-		return time.Time{}, fmt.Errorf("invalid year: %v", err)
+func ensureDateParam(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
+	d := r.URL.Query().Get("date")
+	if d == "" {
+		now := time.Now()
+		q := r.URL.Query()
+		q.Set("date", now.Format("2006-01-02"))
+		r.URL.RawQuery = q.Encode()
+		http.Redirect(w, r, r.URL.String(), http.StatusSeeOther)
+		return time.Time{}, false
 	}
-	month, err = strconv.Atoi(r.PathValue("month"))
-	if err != nil || month < 1 || month > 12 {
-		return time.Time{}, fmt.Errorf("invalid month: %v", err)
+	date, err := time.Parse("2006-01-02", d)
+	if err != nil {
+		http.Error(w, "invalid date: "+err.Error(), http.StatusBadRequest)
+		return time.Time{}, false
 	}
-	day, err = strconv.Atoi(r.PathValue("day"))
-	if err != nil || day < 1 || day > 31 {
-		return time.Time{}, fmt.Errorf("invalid day: %v", err)
-	}
-	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC), nil
+	return date, true
 }
 
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
-	date, err := dateFromPath(r)
-	if err != nil {
-		http.Error(w, "invalid date in path: "+err.Error(), http.StatusBadRequest)
+	date, ok := ensureDateParam(w, r)
+	if !ok {
 		return
 	}
 	var buf bytes.Buffer
-	err = s.renderPositionsTemplate(&buf, date)
+	err := s.renderPositionsTemplate(&buf, r, date)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -618,13 +684,12 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request) {
-	date, err := dateFromPath(r)
-	if err != nil {
-		http.Error(w, "invalid date in path: "+err.Error(), http.StatusBadRequest)
+	date, ok := ensureDateParam(w, r)
+	if !ok {
 		return
 	}
 	var buf bytes.Buffer
-	err = s.renderMaturingPositionsTemplate(&buf, date)
+	err := s.renderMaturingPositionsTemplate(&buf, date)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -937,12 +1002,8 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
 	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
-	mux.HandleFunc("GET /kontoo/positions", func(w http.ResponseWriter, r *http.Request) {
-		now := time.Now()
-		http.Redirect(w, r, fmt.Sprintf("/kontoo/positions/%d/%d/%d", now.Year(), now.Month(), now.Day()), http.StatusSeeOther)
-	})
-	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}", s.reloadHandler(s.handlePositions))
-	mux.HandleFunc("GET /kontoo/positions/{year}/{month}/{day}/maturing", s.reloadHandler(s.handleMaturingPositions))
+	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
+	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handleMaturingPositions))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
 	})

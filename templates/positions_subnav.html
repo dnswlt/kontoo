@@ -1,7 +1,20 @@
 <div>
-    <ul class="horizontal-list">
-        <li><a href="/kontoo/positions/{{.DatePath}}">All</a></li>
-        <li><a href="/kontoo/positions/{{.DatePath}}/maturing">Maturing</a></li>
-        <li><a href="/kontoo/positions/{{.DatePath}}/equity">Equity</a></li>
+    <ul class="filter-chips">
+        <li {{if .ActiveChips.all }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Date}}">All</a></li>
+        <li {{if .ActiveChips.maturing }}class="active-chip" {{end}}><a
+                href="/kontoo/positions/maturing?date={{.Date}}">Maturing</a></li>
+        <li {{if .ActiveChips.equity }}class="active-chip" {{end}}><a
+                href="/kontoo/positions/equity?date={{.Date}}">Equity</a></li>
     </ul>
+
+    {{if .MonthOptions }}
+    <div id="months-dropdown" class="combo-box">
+        <button data-value="" class="combo-button">{{.SelectedMonth.Name}}</button>
+        <div class="combo-options">
+            {{range .MonthOptions }}
+            <div class="combo-option" data-url="{{.Data.URL}}" data-value="{{.Value}}">{{.Name}}</div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
 </div>
