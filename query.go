@@ -143,6 +143,10 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 			}
 		case "name":
 			fval = e.Label()
+		case "type":
+			fval = e.EntryType()
+		case "class":
+			fval = e.AssetType()
 		}
 		if fval == "" {
 			//  Match fails for unsupported (and empty) fields

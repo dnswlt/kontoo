@@ -6,10 +6,11 @@
 </head>
 
 <body>
-    {{template "nav.html"}}
+    {{template "nav2.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
     {{ $baseCurrency := .BaseCurrency }}
+    {{ $showSubtotals := gt (len .Groups) 1 }}
     <table>
         <thead>
             <tr>
@@ -40,6 +41,7 @@
                 </td>
             </tr>
             {{end}}
+            {{if $showSubtotals}}
             <tr class="subtotal">
                 <td>Subtotal</td>
                 <td></td>
@@ -49,6 +51,15 @@
                 <td class="ralign">{{ money .ValueBaseCurrency }}</td>
             </tr>
             {{end}}
+            {{end}}
+            <tr class="total">
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="ralign">{{ $baseCurrency }}</td>
+                <td class="ralign">{{ money .TotalValueBaseCurrency }}</td>
+            </tr>
         </tbody>
     </table>
     <p class="footer">

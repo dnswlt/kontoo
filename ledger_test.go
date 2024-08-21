@@ -32,7 +32,7 @@ func TestStoreAdd(t *testing.T) {
 		},
 		{
 			E: &LedgerEntry{
-				Type:           SellTransaction,
+				Type:           AssetSale,
 				AssetRef:       "NESN",
 				ValueDate:      DateVal(2023, 1, 3),
 				QuantityMicros: 10 * UnitValue,
@@ -345,6 +345,18 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 			ValueDate:   DateVal(2023, 2, 28),
 			ValueMicros: 2000 * UnitValue,
 		},
+		{
+			Type:        AccountCredit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 3, 15),
+			ValueMicros: 3000 * UnitValue,
+		},
+		{
+			Type:        AccountDebit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 3, 31),
+			ValueMicros: 4000 * UnitValue,
+		},
 	}
 	for _, e := range entries {
 		err = s.Add(e)
@@ -359,6 +371,8 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 		{date: DateVal(2023, 1, 31), value: 1000 * UnitValue},
 		{date: DateVal(2023, 2, 16), value: 1000 * UnitValue},
 		{date: DateVal(2023, 2, 28), value: 2000 * UnitValue},
+		{date: DateVal(2023, 3, 15), value: 5000 * UnitValue},
+		{date: DateVal(2023, 3, 31), value: 1000 * UnitValue},
 	}
 	for _, p := range params {
 		ps := s.AssetPositionsAt(p.date.Time)
@@ -397,14 +411,14 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 			ValueMicros: 1000 * UnitValue,
 		},
 		{
-			Type:           BuyTransaction,
+			Type:           AssetPurchase,
 			AssetID:        "DE99",
 			ValueDate:      DateVal(2023, 2, 14),
 			QuantityMicros: 2000 * UnitValue,
 			PriceMicros:    950 * Millis,
 		},
 		{
-			Type:           SellTransaction,
+			Type:           AssetSale,
 			AssetID:        "DE99",
 			ValueDate:      DateVal(2023, 2, 20),
 			QuantityMicros: 500 * UnitValue,
@@ -491,7 +505,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 	}{
 		{
 			E: &LedgerEntry{
-				Type:           BuyTransaction,
+				Type:           AssetPurchase,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 1),
 				QuantityMicros: 10 * u,
@@ -499,10 +513,10 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				CostMicros:     5 * u,
 			},
 			P: &AssetPosition{
-				Asset:           asset,
-				LastPriceUpdate: DateVal(2024, 1, 1),
-				QuantityMicros:  10 * u,
-				PriceMicros:     2 * u,
+				Asset:          asset,
+				LastUpdate:     DateVal(2024, 1, 1),
+				QuantityMicros: 10 * u,
+				PriceMicros:    2 * u,
 				Items: []AssetPositionItem{
 					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 				},
@@ -510,7 +524,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 		},
 		{
 			E: &LedgerEntry{
-				Type:           BuyTransaction,
+				Type:           AssetPurchase,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 2),
 				QuantityMicros: 20 * u,
@@ -518,10 +532,10 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				CostMicros:     12 * u,
 			},
 			P: &AssetPosition{
-				Asset:           asset,
-				LastPriceUpdate: DateVal(2024, 1, 2),
-				QuantityMicros:  30 * u,
-				PriceMicros:     3 * u,
+				Asset:          asset,
+				LastUpdate:     DateVal(2024, 1, 2),
+				QuantityMicros: 30 * u,
+				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
 					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 					{QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
@@ -531,7 +545,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 		{
 			// Sell 20, i.e. 10 of the first purchase and 10 of the second one.
 			E: &LedgerEntry{
-				Type:           SellTransaction,
+				Type:           AssetSale,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 3),
 				QuantityMicros: 20 * u,
@@ -539,10 +553,10 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				CostMicros:     10 * u,
 			},
 			P: &AssetPosition{
-				Asset:           asset,
-				LastPriceUpdate: DateVal(2024, 1, 3),
-				QuantityMicros:  10 * u,
-				PriceMicros:     3 * u,
+				Asset:          asset,
+				LastUpdate:     DateVal(2024, 1, 3),
+				QuantityMicros: 10 * u,
+				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
 					{QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
 				},
@@ -551,7 +565,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 		{
 			// Sell the rest.
 			E: &LedgerEntry{
-				Type:           SellTransaction,
+				Type:           AssetSale,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 4),
 				QuantityMicros: 10 * u,
@@ -559,11 +573,11 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				CostMicros:     10 * u,
 			},
 			P: &AssetPosition{
-				Asset:           asset,
-				LastPriceUpdate: DateVal(2024, 1, 4),
-				QuantityMicros:  0 * u,
-				PriceMicros:     3 * u,
-				Items:           nil,
+				Asset:          asset,
+				LastUpdate:     DateVal(2024, 1, 4),
+				QuantityMicros: 0 * u,
+				PriceMicros:    3 * u,
+				Items:          nil,
 			},
 		},
 	}
@@ -643,7 +657,7 @@ func TestMarshalLedger(t *testing.T) {
 			{
 				Created:        time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
 				ValueDate:      DateVal(2024, 12, 31),
-				Type:           BuyTransaction,
+				Type:           AssetPurchase,
 				QuantityMicros: 1 * UnitValue,
 				PriceMicros:    1_500_000,
 				Currency:       "EUR",
@@ -661,7 +675,7 @@ func TestMarshalLedger(t *testing.T) {
       "Created": "2023-12-31T00:00:00Z",
       "SequenceNum": 0,
       "ValueDate": "2024-12-31",
-      "Type": "BuyTransaction",
+      "Type": "AssetPurchase",
       "Currency": "EUR",
       "Quantity": "1",
       "Price": "1.50"

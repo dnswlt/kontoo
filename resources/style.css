@@ -28,6 +28,10 @@ tr.subtotal {
     background-color: #ddd;
 }
 
+tr.total td {
+    font-weight: bold;
+}
+
 i.warning-emoji::before {
     content: '\26A0';
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
@@ -179,7 +183,7 @@ textarea {
 
 .tooltip .tooltiptext {
     visibility: hidden;
-    width: 12em;
+    width: 13em;
     background-color: #575757;
     color: #fff;
     text-align: left;

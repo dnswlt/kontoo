@@ -29,7 +29,7 @@ const (
 	Commodity               // Edelmetalle, Rohstoffe
 	Cash                    // Bargeld
 	TaxLiability            // Steuerschuld
-	TaxPrepayment           // Steuervorauszahlung
+	TaxPayment              // Steuer(voraus)zahlung
 	CreditCardDebt          // Schulden auf Kreditkarte
 	OtherDebt               // allg. Schulden
 )
@@ -125,9 +125,9 @@ var (
 			displayName: "Tax liability",
 		},
 		{
-			typ:         TaxPrepayment,
+			typ:         TaxPayment,
 			category:    "Taxes",
-			displayName: "Tax prepayment",
+			displayName: "Tax payment",
 		},
 		{
 			typ:         CreditCardDebt,
@@ -176,16 +176,19 @@ type Asset struct {
 type EntryType int32
 
 const (
-	UnspecifiedEntryType EntryType = 0
-	BuyTransaction       EntryType = 1
-	SellTransaction      EntryType = 2
-	AssetMaturity        EntryType = 3
-	DividendPayment      EntryType = 4
-	InterestPayment      EntryType = 5
-	AssetPrice           EntryType = 6
-	AccountBalance       EntryType = 7
-	AssetHolding         EntryType = 8
-	ExchangeRate         EntryType = 9
+	UnspecifiedEntryType EntryType = iota
+
+	AssetPurchase
+	AssetSale
+	AssetPrice
+	AssetHolding
+	AccountCredit
+	AccountDebit
+	AccountBalance
+	AssetMaturity
+	DividendPayment
+	InterestPayment
+	ExchangeRate
 )
 
 // Dates without a time component.

@@ -124,27 +124,27 @@ func TestParseLedgerEntry(t *testing.T) {
 	}{
 		{
 			name:  "currency",
-			input: "buy foo -Currency EUR",
+			input: "assetpurchase foo -Currency EUR",
 			want: &LedgerEntry{
-				Type:     BuyTransaction,
+				Type:     AssetPurchase,
 				AssetRef: "foo",
 				Currency: EUR,
 			},
 		},
 		{
 			name:  "micros",
-			input: "buy foo -Value 120.95",
+			input: "assetpurchase foo -Value 120.95",
 			want: &LedgerEntry{
-				Type:        BuyTransaction,
+				Type:        AssetPurchase,
 				AssetRef:    "foo",
 				ValueMicros: 120_950_000,
 			},
 		},
 		{
 			name:  "comment",
-			input: "buy foo -Comment this is  comment",
+			input: "assetpurchase foo -Comment this is  comment",
 			want: &LedgerEntry{
-				Type:     BuyTransaction,
+				Type:     AssetPurchase,
 				AssetRef: "foo",
 				Comment:  "this is comment",
 			},

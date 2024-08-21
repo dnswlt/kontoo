@@ -320,7 +320,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 		return fmt.Errorf("entry must have at least one non-zero value")
 	}
 	switch e.Type {
-	case BuyTransaction, SellTransaction:
+	case AssetPurchase, AssetSale:
 		if e.PriceMicros == 0 {
 			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
 		}
@@ -392,12 +392,11 @@ type AssetPositionItem struct {
 // AssetPosition represents the "current" asset position.
 // It is typically calculated from ledger entries for the given asset.
 type AssetPosition struct {
-	Asset           *Asset
-	LastPriceUpdate Date
-	LastValueUpdate Date
-	ValueMicros     Micros
-	QuantityMicros  Micros
-	PriceMicros     Micros
+	Asset          *Asset
+	LastUpdate     Date
+	ValueMicros    Micros
+	QuantityMicros Micros
+	PriceMicros    Micros
 	// Items are the constituent parts of the accumulated asset position.
 	// The are stored in chronological order (latest comes last) and can
 	// be used to determine profits and losses (P&L) and to update the
@@ -451,19 +450,19 @@ func (p *AssetPosition) Currency() Currency {
 
 func (p *AssetPosition) Update(e *LedgerEntry) {
 	switch e.Type {
-	case BuyTransaction:
+	case AssetPurchase:
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastPriceUpdate = e.ValueDate
+		p.LastUpdate = e.ValueDate
 		p.Items = append(p.Items, AssetPositionItem{
 			QuantityMicros: e.QuantityMicros,
 			PriceMicros:    e.PriceMicros,
 			CostMicros:     e.CostMicros,
 		})
-	case SellTransaction:
+	case AssetSale:
 		p.QuantityMicros -= e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastPriceUpdate = e.ValueDate
+		p.LastUpdate = e.ValueDate
 		// Remove items
 		qty := e.QuantityMicros
 		for len(p.Items) > 0 {
@@ -484,25 +483,30 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.ValueMicros = 0
 		p.QuantityMicros = 0
 		p.PriceMicros = 0
-		p.LastValueUpdate = e.ValueDate
+		p.LastUpdate = e.ValueDate
 		p.Items = nil
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
-		p.LastPriceUpdate = e.ValueDate
+		p.LastUpdate = e.ValueDate
+	case AccountCredit:
+		p.ValueMicros += e.ValueMicros
+		p.LastUpdate = e.ValueDate
+	case AccountDebit:
+		p.ValueMicros -= e.ValueMicros
+		p.LastUpdate = e.ValueDate
 	case AccountBalance:
 		p.ValueMicros = e.ValueMicros
-		p.LastValueUpdate = e.ValueDate
+		p.LastUpdate = e.ValueDate
 	case AssetHolding:
 		if e.PriceMicros != 0 {
 			p.PriceMicros = e.PriceMicros
-			p.LastPriceUpdate = e.ValueDate
 		}
+		p.LastUpdate = e.ValueDate
 		if e.QuantityMicros != p.QuantityMicros {
 			// Only update position if the quantity has changed,
 			// otherwise consider it an informational ledger entry.
-			p.ValueMicros = e.ValueMicros
 			p.QuantityMicros = e.QuantityMicros
-			p.LastValueUpdate = e.ValueDate
+			p.ValueMicros = e.ValueMicros
 			p.Items = nil
 			if e.QuantityMicros > 0 {
 				p.Items = append(p.Items, AssetPositionItem{

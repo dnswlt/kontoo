@@ -4,7 +4,7 @@
     {{template "head_common.html"}}
 </head>
 <body>
-    {{template "nav.html"}}
+    {{template "nav2.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
     <table>
@@ -27,7 +27,7 @@
         <tbody>
             {{range .TableRows}}
             <tr>
-                <td>{{ .Name }}</td>
+                <td><a class="plain" href="/kontoo/ledger?q=id%3A{{urlquery .ID}}">{{ .Name }}</a></td>
                 <td>{{ .ID }}</td>
                 <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
@@ -46,5 +46,13 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
+    <script>
+        registerDropdown("months-dropdown", (item) => {
+            window.location.href = item.dataset.url;
+        });
+        registerDropdown("years-dropdown", (item) => {
+            window.location.href = item.dataset.url;
+        });
+    </script>
 </body>
 </html>

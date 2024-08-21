@@ -23,16 +23,18 @@
                 <label for="Type">Type</label>
             </div>
             <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList" placeholder="BuyTransaction">
+                <input id="Type" type="text" name="Type" list="TypeList" placeholder="AssetPurchase">
                 <datalist id="TypeList">
-                    <option value="BuyTransaction">
-                    <option value="SellTransaction">
+                    <option value="AssetPurchase">
+                    <option value="AssetSale">
                     <option value="AssetPrice">
-                    <option value="AccountBalance">
                     <option value="AssetHolding">
+                    <option value="AccountCredit">
+                    <option value="AccountDebit">
+                    <option value="AccountBalance">
+                    <option value="AssetMaturity">
                     <option value="DividendPayment">
                     <option value="InterestPayment">
-                    <option value="AssetMaturity">
                     <option value="ExchangeRate">
                 </datalist>
             </div>
@@ -74,7 +76,7 @@
                 <label for="Value">Value</label>
             </div>
             <div class="field-value">
-                <input id="Value" name="Value" type="text" pattern="\d+(\.\d+)?">
+                <input id="Value" name="Value" type="text" pattern="[+-]?\d+(\.\d+)?">
             </div>
         </div>
         <div id="QuantityField" class="field">
@@ -128,7 +130,7 @@
             const clickedButton = event.submitter;
             formData.append(clickedButton.name, clickedButton.value);
             if (!formData.get("Type")) {
-                formData.set("Type", "BuyTransaction");
+                formData.set("Type", "AssetPurchase");
             }
             try {
                 const response = await fetch("/kontoo/entries", {

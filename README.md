@@ -60,7 +60,7 @@ Ledger entry examples:
     "Created": "2024-07-08T17:23:59+0200",
     "SequenceNum": 1001,
     "ValueDate": "2024-07-09",
-    "Type": "BuyTransaction",
+    "Type": "AssetPurchase",
     "Currency": "EUR",
     "ValueMicros": "980.00",
     "NominalValueMicros": "1000.00",

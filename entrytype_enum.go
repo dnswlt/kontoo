@@ -14,20 +14,22 @@ func _() {
 	// Re-run the stringer command to generate them again.
 	var x [1]struct{}
 	_ = x[UnspecifiedEntryType-0]
-	_ = x[BuyTransaction-1]
-	_ = x[SellTransaction-2]
-	_ = x[AssetMaturity-3]
-	_ = x[DividendPayment-4]
-	_ = x[InterestPayment-5]
-	_ = x[AssetPrice-6]
+	_ = x[AssetPurchase-1]
+	_ = x[AssetSale-2]
+	_ = x[AssetPrice-3]
+	_ = x[AssetHolding-4]
+	_ = x[AccountCredit-5]
+	_ = x[AccountDebit-6]
 	_ = x[AccountBalance-7]
-	_ = x[AssetHolding-8]
-	_ = x[ExchangeRate-9]
+	_ = x[AssetMaturity-8]
+	_ = x[DividendPayment-9]
+	_ = x[InterestPayment-10]
+	_ = x[ExchangeRate-11]
 }
 
-const _EntryType_name = "UnspecifiedEntryTypeBuyTransactionSellTransactionAssetMaturityDividendPaymentInterestPaymentAssetPriceAccountBalanceAssetHoldingExchangeRate"
+const _EntryType_name = "UnspecifiedEntryTypeAssetPurchaseAssetSaleAssetPriceAssetHoldingAccountCreditAccountDebitAccountBalanceAssetMaturityDividendPaymentInterestPaymentExchangeRate"
 
-var _EntryType_index = [...]uint8{0, 20, 34, 49, 62, 77, 92, 102, 116, 128, 140}
+var _EntryType_index = [...]uint8{0, 20, 33, 42, 52, 64, 77, 89, 103, 116, 131, 146, 158}
 
 func _() {
 	var _nil_EntryType_value = func() (val EntryType) { return }()
@@ -44,19 +46,21 @@ func (i EntryType) String() string {
 	return _EntryType_name[_EntryType_index[i]:_EntryType_index[i+1]]
 }
 
-var _EntryType_values = []EntryType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9}
+var _EntryType_values = []EntryType{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}
 
 var _EntryType_name_to_values = map[string]EntryType{
 	_EntryType_name[0:20]:    0,
-	_EntryType_name[20:34]:   1,
-	_EntryType_name[34:49]:   2,
-	_EntryType_name[49:62]:   3,
-	_EntryType_name[62:77]:   4,
-	_EntryType_name[77:92]:   5,
-	_EntryType_name[92:102]:  6,
-	_EntryType_name[102:116]: 7,
-	_EntryType_name[116:128]: 8,
-	_EntryType_name[128:140]: 9,
+	_EntryType_name[20:33]:   1,
+	_EntryType_name[33:42]:   2,
+	_EntryType_name[42:52]:   3,
+	_EntryType_name[52:64]:   4,
+	_EntryType_name[64:77]:   5,
+	_EntryType_name[77:89]:   6,
+	_EntryType_name[89:103]:  7,
+	_EntryType_name[103:116]: 8,
+	_EntryType_name[116:131]: 9,
+	_EntryType_name[131:146]: 10,
+	_EntryType_name[146:158]: 11,
 }
 
 // ParseEntryTypeString retrieves an enum value from the enum constants string name.

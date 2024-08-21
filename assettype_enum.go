@@ -30,14 +30,14 @@ func _() {
 	_ = x[Commodity-14]
 	_ = x[Cash-15]
 	_ = x[TaxLiability-16]
-	_ = x[TaxPrepayment-17]
+	_ = x[TaxPayment-17]
 	_ = x[CreditCardDebt-18]
 	_ = x[OtherDebt-19]
 }
 
-const _AssetType_name = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountBrokerageAccountPensionAccountCommodityCashTaxLiabilityTaxPrepaymentCreditCardDebtOtherDebt"
+const _AssetType_name = "UnspecifiedAssetTypeStockStockExchangeTradedFundStockMutualFundBondExchangeTradedFundBondMutualFundCorporateBondGovernmentBondFixedDepositAccountMoneyMarketAccountSavingsAccountCheckingAccountBrokerageAccountPensionAccountCommodityCashTaxLiabilityTaxPaymentCreditCardDebtOtherDebt"
 
-var _AssetType_index = [...]uint16{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 208, 222, 231, 235, 247, 260, 274, 283}
+var _AssetType_index = [...]uint16{0, 20, 25, 48, 63, 85, 99, 112, 126, 145, 163, 177, 192, 208, 222, 231, 235, 247, 257, 271, 280}
 
 func _() {
 	var _nil_AssetType_value = func() (val AssetType) { return }()
@@ -74,9 +74,9 @@ var _AssetType_name_to_values = map[string]AssetType{
 	_AssetType_name[222:231]: 14,
 	_AssetType_name[231:235]: 15,
 	_AssetType_name[235:247]: 16,
-	_AssetType_name[247:260]: 17,
-	_AssetType_name[260:274]: 18,
-	_AssetType_name[274:283]: 19,
+	_AssetType_name[247:257]: 17,
+	_AssetType_name[257:271]: 18,
+	_AssetType_name[271:280]: 19,
 }
 
 // ParseAssetTypeString retrieves an enum value from the enum constants string name.

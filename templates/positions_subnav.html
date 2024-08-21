@@ -33,6 +33,6 @@
     </div>
     {{end}}
     <ul class="filter-chips">
-        <li {{if .ActiveChips.today }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Today}}">Today</a></li>
+        <li {{if .ActiveChips.today }}class="active-chip" {{end}}><a href='{{setp .ThisPage "date" .Today}}'>Today</a></li>
     </ul>
 </div>

@@ -160,6 +160,9 @@ func (e *LedgerEntryRow) Label() string {
 	return ""
 }
 func (e *LedgerEntryRow) AssetType() string {
+	if e.A == nil {
+		return ""
+	}
 	return e.A.Type.String()
 }
 func (e *LedgerEntryRow) Currency() string {
@@ -287,15 +290,9 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 		a := p.Asset
 		var notes []string
 		val := p.CalculatedValueMicros()
-		if !p.LastPriceUpdate.IsZero() {
-			notes = append(notes, fmt.Sprintf("Price date: %s", p.LastPriceUpdate))
-			lastUpdate = p.LastPriceUpdate
-		}
-		if !p.LastValueUpdate.IsZero() {
-			notes = append(notes, fmt.Sprintf("Value date: %s", p.LastValueUpdate))
-			if lastUpdate.IsZero() || p.LastValueUpdate.Before(lastUpdate.Time) {
-				lastUpdate = p.LastValueUpdate
-			}
+		if !p.LastUpdate.IsZero() {
+			notes = append(notes, fmt.Sprintf("Last updated: %s", p.LastUpdate))
+			lastUpdate = p.LastUpdate
 		}
 		bval := val
 		if a.Currency != s.BaseCurrency() {
@@ -310,7 +307,6 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 				if lastUpdate.IsZero() || rdate.Before(lastUpdate.Time) {
 					lastUpdate = rdate
 				}
-
 			}
 		}
 		res[i] = &PositionTableRow{
@@ -392,6 +388,16 @@ func commonFuncs() template.FuncMap {
 		},
 		"days": func(d time.Duration) int {
 			return int(math.Round(d.Seconds() / 60 / 60 / 24))
+		},
+		"setp": func(rawURL string, param, value string) (string, error) {
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				return "", err
+			}
+			q := u.Query()
+			q.Set(param, value)
+			u.RawQuery = q.Encode()
+			return u.String(), nil
 		},
 	}
 }
@@ -595,18 +601,51 @@ func monthOptions(url url.URL, date time.Time, maxDate Date) DropdownOptions {
 	return res
 }
 
+func newURL(path string, queryParams url.Values) *url.URL {
+	u, err := url.Parse(path)
+	if err != nil {
+		panic("failed to parse URL: " + err.Error())
+	}
+	u.RawQuery = queryParams.Encode()
+	return u
+}
+
+func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
+	ctx["Today"] = time.Now().Format("2006-01-02")
+	ctx["Now"] = time.Now().Format("2006-01-02 15:04:05")
+	ctx["BaseCurrency"] = s.Store().BaseCurrency()
+	ctx["ThisPage"] = r.URL.String()
+	ctxQ := make(url.Values)
+	// Inherit contextual query params from the incoming request.
+	q := r.URL.Query()
+	if date := q.Get("date"); date != "" {
+		ctx["Date"] = date
+		ctxQ.Set("date", date)
+	}
+	ctx["Nav"] = map[string]string{
+		"ledger":    newURL("/kontoo/ledger", ctxQ).String(),
+		"positions": newURL("/kontoo/positions", ctxQ).String(),
+		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
+		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
+		"uploadCSV": newURL("/kontoo/quotes", ctxQ).String(),
+		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
+	}
+	return ctx
+}
+
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
 	positions := positionTableRows(s.Store(), date)
 	groups := positionTableRowGroups(positions, func(r *PositionTableRow) string {
 		return assetTypeInfos[r.Type].category
 	})
+	var total Micros
+	for _, g := range groups {
+		total += g.ValueBaseCurrency()
+	}
 	minDate, maxDate := s.Store().ValueDateRange()
-	return s.templates.ExecuteTemplate(w, "positions.html", map[string]any{
-		"Date":         date.Format("2006-01-02"),
-		"Today":        time.Now().Format("2006-01-02"),
-		"Now":          time.Now().Format("2006-01-02 15:04:05"),
-		"BaseCurrency": s.Store().BaseCurrency(),
-		"Groups":       groups,
+	ctx := s.addCommonCtx(r, map[string]any{
+		"TotalValueBaseCurrency": total,
+		"Groups":                 groups,
 		"ActiveChips": map[string]bool{
 			"all":   true,
 			"today": toDate(date).Equal(today()),
@@ -614,19 +653,22 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
 	})
+	return s.templates.ExecuteTemplate(w, "positions.html", ctx)
 }
 
-func (s *Server) renderMaturingPositionsTemplate(w io.Writer, date time.Time) error {
+func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
 	positions := maturingPositionTableRows(s.Store(), date)
-	return s.templates.ExecuteTemplate(w, "positions_maturing.html", map[string]any{
-		"Date":      date.Format("2006-01-02"),
-		"Today":     time.Now().Format("2006-01-02"),
-		"Now":       time.Now().Format("2006-01-02 15:04:05"),
+	minDate, maxDate := s.Store().ValueDateRange()
+	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": positions,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
+			"today":    toDate(date).Equal(today()),
 		},
+		"MonthOptions": monthOptions(*r.URL, date, maxDate),
+		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
 	})
+	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
 }
 
 func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
@@ -735,7 +777,7 @@ func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	var buf bytes.Buffer
-	err := s.renderMaturingPositionsTemplate(&buf, date)
+	err := s.renderMaturingPositionsTemplate(&buf, r, date)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
