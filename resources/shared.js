@@ -100,26 +100,42 @@ function registerQuotesSubmit() {
 // Registers a dropdown widget. callback will be called with the
 // clicked option div as the only argument.
 function registerDropdown(id, callback) {
-    // Open the drowndown on click.
-    document.querySelector(`#${id} .combo-button`).addEventListener('click', function () {
-        this.parentNode.classList.toggle('open');
+    const dropdown = document.getElementById(id);
+    if (!dropdown) {
+        console.error("Trying to register a dropdown that does not exist:", id);
+        return;
+    }
+    const button = dropdown.querySelector(".combo-button");
+    // Make the dropdown focusable with tab.
+    dropdown.setAttribute("tabindex", "0");
+    // Open/close the dropdown when gaining/losing focus.
+    dropdown.addEventListener("focus", function () {
+        dropdown.classList.add("open");
+    });
+    dropdown.addEventListener("blur", function () {
+        dropdown.classList.remove("open");
+    });
+    // Toggle the dropdown menu when clicking the button.
+    // Use "mousedown" instead of "click" to handle the event
+    // before the dropdown loses its focus.
+    button.addEventListener("mousedown", function (event) {
+        // Prevent dropdown from losing focus:
+        event.preventDefault();
+        if (document.activeElement === dropdown) {
+            dropdown.blur();
+        } else {
+            dropdown.focus();
+        }
     });
     // Set the dropdown value on select and hide the dropdown options.
-    document.querySelectorAll(`#${id} .combo-option`).forEach(function (option) {
-        option.addEventListener('click', function () {
-            const button = document.querySelector(`#${id} .combo-button`);
-            button.textContent = this.textContent;
-            button.dataset.value = this.dataset.value;
-            document.querySelector(`#${id}`).classList.remove('open');
-            callback(this);
-        });
-    });
-
-    // Close the dropdown when clicking outside.
-    document.addEventListener('click', function (event) {
-        const dropdown = document.getElementById(id);
-        if (!dropdown.contains(event.target)) {
-            dropdown.classList.remove('open');
+    dropdown.addEventListener("click", (event) => {
+        const option = event.target;
+        if (!option.classList.contains("combo-option")) {
+            return;
         }
+        button.textContent = option.textContent;
+        button.dataset.value = option.dataset.value;
+        dropdown.classList.remove("open");
+        callback(option);
     });
 }

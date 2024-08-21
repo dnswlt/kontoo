@@ -1,20 +1,38 @@
 <div>
-    <ul class="filter-chips">
-        <li {{if .ActiveChips.all }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Date}}">All</a></li>
-        <li {{if .ActiveChips.maturing }}class="active-chip" {{end}}><a
-                href="/kontoo/positions/maturing?date={{.Date}}">Maturing</a></li>
-        <li {{if .ActiveChips.equity }}class="active-chip" {{end}}><a
-                href="/kontoo/positions/equity?date={{.Date}}">Equity</a></li>
-    </ul>
+    <div>
+        <ul class="filter-chips">
+            <li {{if .ActiveChips.all }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Date}}">All</a>
+            </li>
+            <li {{if .ActiveChips.maturing }}class="active-chip" {{end}}><a
+                    href="/kontoo/positions/maturing?date={{.Date}}">Maturing</a></li>
+            <li {{if .ActiveChips.equity }}class="active-chip" {{end}}><a
+                    href="/kontoo/positions/equity?date={{.Date}}">Equity</a></li>
+        </ul>
+    </div>
 
-    {{if .MonthOptions }}
-    <div id="months-dropdown" class="combo-box">
-        <button data-value="" class="combo-button">{{.SelectedMonth.Name}}</button>
+    {{if .YearOptions }}
+    <div id="years-dropdown" class="combo-box">
+        <button data-value="{{.YearOptions.Selected.Value}}"
+            class="combo-button">{{.YearOptions.Selected.Name}}</button>
         <div class="combo-options">
-            {{range .MonthOptions }}
+            {{range .YearOptions.Options }}
             <div class="combo-option" data-url="{{.Data.URL}}" data-value="{{.Value}}">{{.Name}}</div>
             {{end}}
         </div>
     </div>
     {{end}}
+    {{if .MonthOptions }}
+    <div id="months-dropdown" class="combo-box">
+        <button data-value="{{.MonthOptions.Selected.Value}}"
+            class="combo-button">{{.MonthOptions.Selected.Name}}</button>
+        <div class="combo-options">
+            {{range .MonthOptions.Options }}
+            <div class="combo-option" data-url="{{.Data.URL}}" data-value="{{.Value}}">{{.Name}}</div>
+            {{end}}
+        </div>
+    </div>
+    {{end}}
+    <ul class="filter-chips">
+        <li {{if .ActiveChips.today }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Today}}">Today</a></li>
+    </ul>
 </div>

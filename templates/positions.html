@@ -19,6 +19,7 @@
                 <th>Type</th>
                 <th>Currency</th>
                 <th>Market value</th>
+                <th><!-- Warnings --></th>
             </tr>
         </thead>
         <tbody>
@@ -34,6 +35,9 @@
                     {{ money .Value }}
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
                 </td>
+                <td class="tooltip">{{if gt (days .DataAge) 35}}<i class="warning-emoji"></i>{{end}}
+                    <span class="tooltiptext">Data is {{days .DataAge}} days old.</span>
+                </td>
             </tr>
             {{end}}
             <tr class="subtotal">
@@ -48,10 +52,13 @@
         </tbody>
     </table>
     <p class="footer">
-        Report date: {{.Date}} (generated {{.CurrentDate}})
+        Report date: {{.Date}} (generated {{.Now}})
     </p>
     <script>
         registerDropdown("months-dropdown", (item) => {
+            window.location.href = item.dataset.url;
+        });
+        registerDropdown("years-dropdown", (item) => {
             window.location.href = item.dataset.url;
         });
     </script>

@@ -438,10 +438,6 @@ func NewPriceHistoryCache() *PriceHistoryCache {
 	}
 }
 
-func utcDate(d time.Time) time.Time {
-	return time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
-}
-
 func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) error {
 	if start.After(end) {
 		return fmt.Errorf("start after end: %v > %v", start, end)

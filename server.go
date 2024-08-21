@@ -7,6 +7,7 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -206,6 +207,10 @@ type PositionTableRow struct {
 	// was available.
 	ValueBaseCurrency Micros
 	Notes             []string
+	// Maximum age of the data on which the Value and ValueBaseCurrency
+	// are calculated. Used to display warnings in the UI if the age is
+	// above a threshold.
+	DataAge time.Duration
 
 	PurchasePrice   Micros
 	NominalValue    Micros
@@ -278,18 +283,23 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	})
 	res := make([]*PositionTableRow, len(positions))
 	for i, p := range positions {
+		var lastUpdate Date
 		a := p.Asset
 		var notes []string
 		val := p.CalculatedValueMicros()
 		if !p.LastPriceUpdate.IsZero() {
 			notes = append(notes, fmt.Sprintf("Price date: %s", p.LastPriceUpdate))
+			lastUpdate = p.LastPriceUpdate
 		}
 		if !p.LastValueUpdate.IsZero() {
 			notes = append(notes, fmt.Sprintf("Value date: %s", p.LastValueUpdate))
+			if lastUpdate.IsZero() || p.LastValueUpdate.Before(lastUpdate.Time) {
+				lastUpdate = p.LastValueUpdate
+			}
 		}
 		bval := val
 		if a.Currency != s.BaseCurrency() {
-			rate, rdate, err := s.ExchangeRateAt(a.Currency, Date{utcDate(date)})
+			rate, rdate, err := s.ExchangeRateAt(a.Currency, toDate(date))
 			if err != nil {
 				// TODO: add error info to row
 				log.Printf("No exchange rate at %v for %s: %s", date, a.Currency, err)
@@ -297,6 +307,10 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 			} else {
 				bval = val.Frac(UnitValue, rate)
 				notes = append(notes, fmt.Sprintf("Exch. rate date: %s", rdate))
+				if lastUpdate.IsZero() || rdate.Before(lastUpdate.Time) {
+					lastUpdate = rdate
+				}
+
 			}
 		}
 		res[i] = &PositionTableRow{
@@ -307,6 +321,7 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 			Value:             val,
 			ValueBaseCurrency: bval,
 			Notes:             notes,
+			DataAge:           date.Sub(lastUpdate.Time),
 		}
 	}
 	return res
@@ -375,8 +390,8 @@ func commonFuncs() template.FuncMap {
 			}
 			return "", fmt.Errorf("no category for asset type %v", t)
 		},
-		"join": func(elems []string, sep string) string {
-			return strings.Join(elems, sep)
+		"days": func(d time.Duration) int {
+			return int(math.Round(d.Seconds() / 60 / 60 / 24))
 		},
 	}
 }
@@ -396,13 +411,13 @@ func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, s
 		tmpl = "snip_ledger_table.html"
 	}
 	return s.templates.ExecuteTemplate(w, tmpl, struct {
-		TableRows   []*LedgerEntryRow
-		Query       string
-		CurrentDate string
+		TableRows []*LedgerEntryRow
+		Query     string
+		Now       string
 	}{
-		TableRows:   rows,
-		Query:       query.raw,
-		CurrentDate: time.Now().Format("2006-01-02 15:04:05"),
+		TableRows: rows,
+		Query:     query.raw,
+		Now:       time.Now().Format("2006-01-02 15:04:05"),
 	})
 }
 
@@ -425,12 +440,12 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
 	}
 	slices.Sort(quoteCurrencies)
 	return s.templates.ExecuteTemplate(w, "add_entry.html", struct {
-		CurrentDate     string
+		Today           string
 		Assets          []*Asset
 		BaseCurrency    Currency
 		QuoteCurrencies []Currency
 	}{
-		CurrentDate:     time.Now().Format("2006-01-02"),
+		Today:           time.Now().Format("2006-01-02"),
 		Assets:          assets,
 		BaseCurrency:    store.BaseCurrency(),
 		QuoteCurrencies: quoteCurrencies,
@@ -447,11 +462,11 @@ func (s *Server) renderAddAssetTemplate(w io.Writer) error {
 		assetTypes = append(assetTypes, a.String())
 	}
 	return s.templates.ExecuteTemplate(w, "add_asset.html", struct {
-		CurrentDate string
-		AssetTypes  []string
+		Today      string
+		AssetTypes []string
 	}{
-		CurrentDate: time.Now().Format("2006-01-02"),
-		AssetTypes:  assetTypes,
+		Today:      time.Now().Format("2006-01-02"),
+		AssetTypes: assetTypes,
 	})
 }
 
@@ -513,43 +528,71 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 	})
 }
 
+type DropdownOptions struct {
+	Selected *NamedOption
+	Options  []NamedOption
+}
 type NamedOption struct {
 	Name  string
 	Value any
 	Data  map[string]any
 }
 
-func monthOptions(url *url.URL, date time.Time, maxDate Date) (selected NamedOption, options []NamedOption) {
+func yearOptions(url url.URL, date time.Time, minDate, maxDate Date) DropdownOptions {
+	res := DropdownOptions{
+		Selected: &NamedOption{
+			Name:  fmt.Sprintf("%d", date.Year()),
+			Value: date.Year(),
+		},
+	}
+	for y := maxDate.Year(); y >= minDate.Year(); y-- {
+		d := DateVal(y, date.Month(), date.Day())
+		q := url.Query()
+		q.Set("date", d.Format("2006-01-02"))
+		url.RawQuery = q.Encode()
+		res.Options = append(res.Options, NamedOption{
+			Name:  fmt.Sprintf("%d", y),
+			Value: y,
+			Data: map[string]any{
+				"URL": url.String(),
+			},
+		})
+	}
+	return res
+}
+
+func monthOptions(url url.URL, date time.Time, maxDate Date) DropdownOptions {
 	months := []string{
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 	}
-	selected = NamedOption{
-		Name:  months[date.Month()-1],
-		Value: int(date.Month()),
+	res := DropdownOptions{
+		Selected: &NamedOption{
+			Name:  months[date.Month()-1],
+			Value: int(date.Month()),
+		},
 	}
 	if date.Year() > maxDate.Year() {
-		return
+		return res // No options if no data
 	}
 	maxMonth := 12
 	if maxDate.Year() == date.Year() {
 		maxMonth = int(maxDate.Month())
 	}
-	u := *url
 	for i := 0; i < maxMonth; i++ {
 		d := DateVal(date.Year(), time.Month(i+1), 1).AddDate(0, 1, -1)
-		q := u.Query()
+		q := url.Query()
 		q.Set("date", d.Format("2006-01-02"))
-		u.RawQuery = q.Encode()
-		options = append(options, NamedOption{
+		url.RawQuery = q.Encode()
+		res.Options = append(res.Options, NamedOption{
 			Name:  months[i],
 			Value: i + 1,
 			Data: map[string]any{
-				"URL": u.String(),
+				"URL": url.String(),
 			},
 		})
 	}
-	return
+	return res
 }
 
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
@@ -557,26 +600,29 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time
 	groups := positionTableRowGroups(positions, func(r *PositionTableRow) string {
 		return assetTypeInfos[r.Type].category
 	})
-	selected, options := monthOptions(r.URL, date, s.Store().MaxValueDate())
+	minDate, maxDate := s.Store().ValueDateRange()
 	return s.templates.ExecuteTemplate(w, "positions.html", map[string]any{
 		"Date":         date.Format("2006-01-02"),
-		"CurrentDate":  time.Now().Format("2006-01-02 15:04:05"),
+		"Today":        time.Now().Format("2006-01-02"),
+		"Now":          time.Now().Format("2006-01-02 15:04:05"),
 		"BaseCurrency": s.Store().BaseCurrency(),
 		"Groups":       groups,
 		"ActiveChips": map[string]bool{
-			"all": true,
+			"all":   true,
+			"today": toDate(date).Equal(today()),
 		},
-		"SelectedMonth": selected,
-		"MonthOptions":  options,
+		"MonthOptions": monthOptions(*r.URL, date, maxDate),
+		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
 	})
 }
 
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, date time.Time) error {
 	positions := maturingPositionTableRows(s.Store(), date)
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", map[string]any{
-		"Date":        date.Format("2006-01-02"),
-		"CurrentDate": time.Now().Format("2006-01-02 15:04:05"),
-		"TableRows":   positions,
+		"Date":      date.Format("2006-01-02"),
+		"Today":     time.Now().Format("2006-01-02"),
+		"Now":       time.Now().Format("2006-01-02 15:04:05"),
+		"TableRows": positions,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
 		},
@@ -629,15 +675,15 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	d := r.Form.Get("d")
+	d := r.Form.Get("date")
 	var date time.Time
 	if d == "" {
 		date = time.Now()
 	} else {
 		var err error
-		date, err = time.Parse("2006-01-02", r.Form.Get("d"))
+		date, err = time.Parse("2006-01-02", d)
 		if err != nil {
-			http.Error(w, "invalid value for d= parameter", http.StatusBadRequest)
+			http.Error(w, "invalid value for date= parameter", http.StatusBadRequest)
 			return
 		}
 	}

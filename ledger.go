@@ -19,6 +19,18 @@ func DateVal(year int, month time.Month, day int) Date {
 func NewDate(year int, month time.Month, day int) *Date {
 	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
+func today() Date {
+	y, m, d := time.Now().Date()
+	return DateVal(y, m, d)
+}
+func toDate(t time.Time) Date {
+	y, m, d := t.Date()
+	return DateVal(y, m, d)
+}
+func utcDate(date time.Time) time.Time {
+	y, m, d := date.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
 
 func (d *Date) UnmarshalJSON(data []byte) error {
 	s := strings.Trim(string(data), "\"")
@@ -50,14 +62,16 @@ func (s *Store) BaseCurrency() Currency {
 	return s.L.GetHeader().BaseCurrency
 }
 
-func (s *Store) MaxValueDate() Date {
-	var max Date
+func (s *Store) ValueDateRange() (min, max Date) {
 	for _, e := range s.L.Entries {
 		if e.ValueDate.After(max.Time) {
 			max = e.ValueDate
 		}
+		if min.IsZero() || e.ValueDate.Before(min.Time) {
+			min = e.ValueDate
+		}
 	}
-	return max
+	return
 }
 
 // Always returns a non-nil value. Useful to avoid nil checks for missing headers all around.
