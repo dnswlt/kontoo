@@ -1,3 +1,22 @@
+:root {
+    --gray-active: #aaa;
+    --gray-passive: #ddd;
+    --gray-text: #6f6f6f;
+    --red-foreground: #a52a2a;
+    --red-background: #ffe6e6;
+    --green-foreground: #008000;
+    --green-background: #e6ffe6;
+    --yellow-foreground: #ffae42;
+    --yellow-background: #fff4e5;
+
+    --light-foreground: black;
+    --light-background: white;
+
+    --dark-background: #333;
+    --dark-foreground: white;
+    --dark-background-active: #575757;
+}
+
 body {
     font-family: sans-serif;
     font-size: 11pt;
@@ -25,7 +44,7 @@ th {
 }
 
 tr.subtotal {
-    background-color: #ddd;
+    background-color: var(--gray-passive);
 }
 
 tr.total td {
@@ -42,16 +61,11 @@ i.warning-emoji::before {
 :focus {
     outline: none;    
 }
-.warning {
-    color: #a52a2a;
-    background-color: #ffe6e6;
-    /* color: #da2424; */
-}
 
 .footer {
     font-style: italic;
     font-size: 10pt;
-    color: #6f6f6f;
+    color: var(--gray-text);
 }
 
 /* Links */
@@ -104,18 +118,18 @@ textarea {
 }
 
 .callout-err {
-    border-color: #a52a2a;
-    background-color: #ffe6e6;
+    border-color: var(--red-foreground);
+    background-color: var(--red-background);
 }
 
 .callout-ok {
-    border-color: #008000;
-    background-color: #e6ffe6;
+    border-color: var(--green-foreground);
+    background-color: var(--green-background);
 }
 
 .callout-warn {
-    border-color: #ffae42;
-    background-color: #fff4e5;
+    border-color: var(--yellow-foreground);
+    background-color: var(--yellow-background);
 }
 
 /* Visibility */
@@ -129,7 +143,7 @@ textarea {
     list-style-type: none;
     display: flex;
     /* justify-content: space-around; Distribute items evenly */
-    background-color: #333;
+    background-color: var(--dark-background);
     padding: 0px;
     margin: 0px;
 }
@@ -139,7 +153,7 @@ textarea {
 }
 
 #navbar a {
-    color: white;
+    color: var(--dark-foreground);
     text-decoration: none;
     padding: 14px 14px;
     /* Padding for clickable area */
@@ -150,7 +164,7 @@ textarea {
 }
 
 #navbar a:hover {
-    background-color: #575757;
+    background-color: var(--dark-background-active);
 }
 
 /* Upload drag&drop area */
@@ -184,8 +198,8 @@ textarea {
 .tooltip .tooltiptext {
     visibility: hidden;
     width: 13em;
-    background-color: #575757;
-    color: #fff;
+    background-color: var(--dark-background-active);
+    color: var(--dark-foreground);
     text-align: left;
     border-radius: 6px;
     padding: 5px;
@@ -220,12 +234,12 @@ ul.filter-chips {
 ul.filter-chips li {
     display: inline-block;
     margin: 0 0.5ex 0 0;
-    background-color: #ddd;
+    background-color: var(--gray-passive);
     border-radius: 20px;
 }
 
 ul.filter-chips li.active-chip {
-    background-color: #aaa;
+    background-color: var(--gray-active);
 }
 
 ul.filter-chips a {
@@ -247,8 +261,8 @@ ul.filter-chips a {
 .combo-button {
     width: 100%;
     padding: 6px 12px;
-    background-color: #aaa;
-    color: black;
+    background-color: var(--gray-active);
+    color: var(--light-foreground);
     border: none;
     border-radius: 20px;
     cursor: pointer;
@@ -260,9 +274,9 @@ ul.filter-chips a {
     display: none;
     position: absolute;
     width: 100%;
-    border: 1px solid #aaa;
+    border: 1px solid var(--gray-active);
     border-radius: 4px;
-    background-color: white;
+    background-color: var(--light-background);
     z-index: 1;
 }
 
@@ -272,7 +286,7 @@ ul.filter-chips a {
 }
 
 .combo-option:hover {
-    background-color: #ddd;
+    background-color: var(--gray-passive);
 }
 
 .combo-box.open .combo-options {

@@ -68,13 +68,26 @@ func TestDateCompare(t *testing.T) {
 	}
 }
 
-func TestAssetTypeMap(t *testing.T) {
+func TestAssetTypeInfos(t *testing.T) {
+	if len(assetTypeInfos) != len(AssetTypeValues()) {
+		t.Fatal("assetTypeInfos has wrong length")
+	}
 	for _, v := range AssetTypeValues() {
 		if v == UnspecifiedAssetType {
 			continue
 		}
-		if _, ok := assetTypeInfos[v]; !ok {
-			t.Fatalf("Missing entry in assetTypeInfos: %v", v)
+		info := assetTypeInfos[v]
+		if v != info.typ {
+			t.Errorf("Wrong typ in assetTypeInfos for %v: %v", v, info.typ)
+		}
+		if info.displayName == "" {
+			t.Errorf("Missing displayName in assetTypeInfos for %v", v)
+		}
+		if info.category == "" {
+			t.Errorf("Missing category in assetTypeInfos for %v", v)
+		}
+		if len(info.validEntryTypes) == 0 {
+			t.Errorf("Missing validEntryTypes in assetTypeInfos for %v", v)
 		}
 	}
 }

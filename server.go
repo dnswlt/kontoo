@@ -7,7 +7,6 @@ import (
 	"html/template"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -138,8 +137,13 @@ type LedgerEntryRow struct {
 func (e *LedgerEntryRow) ValueDate() Date {
 	return e.E.ValueDate
 }
+func (e *LedgerEntryRow) Created() time.Time {
+	return e.E.Created
+}
+
 func (e *LedgerEntryRow) EntryType() string {
 	return e.E.Type.String()
+
 }
 func (e *LedgerEntryRow) HasAsset() bool {
 	return e.A != nil
@@ -348,58 +352,13 @@ func positionTableRowGroups(rows []*PositionTableRow, groupKey groupingFunc) []*
 	return res
 }
 
-func commonFuncs() template.FuncMap {
-	return template.FuncMap{
-		"nonzero": func(m Micros) bool {
-			return m != 0
-		},
-		"money": func(m Micros) string {
-			return m.Format("()'.2")
-		},
-		"price": func(m Micros) string {
-			return m.Format("'.3")
-		},
-		"quantity": func(m Micros) string {
-			return m.Format("'.0")
-		},
-		"percent": func(m Micros) string {
-			return m.Format(".2%")
-		},
-		"yyyymmdd": func(t any) (string, error) {
-			switch d := t.(type) {
-			case time.Time:
-				return d.Format("2006-01-02"), nil
-			case Date:
-				return d.Time.Format("2006-01-02"), nil
-			}
-			return "", fmt.Errorf("yyyymmdd called with invalid type %t", t)
-		},
-		"assetType": func(t AssetType) (string, error) {
-			if a, ok := assetTypeInfos[t]; ok {
-				return a.displayName, nil
-			}
-			return "", fmt.Errorf("no display name for asset type %v", t)
-		},
-		"assetCategory": func(t AssetType) (string, error) {
-			if a, ok := assetTypeInfos[t]; ok {
-				return a.category, nil
-			}
-			return "", fmt.Errorf("no category for asset type %v", t)
-		},
-		"days": func(d time.Duration) int {
-			return int(math.Round(d.Seconds() / 60 / 60 / 24))
-		},
-		"setp": func(rawURL string, param, value string) (string, error) {
-			u, err := url.Parse(rawURL)
-			if err != nil {
-				return "", err
-			}
-			q := u.Query()
-			q.Set(param, value)
-			u.RawQuery = q.Encode()
-			return u.String(), nil
-		},
+func newURL(path string, queryParams url.Values) *url.URL {
+	u, err := url.Parse(path)
+	if err != nil {
+		panic("failed to parse URL: " + err.Error())
 	}
+	u.RawQuery = queryParams.Encode()
+	return u
 }
 
 func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, snippet bool) error {
@@ -427,7 +386,7 @@ func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, s
 	})
 }
 
-func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
+func (s *Server) renderAddEntryTemplate(w io.Writer, date Date, store *Store) error {
 	assets := make([]*Asset, len(store.L.Assets))
 	copy(assets, store.L.Assets)
 	slices.SortFunc(assets, func(a, b *Asset) int {
@@ -445,16 +404,13 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, store *Store) error {
 		}
 	}
 	slices.Sort(quoteCurrencies)
-	return s.templates.ExecuteTemplate(w, "add_entry.html", struct {
-		Today           string
-		Assets          []*Asset
-		BaseCurrency    Currency
-		QuoteCurrencies []Currency
-	}{
-		Today:           time.Now().Format("2006-01-02"),
-		Assets:          assets,
-		BaseCurrency:    store.BaseCurrency(),
-		QuoteCurrencies: quoteCurrencies,
+	return s.templates.ExecuteTemplate(w, "add_entry.html", map[string]any{
+		"Today":           time.Now().Format("2006-01-02"),
+		"Date":            date,
+		"Assets":          assets,
+		"BaseCurrency":    store.BaseCurrency(),
+		"QuoteCurrencies": quoteCurrencies,
+		"EntryTypes":      EntryTypeValues()[1:],
 	})
 }
 
@@ -534,82 +490,6 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 	})
 }
 
-type DropdownOptions struct {
-	Selected *NamedOption
-	Options  []NamedOption
-}
-type NamedOption struct {
-	Name  string
-	Value any
-	Data  map[string]any
-}
-
-func yearOptions(url url.URL, date time.Time, minDate, maxDate Date) DropdownOptions {
-	res := DropdownOptions{
-		Selected: &NamedOption{
-			Name:  fmt.Sprintf("%d", date.Year()),
-			Value: date.Year(),
-		},
-	}
-	for y := maxDate.Year(); y >= minDate.Year(); y-- {
-		d := DateVal(y, date.Month(), date.Day())
-		q := url.Query()
-		q.Set("date", d.Format("2006-01-02"))
-		url.RawQuery = q.Encode()
-		res.Options = append(res.Options, NamedOption{
-			Name:  fmt.Sprintf("%d", y),
-			Value: y,
-			Data: map[string]any{
-				"URL": url.String(),
-			},
-		})
-	}
-	return res
-}
-
-func monthOptions(url url.URL, date time.Time, maxDate Date) DropdownOptions {
-	months := []string{
-		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-	}
-	res := DropdownOptions{
-		Selected: &NamedOption{
-			Name:  months[date.Month()-1],
-			Value: int(date.Month()),
-		},
-	}
-	if date.Year() > maxDate.Year() {
-		return res // No options if no data
-	}
-	maxMonth := 12
-	if maxDate.Year() == date.Year() {
-		maxMonth = int(maxDate.Month())
-	}
-	for i := 0; i < maxMonth; i++ {
-		d := DateVal(date.Year(), time.Month(i+1), 1).AddDate(0, 1, -1)
-		q := url.Query()
-		q.Set("date", d.Format("2006-01-02"))
-		url.RawQuery = q.Encode()
-		res.Options = append(res.Options, NamedOption{
-			Name:  months[i],
-			Value: i + 1,
-			Data: map[string]any{
-				"URL": url.String(),
-			},
-		})
-	}
-	return res
-}
-
-func newURL(path string, queryParams url.Values) *url.URL {
-	u, err := url.Parse(path)
-	if err != nil {
-		panic("failed to parse URL: " + err.Error())
-	}
-	u.RawQuery = queryParams.Encode()
-	return u
-}
-
 func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
 	ctx["Today"] = time.Now().Format("2006-01-02")
 	ctx["Now"] = time.Now().Format("2006-01-02 15:04:05")
@@ -627,7 +507,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		"positions": newURL("/kontoo/positions", ctxQ).String(),
 		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
 		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
-		"uploadCSV": newURL("/kontoo/quotes", ctxQ).String(),
+		"uploadCSV": newURL("/kontoo/csv/upload", ctxQ).String(),
 		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
 	}
 	return ctx
@@ -693,8 +573,13 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
+	date, err := dateParam(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid date= parameter: %s", err), http.StatusBadRequest)
+		return
+	}
 	var buf bytes.Buffer
-	if err := s.renderAddEntryTemplate(&buf, s.Store()); err != nil {
+	if err := s.renderAddEntryTemplate(&buf, date, s.Store()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -713,11 +598,22 @@ func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	date, err := dateParam(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid date= parameter: %q", err), http.StatusBadRequest)
 		return
 	}
-	d := r.Form.Get("date")
+	var buf bytes.Buffer
+	if err := s.renderQuotesTemplate(&buf, date.Time); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func dateParam(r *http.Request) (Date, error) {
+	d := r.URL.Query().Get("date")
 	var date time.Time
 	if d == "" {
 		date = time.Now()
@@ -725,17 +621,10 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 		var err error
 		date, err = time.Parse("2006-01-02", d)
 		if err != nil {
-			http.Error(w, "invalid value for date= parameter", http.StatusBadRequest)
-			return
+			return Date{}, fmt.Errorf("invalid value for date= parameter: %q", d)
 		}
 	}
-	var buf bytes.Buffer
-	if err := s.renderQuotesTemplate(&buf, date); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(buf.Bytes())
+	return Date{date}, nil
 }
 
 func ensureDateParam(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
@@ -923,7 +812,10 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	}
 	e, err := ParseLedgerEntry(args)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Cannot parse ledger: %v", err), http.StatusBadRequest)
+		s.jsonResponse(w, AddLedgerEntryResponse{
+			Status: StatusInvalidArgument,
+			Error:  err.Error(),
+		})
 		return
 	}
 	err = s.Store().Add(e)

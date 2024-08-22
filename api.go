@@ -2,6 +2,7 @@ package kontoo
 
 import (
 	"regexp"
+	"slices"
 	"time"
 )
 
@@ -37,118 +38,148 @@ const (
 type AssetCategory string
 
 type assetTypeInfo struct {
-	typ         AssetType
-	category    string
-	displayName string
+	typ             AssetType
+	category        string
+	displayName     string
+	validEntryTypes []EntryType
+}
+
+func (i *assetTypeInfo) valid(t EntryType) bool {
+	return slices.Contains(i.validEntryTypes, t)
 }
 
 var (
-	assetTypeInfoList = []assetTypeInfo{
+	// For fast info lookup. Each AssetType's info is at the index
+	// of its own int value. Populated in init() from _assetTypeInfosList.
+	assetTypeInfos []assetTypeInfo
+
+	_assetTypeInfosList = []assetTypeInfo{
 		{
-			typ:         Stock,
-			category:    "Equity",
-			displayName: "Stock",
+			typ:             Stock,
+			category:        "Equity",
+			displayName:     "Stock",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
-			typ:         StockExchangeTradedFund,
-			category:    "Equity",
-			displayName: "ETF",
+			typ:             StockExchangeTradedFund,
+			category:        "Equity",
+			displayName:     "ETF",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
-			typ:         StockMutualFund,
-			category:    "Equity",
-			displayName: "Mutual fund",
+			typ:             StockMutualFund,
+			category:        "Equity",
+			displayName:     "Mutual fund",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
-			typ:         BondExchangeTradedFund,
-			category:    "Fixed-income",
-			displayName: "Bond ETF",
+			typ:             BondExchangeTradedFund,
+			category:        "Fixed-income",
+			displayName:     "Bond ETF",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment},
 		},
 		{
-			typ:         BondMutualFund,
-			category:    "Fixed-income",
-			displayName: "Bond mutual fund",
+			typ:             BondMutualFund,
+			category:        "Fixed-income",
+			displayName:     "Bond mutual fund",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment},
 		},
 		{
-			typ:         CorporateBond,
-			category:    "Fixed-income",
-			displayName: "Corp bond",
+			typ:             CorporateBond,
+			category:        "Fixed-income",
+			displayName:     "Corp bond",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment, AssetMaturity},
 		},
 		{
-			typ:         GovernmentBond,
-			category:    "Fixed-income",
-			displayName: "Gov bond",
+			typ:             GovernmentBond,
+			category:        "Fixed-income",
+			displayName:     "Gov bond",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment, AssetMaturity},
 		},
 		{
-			typ:         FixedDepositAccount,
-			category:    "Fixed-income",
-			displayName: "Fixed deposit",
+			typ:             FixedDepositAccount,
+			category:        "Fixed-income",
+			displayName:     "Fixed deposit",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment, AssetMaturity},
 		},
 		{
-			typ:         MoneyMarketAccount,
-			category:    "Cash equivalents",
-			displayName: "Money market account",
+			typ:             MoneyMarketAccount,
+			category:        "Cash equivalents",
+			displayName:     "Money market account",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:         SavingsAccount,
-			category:    "Cash equivalents",
-			displayName: "Savings account",
+			typ:             SavingsAccount,
+			category:        "Cash equivalents",
+			displayName:     "Savings account",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:         CheckingAccount,
-			category:    "Cash equivalents",
-			displayName: "Checking account",
+			typ:             CheckingAccount,
+			category:        "Cash equivalents",
+			displayName:     "Checking account",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:         BrokerageAccount,
-			category:    "Cash equivalents",
-			displayName: "Brokerage account",
+			typ:             BrokerageAccount,
+			category:        "Cash equivalents",
+			displayName:     "Brokerage account",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:         PensionAccount,
-			category:    "Retirement savings",
-			displayName: "Pension account",
+			typ:             PensionAccount,
+			category:        "Retirement savings",
+			displayName:     "Pension account",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:         Commodity,
-			category:    "Commodities",
-			displayName: "Commodity",
+			typ:             Commodity,
+			category:        "Commodities",
+			displayName:     "Commodity",
+			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding},
 		},
 		{
-			typ:         Cash,
-			category:    "Cash",
-			displayName: "Cash",
+			typ:             Cash,
+			category:        "Cash",
+			displayName:     "Cash",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:         TaxLiability,
-			category:    "Taxes",
-			displayName: "Tax liability",
+			typ:             TaxLiability,
+			category:        "Taxes",
+			displayName:     "Tax liability",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:         TaxPayment,
-			category:    "Taxes",
-			displayName: "Tax payment",
+			typ:             TaxPayment,
+			category:        "Taxes",
+			displayName:     "Tax payment",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:         CreditCardDebt,
-			category:    "Debt",
-			displayName: "Credit card",
+			typ:             CreditCardDebt,
+			category:        "Debt",
+			displayName:     "Credit card",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:         OtherDebt,
-			category:    "Debt",
-			displayName: "Other debt",
+			typ:             OtherDebt,
+			category:        "Debt",
+			displayName:     "Other debt",
+			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 	}
-	// Map for fast lookup, populated in init():
-	assetTypeInfos = make(map[AssetType]*assetTypeInfo)
 )
 
 func init() {
-	for i := range assetTypeInfoList {
-		a := &assetTypeInfoList[i]
+	assetTypeInfos = make([]assetTypeInfo, len(AssetTypeValues()))
+	for _, a := range _assetTypeInfosList {
 		assetTypeInfos[a.typ] = a
 	}
+}
+
+func (t AssetType) ValidEntryTypes() []EntryType {
+	return assetTypeInfos[t].validEntryTypes
 }
 
 type Asset struct {

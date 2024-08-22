@@ -300,7 +300,10 @@ func (s *Store) Add(e *LedgerEntry) error {
 	// Must be an entry that refers to an asset.
 	a, found := s.LookupAsset(e)
 	if !found {
-		return fmt.Errorf("no asset found: {AssetID:%q, AssetRef:%q})", e.AssetID, e.AssetRef)
+		return fmt.Errorf("no asset found with ID=%q or ref=%q", e.AssetID, e.AssetRef)
+	}
+	if !assetTypeInfos[a.Type].valid(e.Type) {
+		return fmt.Errorf("%v is not a valid entry type for an asset of type %v", e.Type, a.Type)
 	}
 	if e.Currency != "" && e.Currency != a.Currency {
 		return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)

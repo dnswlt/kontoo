@@ -364,7 +364,7 @@ func (s *argSpec) parse(args []string) error {
 		if fullName, ok := s.matchArg(name); ok {
 			err := s.args[fullName](args)
 			if err != nil {
-				return err
+				return fmt.Errorf("invalid argument for %s: %v", fullName, err)
 			}
 		} else {
 			return fmt.Errorf("invalid argument: %q", name)

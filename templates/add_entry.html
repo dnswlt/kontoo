@@ -10,33 +10,12 @@
     <h1>Add entry</h1>
     <div id="status-callout" class="callout hidden"></div>
     <form class="columnar" id="entry-form" method="post" action="/kontoo/entries">
-        <div class="field">
+        <div id="ValueDateField" class="field">
             <div class="field-label">
                 <label for="ValueDate">Value date</label>
             </div>
             <div class="field-value">
-                <input id="ValueDate" name="ValueDate" type="date" value="{{.Today}}" required>
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="Type">Type</label>
-            </div>
-            <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList" placeholder="AssetPurchase">
-                <datalist id="TypeList">
-                    <option value="AssetPurchase">
-                    <option value="AssetSale">
-                    <option value="AssetPrice">
-                    <option value="AssetHolding">
-                    <option value="AccountCredit">
-                    <option value="AccountDebit">
-                    <option value="AccountBalance">
-                    <option value="AssetMaturity">
-                    <option value="DividendPayment">
-                    <option value="InterestPayment">
-                    <option value="ExchangeRate">
-                </datalist>
+                <input id="ValueDate" name="ValueDate" type="date" value="{{.Date}}" required>
             </div>
         </div>
         <div id="AssetIDField" class="field">
@@ -47,13 +26,26 @@
                 <input id="AssetID" type="text" name="AssetID" list="AssetList">
                 <datalist id="AssetList">
                     {{range .Assets}}
-                    <option value="{{.ID}}">{{.Name}}</option>
+                    <option data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </datalist>
             </div>
         </div>
         <div id="AssetNameField" class="field">
             <div class="field-value" id="AssetName">&nbsp;</div>
+        </div>
+        <div id="TypeField" class="field">
+            <div class="field-label">
+                <label for="Type">Type</label>
+            </div>
+            <div class="field-value">
+                <input id="Type" type="text" name="Type" list="TypeList">
+                <datalist id="TypeList">
+                    {{range .EntryTypes}}
+                    <option value="{{.}}"></option>
+                    {{end}}
+                </datalist>
+            </div>
         </div>
         <div id="QuoteCurrencyField" class="field hidden">
             {{if .QuoteCurrencies }}
@@ -76,7 +68,7 @@
                 <label for="Value">Value</label>
             </div>
             <div class="field-value">
-                <input id="Value" name="Value" type="text" pattern="[+-]?\d+(\.\d+)?">
+                <input id="Value" name="Value" type="text" pattern="[\+\-]?[0-9]+(\.[0-9]+)?">
             </div>
         </div>
         <div id="QuantityField" class="field">
@@ -84,7 +76,7 @@
                 <label for="Quantity">Quantity / Nominal value</label>
             </div>
             <div class="field-value">
-                <input id="Quantity" name="Quantity" type="text" pattern="\d+(\.\d+)?">
+                <input id="Quantity" name="Quantity" type="text" pattern="[0-9]+(\.[0-9]+)?">
             </div>
         </div>
         <div id="PriceField" class="field">
@@ -92,7 +84,7 @@
                 <label for="Price">Price</label>
             </div>
             <div class="field-value">
-                <input id="Price" name="Price" type="text" pattern="\d+(\.\d+)?%?">
+                <input id="Price" name="Price" type="text" pattern="[0-9]+(\.[0-9]+)?%?">
             </div>
         </div>
         <div id="CostField" class="field">
@@ -100,7 +92,7 @@
                 <label for="Cost">Cost</label>
             </div>
             <div class="field-value">
-                <input id="Cost" name="Cost" type="text" pattern="\d+(\.\d+)?">
+                <input id="Cost" name="Cost" type="text" pattern="[0-9]+(\.[0-9]+)?">
             </div>
         </div>
         <div id="CommentField" class="field">
@@ -129,9 +121,6 @@
             const formData = new FormData(this);
             const clickedButton = event.submitter;
             formData.append(clickedButton.name, clickedButton.value);
-            if (!formData.get("Type")) {
-                formData.set("Type", "AssetPurchase");
-            }
             try {
                 const response = await fetch("/kontoo/entries", {
                     method: "POST",
@@ -153,8 +142,27 @@
             }
         });
         document.querySelector("#AssetID").addEventListener("change", function (event) {
-            const assetId = document.querySelector("#AssetID").value;
-            setAssetName(assetId);
+            const assetId = event.target.value;
+            const assets = document.querySelectorAll("#AssetList option");
+            let asset = null;
+            for (const a of assets) {
+                if (a.value === assetId) {
+                    asset = a;
+                    break;
+                }
+            }
+            if (asset == null) {
+                // Unknown asset: enable all types
+                document.querySelectorAll("#TypeList option").forEach((opt) => {
+                    opt.disabled = false
+                });
+                return; 
+            }
+            document.querySelector("#AssetName").textContent = asset.textContent;
+            const entryTypes = asset.dataset.entryTypes.split(" ");
+            document.querySelectorAll("#TypeList option").forEach((opt) => {
+                opt.disabled = !entryTypes.includes(opt.value);
+            });
         });
         document.querySelector("#Type").addEventListener("keydown", function (event) {
             if (event.key === "Backspace") {
@@ -166,7 +174,7 @@
             const typ = event.target.value;
             if (typ === "ExchangeRate") {
                 showFields(["QuoteCurrency", "Price"]);
-            } else if (typ === "AccountBalance") {
+            } else if (typ === "AccountBalance" || typ === "AccountDebit" || typ === "AccountCredit") {
                 showFields(["AssetID", "AssetName", "Value"]);
             } else if (typ === "AssetHolding") {
                 showFields(["AssetID", "AssetName", "Value", "Quantity", "Price"]);
@@ -189,18 +197,6 @@
                     document.querySelector(`#${fieldName}Field`).classList.add("hidden");
                 }
             }
-        }
-        function setAssetName(assetId) {
-            const assets = document.querySelectorAll("#AssetList option");
-            const assetName = document.querySelector("#AssetName");
-            let name = "";
-            for (const a of assets) {
-                if (a.value === assetId) {
-                    name = a.textContent;
-                    break;
-                }
-            }
-            assetName.textContent = name;
         }
     </script>
 </body>
