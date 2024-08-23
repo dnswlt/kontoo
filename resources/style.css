@@ -11,10 +11,12 @@
 
     --light-foreground: black;
     --light-background: white;
+    --light-border: #ccc;
 
     --dark-background: #333;
     --dark-foreground: white;
     --dark-background-active: #575757;
+    --dark-border: black;
 }
 
 body {
@@ -59,7 +61,7 @@ i.warning-emoji::before {
 }
 
 :focus {
-    outline: none;    
+    outline: none;
 }
 
 .footer {
@@ -78,9 +80,14 @@ a.plain {
 
 /* Forms */
 
+div.field {
+    width: 16em;
+}
+
 .field-label {
     font-weight: bold;
-    font-size: 90%;
+    /* font-size: 90%; */
+    margin-bottom: 4px;
 }
 
 form.columnar {
@@ -89,7 +96,7 @@ form.columnar {
 }
 
 .field-value {
-    width: 16em;
+    width: 100%;
     margin-bottom: 1ex;
 }
 
@@ -99,8 +106,54 @@ form.columnar {
     width: 100%;
 }
 
-textarea {
-    font-family: sans-serif;
+.field-value textarea {
+    font-size: inherit;
+    resize: vertical;
+    padding: 9px;
+    border: 1px solid var(--light-border);
+    border-radius: 5px;
+    box-sizing: border-box;
+    font-family: inherit;
+}
+
+.field-value input[type="text"] {
+    padding: 9px;
+    border: 1px solid var(--light-border);
+    border-radius: 5px;
+    font-size: inherit;
+    box-sizing: border-box;
+    /* Ensures padding and borders don't affect the total width */
+    outline: none;
+    /* Removes the default outline */
+    transition: border-color 0.3s ease;
+    /* Adds a smooth transition effect */
+}
+
+input[type="text"]:focus {
+    border-color: var(--dark-border);
+    /* Changes the border color on focus */
+}
+
+input[type="submit"] {
+    padding: 12px 20px;
+    background-color: var(--gray-passive);
+    border: none;
+    border-radius: 5px;
+    font-size: inherit;
+    cursor: pointer;
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    /* Smooth background and transform transitions */
+}
+
+input[type="submit"]:hover {
+    background-color: var(--gray-active);
+}
+
+/* Container for right-aligned buttons. */
+div.button-field {
+    width: 16em;
+    display: flex;
+    justify-content: flex-end;
 }
 
 .filter {
@@ -171,7 +224,7 @@ textarea {
 #upload-drop-area {
     width: 300px;
     height: 200px;
-    border: 2px dashed #ccc;
+    border: 2px dashed var(--light-border);
     border-radius: 10px;
     display: flex;
     align-items: center;

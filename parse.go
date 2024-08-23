@@ -60,6 +60,11 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 	if l == 0 {
 		return fmt.Errorf("cannot parse empty string as micros")
 	}
+	percent := false
+	if decimal[l-1] == '%' {
+		percent = true
+		l--
+	}
 	pos := 0
 	sign := int64(1)
 	if decimal[pos] == '-' {
@@ -94,7 +99,7 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 	fracVal := 0
 	if fracStart < l {
 		var err error
-		fracVal, err = strconv.Atoi(decimal[fracStart:])
+		fracVal, err = strconv.Atoi(decimal[fracStart:l])
 		if err != nil {
 			return fmt.Errorf("failed to parse fractional part: %w", err)
 		}
@@ -119,6 +124,9 @@ func ParseDecimalAsMicros(decimal string, m *Micros) error {
 		}
 	}
 	*m = Micros(sign * (intVal*UnitValue + int64(fracVal)))
+	if percent {
+		*m = m.Mul(10 * Millis)
+	}
 	return nil
 }
 

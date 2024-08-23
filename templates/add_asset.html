@@ -3,6 +3,8 @@
 
 <head>
     {{template "head_common.html"}}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 
 <body>
@@ -15,7 +17,7 @@
                 <label for="Type">Type</label>
             </div>
             <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList" placeholder="Stock">
+                <input id="Type" type="text" name="Type" list="TypeList">
                 <datalist id="TypeList">
                     {{range .AssetTypes}}
                     <option value="{{.}}"></option>
@@ -28,7 +30,7 @@
                 <label for="Currency">Currency</label>
             </div>
             <div class="field-value">
-                <input id="Currency" name="Currency" type="text" pattern="[A-Z]{3}">
+                <input id="Currency" name="Currency" type="text" pattern="[A-Z]{3}" required>
             </div>
         </div>
         <div class="field">
@@ -36,7 +38,7 @@
                 <label for="Name">Name</label>
             </div>
             <div class="field-value">
-                <input id="Name" name="Name" type="text">
+                <input id="Name" name="Name" type="text" required>
             </div>
         </div>
         <div class="field">
@@ -52,7 +54,7 @@
                 <label for="IssueDate">Issue date</label>
             </div>
             <div class="field-value">
-                <input id="IssueDate" name="IssueDate" type="date">
+                <input id="IssueDate" name="IssueDate">
             </div>
         </div>
         <div class="field">
@@ -60,7 +62,7 @@
                 <label for="MaturityDate">Maturity date</label>
             </div>
             <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate" type="date">
+                <input id="MaturityDate" name="MaturityDate">
             </div>
         </div>
         <div class="field">
@@ -136,12 +138,14 @@
                 <textarea rows="3" id="Comment" name="Comment"></textarea>
             </div>
         </div>
-        <div>
+        <div class="button-field">
             <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
         </div>
     </form>
 
     <script>
+        flatpickr("#MaturityDate", {});
+        flatpickr("#IssueDate", {});
         const entryForm = document.querySelector("#asset-form");
         entryForm.addEventListener('keydown', function (event) {
             if (event.key === 'Enter') {
@@ -153,19 +157,26 @@
             event.preventDefault(); // Prevent the default form submission
             const formData = new FormData(this);
             const clickedButton = event.submitter;
-            formData.append(clickedButton.name, clickedButton.value);
-            if (!formData.get("Type")) {
-                formData.set("Type", "Stock");
-            }
-            const quoteServiceSymbols = formData.get("QuoteServiceSymbols");
-            if (quoteServiceSymbols) {
-                // Prepend key, so that backend can process it as a "dict" arg.
-                formData.set("QuoteServiceSymbols", `YF=${quoteServiceSymbols}`);
-            }
+            const asset = {};
+            formData.forEach((value, key) => {
+                if (!value) {
+                    return;
+                }
+                if (key === "QuoteServiceSymbols") {
+                    asset[key] = {
+                        "YF": value
+                    };
+                } else {
+                    asset[key] = value;
+                }
+            })
             try {
                 const response = await fetch("/kontoo/assets", {
                     method: "POST",
-                    body: formData
+                    body: JSON.stringify(asset),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
                 });
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);

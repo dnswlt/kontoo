@@ -795,39 +795,24 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	if r.Header.Get("Content-Type") != "application/json" {
+		http.Error(w, "only application/json is allowed", http.StatusBadRequest)
 		return
 	}
-	// Parse as a ledger entry in the same way that we'd parse it from the command line.
-	var args []string
-	for k, v := range r.Form {
-		if strings.HasPrefix(k, "Submit") {
-			continue // Ignore Submit button values.
-		}
-		if len(v) > 0 && len(v[0]) > 0 {
-			args = append(args, "-"+k)
-			args = append(args, v...)
-		}
+	var e LedgerEntry
+	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
 	}
-	e, err := ParseLedgerEntry(args)
-	if err != nil {
+	if err := s.Store().Add(&e); err != nil {
 		s.jsonResponse(w, AddLedgerEntryResponse{
 			Status: StatusInvalidArgument,
 			Error:  err.Error(),
 		})
 		return
 	}
-	err = s.Store().Add(e)
-	if err != nil {
-		s.jsonResponse(w, AddLedgerEntryResponse{
-			Status: StatusInvalidArgument,
-			Error:  err.Error(),
-		})
-		return
-	}
-	err = s.Store().Save()
-	if err != nil {
+
+	if err := s.Store().Save(); err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -838,36 +823,24 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(1 << 20); err != nil {
-		http.Error(w, "invalid form", http.StatusBadRequest)
+	contentType := r.Header.Get("Content-Type")
+	if contentType != "application/json" {
+		http.Error(w, "only application/json is allowed", http.StatusBadRequest)
 		return
 	}
-	// Parse as a ledger entry in the same way that we'd parse it from the command line.
-	var args []string
-	for k, v := range r.Form {
-		if strings.HasPrefix(k, "Submit") {
-			continue // Ignore Submit button values.
-		}
-		if len(v) > 0 && len(v[0]) > 0 {
-			args = append(args, "-"+k)
-			args = append(args, v...)
-		}
-	}
-	a, err := ParseAsset(args)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Cannot parse asset: %v", err), http.StatusBadRequest)
+	var a Asset
+	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	err = s.Store().AddAsset(a)
-	if err != nil {
+	if err := s.Store().AddAsset(&a); err != nil {
 		s.jsonResponse(w, AddAssetResponse{
 			Status: StatusInvalidArgument,
 			Error:  err.Error(),
 		})
 		return
 	}
-	err = s.Store().Save()
-	if err != nil {
+	if err := s.Store().Save(); err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -916,7 +889,6 @@ func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*LedgerEntry, error
 
 func (s *Server) handleQuotesPost(w http.ResponseWriter, r *http.Request) {
 	var req AddQuotesRequest
-	defer r.Body.Close()
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid input: "+err.Error(), http.StatusBadRequest)
 		return
@@ -968,6 +940,16 @@ func (s *Server) reloadHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func jsonHandler(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Content-Type") != "application/json" {
+			http.Error(w, "Content-Type must be application/json", http.StatusBadRequest)
+			return
+		}
+		h.ServeHTTP(w, r)
+	}
+}
+
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Serve static resources like CSS from resources/ dir.
@@ -980,8 +962,8 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	mux.HandleFunc("POST /kontoo/quotes", s.handleQuotesPost)
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
-	mux.HandleFunc("POST /kontoo/assets", s.handleAssetsPost)
-	mux.HandleFunc("POST /kontoo/entries", s.handleEntriesPost)
+	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
+	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
 	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handleMaturingPositions))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {

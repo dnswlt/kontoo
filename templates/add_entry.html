@@ -3,6 +3,8 @@
 
 <head>
     {{template "head_common.html"}}
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 </head>
 
 <body>
@@ -15,7 +17,7 @@
                 <label for="ValueDate">Value date</label>
             </div>
             <div class="field-value">
-                <input id="ValueDate" name="ValueDate" type="date" value="{{.Date}}" required>
+                <input id="ValueDate" name="ValueDate" value="{{.Date}}" required>
             </div>
         </div>
         <div id="AssetIDField" class="field">
@@ -39,7 +41,7 @@
                 <label for="Type">Type</label>
             </div>
             <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList">
+                <input id="Type" type="text" name="Type" list="TypeList" required>
                 <datalist id="TypeList">
                     {{range .EntryTypes}}
                     <option value="{{.}}"></option>
@@ -103,28 +105,31 @@
                 <textarea rows="3" id="Comment" name="Comment"></textarea>
             </div>
         </div>
-        <div>
+        <div class="button-field">
             <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
         </div>
     </form>
 
     <script>
+        flatpickr("#ValueDate", {});
         const entryForm = document.querySelector("#entry-form");
-        entryForm.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent the default form submission
-                document.getElementById('submit-next').click();
-            }
-        });
         entryForm.addEventListener("submit", async function (event) {
             event.preventDefault(); // Prevent the default form submission
             const formData = new FormData(this);
             const clickedButton = event.submitter;
-            formData.append(clickedButton.name, clickedButton.value);
+            const entry = {}
+            formData.forEach((value, key) => {
+                if (value) {
+                    entry[key] = value;
+                }
+            })
             try {
                 const response = await fetch("/kontoo/entries", {
                     method: "POST",
-                    body: formData
+                    body: JSON.stringify(entry),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
                 });
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
