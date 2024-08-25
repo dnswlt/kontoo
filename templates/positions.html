@@ -6,12 +6,13 @@
 </head>
 
 <body>
-    {{template "nav2.html" .}}
+    {{template "nav.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
+    {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
     {{ $showSubtotals := gt (len .Groups) 1 }}
-    <table>
+    <table id="positions-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -27,7 +28,13 @@
             {{range .Groups}}
             {{range .Rows}}
             <tr>
-                <td><a class="plain" href="/kontoo/ledger?q=id%3A{{urlquery .ID}}">{{ .Name }}</a></td>
+                <td class="contextmenu entry-actions">
+                    {{ .Name }}
+                    <div class="contextmenu-options">
+                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .ID}}' data-action="add-entry">Add entry</div>
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .ID) }}' data-action="show-ledger">Show ledger</div>
+                    </div>
+                </td>
                 <td>{{ .ID }}</td>
                 <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
@@ -36,7 +43,7 @@
                     {{ money .Value }}
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
                 </td>
-                <td class="tooltip">{{if gt (days .DataAge) 35}}<i class="warning-emoji"></i>{{end}}
+                <td class="tooltip">{{if gt (days .DataAge) 35}}<i class="emoji emoji-warning"></i>{{end}}
                     <span class="tooltiptext">Data is {{days .DataAge}} days old.</span>
                 </td>
             </tr>
@@ -72,6 +79,11 @@
         registerDropdown("years-dropdown", (item) => {
             window.location.href = item.dataset.url;
         });
+        document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
+            registerContextMenu(td, (item) => {
+                window.location.href = item.dataset.url;
+            });
+        })
     </script>
 </body>
 

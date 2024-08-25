@@ -361,8 +361,31 @@ func newURL(path string, queryParams url.Values) *url.URL {
 	return u
 }
 
-func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, snippet bool) error {
-	rows := LedgerEntryRows(store, query)
+func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
+	ctx["Today"] = time.Now().Format("2006-01-02")
+	ctx["Now"] = time.Now().Format("2006-01-02 15:04:05")
+	ctx["BaseCurrency"] = s.Store().BaseCurrency()
+	ctx["ThisPage"] = r.URL.String()
+	ctxQ := make(url.Values)
+	// Inherit contextual query params from the incoming request.
+	q := r.URL.Query()
+	if date := q.Get("date"); date != "" {
+		ctx["Date"] = date
+		ctxQ.Set("date", date)
+	}
+	ctx["Nav"] = map[string]string{
+		"ledger":    newURL("/kontoo/ledger", ctxQ).String(),
+		"positions": newURL("/kontoo/positions", ctxQ).String(),
+		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
+		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
+		"uploadCSV": newURL("/kontoo/csv/upload", ctxQ).String(),
+		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
+	}
+	return ctx
+}
+
+func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query, snippet bool) error {
+	rows := LedgerEntryRows(s.Store(), query)
 	// Sort ledger rows by (ValueDate, Created) for output table.
 	slices.SortFunc(rows, func(a, b *LedgerEntryRow) int {
 		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
@@ -375,27 +398,23 @@ func (s *Server) renderLedgerTemplate(w io.Writer, store *Store, query *Query, s
 	if snippet {
 		tmpl = "snip_ledger_table.html"
 	}
-	return s.templates.ExecuteTemplate(w, tmpl, struct {
-		TableRows []*LedgerEntryRow
-		Query     string
-		Now       string
-	}{
-		TableRows: rows,
-		Query:     query.raw,
-		Now:       time.Now().Format("2006-01-02 15:04:05"),
+	ctx := s.addCommonCtx(r, map[string]any{
+		"TableRows": rows,
+		"Query":     query.raw,
 	})
+	return s.templates.ExecuteTemplate(w, tmpl, ctx)
 }
 
-func (s *Server) renderAddEntryTemplate(w io.Writer, date Date, store *Store) error {
-	assets := make([]*Asset, len(store.L.Assets))
-	copy(assets, store.L.Assets)
+func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date) error {
+	assets := make([]*Asset, len(s.Store().L.Assets))
+	copy(assets, s.Store().L.Assets)
 	slices.SortFunc(assets, func(a, b *Asset) int {
 		return strings.Compare(a.Name, b.Name)
 	})
 	quoteCurrenciesMap := make(map[Currency]bool)
 	var quoteCurrencies []Currency
 	for _, a := range assets {
-		if a.Currency == store.BaseCurrency() {
+		if a.Currency == s.Store().BaseCurrency() {
 			continue
 		}
 		if _, ok := quoteCurrenciesMap[a.Currency]; !ok {
@@ -404,17 +423,25 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, date Date, store *Store) er
 		}
 	}
 	slices.Sort(quoteCurrencies)
-	return s.templates.ExecuteTemplate(w, "add_entry.html", map[string]any{
+	ctx := s.addCommonCtx(r, map[string]any{
 		"Today":           time.Now().Format("2006-01-02"),
 		"Date":            date,
 		"Assets":          assets,
-		"BaseCurrency":    store.BaseCurrency(),
+		"BaseCurrency":    s.Store().BaseCurrency(),
 		"QuoteCurrencies": quoteCurrencies,
 		"EntryTypes":      EntryTypeValues()[1:],
 	})
+	// Populate input field values from query params
+	q := r.URL.Query()
+	for _, p := range []string{"AssetID", "Type"} {
+		if v := q.Get(p); v != "" {
+			ctx[p] = v
+		}
+	}
+	return s.templates.ExecuteTemplate(w, "add_entry.html", ctx)
 }
 
-func (s *Server) renderAddAssetTemplate(w io.Writer) error {
+func (s *Server) renderAddAssetTemplate(w io.Writer, r *http.Request) error {
 	assetTypeVals := AssetTypeValues()
 	assetTypes := make([]string, 0, len(assetTypeVals))
 	for _, a := range assetTypeVals {
@@ -423,16 +450,14 @@ func (s *Server) renderAddAssetTemplate(w io.Writer) error {
 		}
 		assetTypes = append(assetTypes, a.String())
 	}
-	return s.templates.ExecuteTemplate(w, "add_asset.html", struct {
-		Today      string
-		AssetTypes []string
-	}{
-		Today:      time.Now().Format("2006-01-02"),
-		AssetTypes: assetTypes,
+	ctx := s.addCommonCtx(r, map[string]any{
+		"Today":      time.Now().Format("2006-01-02"),
+		"AssetTypes": assetTypes,
 	})
+	return s.templates.ExecuteTemplate(w, "add_asset.html", ctx)
 }
 
-func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
+func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Time) error {
 	type QuoteEntry struct {
 		AssetID      string
 		AssetName    string
@@ -441,15 +466,9 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 		ClosingPrice Micros
 		Date         time.Time
 	}
-	type TemplateData struct {
-		Date          string
-		Entries       []*QuoteEntry
-		ExchangeRates []*DailyExchangeRate
-	}
 	if s.yFinance == nil {
-		return s.templates.ExecuteTemplate(w, "quotes.html", TemplateData{
-			Date: date.Format("2006-01-02"),
-		})
+		// No quotes service, can't show quotes.
+		return s.templates.ExecuteTemplate(w, "quotes.html", s.addCommonCtx(r, map[string]any{}))
 	}
 	var entries []*QuoteEntry
 	var exchangeRates []*DailyExchangeRate
@@ -483,34 +502,11 @@ func (s *Server) renderQuotesTemplate(w io.Writer, date time.Time) error {
 			log.Printf("Failed to get exchange rates: %v", err)
 		}
 	}
-	return s.templates.ExecuteTemplate(w, "quotes.html", TemplateData{
-		Date:          date.Format("2006-01-02"),
-		Entries:       entries,
-		ExchangeRates: exchangeRates,
+	ctx := s.addCommonCtx(r, map[string]any{
+		"Entries":       entries,
+		"ExchangeRates": exchangeRates,
 	})
-}
-
-func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
-	ctx["Today"] = time.Now().Format("2006-01-02")
-	ctx["Now"] = time.Now().Format("2006-01-02 15:04:05")
-	ctx["BaseCurrency"] = s.Store().BaseCurrency()
-	ctx["ThisPage"] = r.URL.String()
-	ctxQ := make(url.Values)
-	// Inherit contextual query params from the incoming request.
-	q := r.URL.Query()
-	if date := q.Get("date"); date != "" {
-		ctx["Date"] = date
-		ctxQ.Set("date", date)
-	}
-	ctx["Nav"] = map[string]string{
-		"ledger":    newURL("/kontoo/ledger", ctxQ).String(),
-		"positions": newURL("/kontoo/positions", ctxQ).String(),
-		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
-		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
-		"uploadCSV": newURL("/kontoo/csv/upload", ctxQ).String(),
-		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
-	}
-	return ctx
+	return s.templates.ExecuteTemplate(w, "quotes.html", ctx)
 }
 
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
@@ -551,8 +547,36 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
 }
 
-func (s *Server) renderUploadCsvTemplate(w io.Writer) error {
-	return s.templates.ExecuteTemplate(w, "upload_csv.html", struct{}{})
+func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
+	return s.templates.ExecuteTemplate(w, "upload_csv.html", s.addCommonCtx(r, map[string]any{}))
+}
+
+func (s *Server) renderSnipUploadCsvData(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
+	type Row struct {
+		*LedgerEntry
+		AssetName string
+	}
+	var rows []*Row
+	for _, entry := range entries {
+		asset := store.assetMap[entry.AssetID]
+		if asset == nil {
+			continue
+		}
+		rows = append(rows, &Row{
+			LedgerEntry: entry,
+			AssetName:   asset.Name,
+		})
+	}
+	slices.Sort(skipped)
+	suffix := ""
+	if len(skipped) > 5 {
+		skipped = skipped[:5]
+		suffix = ", ..."
+	}
+	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", map[string]any{
+		"Entries": rows,
+		"Skipped": strings.Join(skipped, ", ") + suffix,
+	})
 }
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
@@ -564,7 +588,7 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	}
 	snippet := q.Get("snippet") == "true"
 	var buf bytes.Buffer
-	if err := s.renderLedgerTemplate(&buf, s.Store(), query, snippet); err != nil {
+	if err := s.renderLedgerTemplate(&buf, r, query, snippet); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -579,7 +603,7 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := s.renderAddEntryTemplate(&buf, date, s.Store()); err != nil {
+	if err := s.renderAddEntryTemplate(&buf, r, date); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -589,7 +613,7 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
-	if err := s.renderAddAssetTemplate(&buf); err != nil {
+	if err := s.renderAddAssetTemplate(&buf, r); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -604,7 +628,7 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := s.renderQuotesTemplate(&buf, date.Time); err != nil {
+	if err := s.renderQuotesTemplate(&buf, r, date.Time); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -677,43 +701,12 @@ func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
-	err := s.renderUploadCsvTemplate(&buf)
+	err := s.renderUploadCsvTemplate(&buf, r)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Write(buf.Bytes())
-}
-
-func (s *Server) renderSnipUploadCsvData(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
-	type Row struct {
-		*LedgerEntry
-		AssetName string
-	}
-	var rows []*Row
-	for _, entry := range entries {
-		asset := store.assetMap[entry.AssetID]
-		if asset == nil {
-			continue
-		}
-		rows = append(rows, &Row{
-			LedgerEntry: entry,
-			AssetName:   asset.Name,
-		})
-	}
-	slices.Sort(skipped)
-	suffix := ""
-	if len(skipped) > 5 {
-		skipped = skipped[:5]
-		suffix = ", ..."
-	}
-	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", struct {
-		Entries []*Row
-		Skipped string
-	}{
-		Entries: rows,
-		Skipped: strings.Join(skipped, ", ") + suffix,
-	})
 }
 
 func (s *Server) jsonResponse(w http.ResponseWriter, v any) {
@@ -956,16 +949,16 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesDir))))
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
-	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
-	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
-	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
-	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
-	mux.HandleFunc("POST /kontoo/quotes", s.handleQuotesPost)
-	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
-	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
-	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
 	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handleMaturingPositions))
+	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
+	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
+	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
+	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
+	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
+	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
+	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
+	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
 	})

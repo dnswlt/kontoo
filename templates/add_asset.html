@@ -8,7 +8,7 @@
 </head>
 
 <body>
-    {{template "nav.html"}}
+    {{template "nav.html" .}}
     <h1>Add asset</h1>
     <div id="status-callout" class="callout hidden"></div>
     <form class="columnar" id="asset-form" method="post" action="/kontoo/assets">
@@ -147,12 +147,6 @@
         flatpickr("#MaturityDate", {});
         flatpickr("#IssueDate", {});
         const entryForm = document.querySelector("#asset-form");
-        entryForm.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); // Prevent the default form submission
-                document.getElementById('submit-next').click();
-            }
-        });
         entryForm.addEventListener("submit", async function (event) {
             event.preventDefault(); // Prevent the default form submission
             const formData = new FormData(this);

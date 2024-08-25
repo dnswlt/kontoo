@@ -53,11 +53,22 @@ tr.total td {
     font-weight: bold;
 }
 
-i.warning-emoji::before {
-    content: '\26A0';
+i.emoji {
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
     font-style: normal;
     font-size: 10pt;
+}
+
+i.emoji-warning::before {
+    content: '\26A0';
+}
+
+i.emoji-plus::before {
+    content: '\2795';
+}
+
+i.emoji-page-facing-up::before {
+    content: '\1F4C4';
 }
 
 :focus {
@@ -117,7 +128,7 @@ form.columnar {
 }
 
 .field-value input[type="text"] {
-    padding: 9px;
+    padding: 6px;
     border: 1px solid var(--light-border);
     border-radius: 5px;
     font-size: inherit;
@@ -344,4 +355,33 @@ ul.filter-chips a {
 
 .combo-box.open .combo-options {
     display: block;
+}
+
+/* Context menus */
+.contextmenu {
+    position: relative;
+}
+.contextmenu:hover {
+    cursor: pointer;
+}
+.contextmenu-options {
+    display: none;
+    position: absolute;
+    /* width: 100%; */
+    border: 1px solid var(--gray-active);
+    border-radius: 4px;
+    background-color: var(--light-background);
+    z-index: 1;
+}
+
+.contextmenu.open .contextmenu-options {
+    display: block;
+}
+
+.contextmenu-option {
+    padding: 10px;
+    cursor: pointer;
+}
+.contextmenu-option:hover {
+    background-color: var(--gray-passive); 
 }

@@ -95,6 +95,9 @@ func joinAny(items any, sep string) (string, error) {
 
 func commonFuncs() template.FuncMap {
 	return template.FuncMap{
+		"concat": func(s, t string) string {
+			return s + t
+		},
 		"nonzero": func(m Micros) bool {
 			return m != 0
 		},
