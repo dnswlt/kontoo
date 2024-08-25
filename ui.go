@@ -126,10 +126,10 @@ func commonFuncs() template.FuncMap {
 			return t.Format("2006-01-02 15:04")
 		},
 		"assetType": func(t AssetType) string {
-			return assetTypeInfos[t].displayName
+			return t.DisplayName()
 		},
 		"assetCategory": func(t AssetType) string {
-			return assetTypeInfos[t].category
+			return t.Category().String()
 		},
 		"days": func(d time.Duration) int {
 			return int(math.Round(d.Seconds() / 60 / 60 / 24))

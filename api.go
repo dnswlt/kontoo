@@ -1,6 +1,7 @@
 package kontoo
 
 import (
+	"fmt"
 	"regexp"
 	"slices"
 	"time"
@@ -35,11 +36,45 @@ const (
 	OtherDebt               // allg. Schulden
 )
 
-type AssetCategory string
+type AssetCategory int
+
+const (
+	UnspecfiedAssetCategory AssetCategory = iota
+	Equity
+	FixedIncome
+	CashEquivalents
+	RetirementSavings
+	Commodities
+	Taxes
+	Debt
+)
+
+func (ac AssetCategory) String() string {
+	switch ac {
+	case UnspecfiedAssetCategory:
+		return "Unspecified"
+	case Equity:
+		return "Equity"
+	case FixedIncome:
+		return "Fixed-income"
+	case CashEquivalents:
+		return "Cash equivalents"
+	case RetirementSavings:
+		return "Retirement savings"
+	case Commodities:
+		return "Commodities"
+	case Taxes:
+		return "Taxes"
+	case Debt:
+		return "Debt"
+	default:
+		panic(fmt.Sprintf("invalid AssetCategory: %d", ac))
+	}
+}
 
 type assetTypeInfo struct {
 	typ             AssetType
-	category        string
+	category        AssetCategory
 	displayName     string
 	validEntryTypes []EntryType
 }
@@ -56,115 +91,115 @@ var (
 	_assetTypeInfosList = []assetTypeInfo{
 		{
 			typ:             Stock,
-			category:        "Equity",
+			category:        Equity,
 			displayName:     "Stock",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
 			typ:             StockExchangeTradedFund,
-			category:        "Equity",
+			category:        Equity,
 			displayName:     "ETF",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
 			typ:             StockMutualFund,
-			category:        "Equity",
+			category:        Equity,
 			displayName:     "Mutual fund",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, DividendPayment},
 		},
 		{
 			typ:             BondExchangeTradedFund,
-			category:        "Fixed-income",
+			category:        FixedIncome,
 			displayName:     "Bond ETF",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment},
 		},
 		{
 			typ:             BondMutualFund,
-			category:        "Fixed-income",
+			category:        FixedIncome,
 			displayName:     "Bond mutual fund",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment},
 		},
 		{
 			typ:             CorporateBond,
-			category:        "Fixed-income",
+			category:        FixedIncome,
 			displayName:     "Corp bond",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment, AssetMaturity},
 		},
 		{
 			typ:             GovernmentBond,
-			category:        "Fixed-income",
+			category:        FixedIncome,
 			displayName:     "Gov bond",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment, AssetMaturity},
 		},
 		{
 			typ:             FixedDepositAccount,
-			category:        "Fixed-income",
+			category:        FixedIncome,
 			displayName:     "Fixed deposit",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment, AssetMaturity},
 		},
 		{
 			typ:             MoneyMarketAccount,
-			category:        "Cash equivalents",
-			displayName:     "Money market account",
+			category:        CashEquivalents,
+			displayName:     "Money mkt acct",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
 			typ:             SavingsAccount,
-			category:        "Cash equivalents",
+			category:        CashEquivalents,
 			displayName:     "Savings account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
 			typ:             CheckingAccount,
-			category:        "Cash equivalents",
+			category:        CashEquivalents,
 			displayName:     "Checking account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
 			typ:             BrokerageAccount,
-			category:        "Cash equivalents",
+			category:        CashEquivalents,
 			displayName:     "Brokerage account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
 			typ:             PensionAccount,
-			category:        "Retirement savings",
+			category:        RetirementSavings,
 			displayName:     "Pension account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
 			typ:             Commodity,
-			category:        "Commodities",
+			category:        Commodities,
 			displayName:     "Commodity",
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding},
 		},
 		{
 			typ:             Cash,
-			category:        "Cash",
+			category:        CashEquivalents,
 			displayName:     "Cash",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
 			typ:             TaxLiability,
-			category:        "Taxes",
+			category:        Taxes,
 			displayName:     "Tax liability",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
 			typ:             TaxPayment,
-			category:        "Taxes",
+			category:        Taxes,
 			displayName:     "Tax payment",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
 			typ:             CreditCardDebt,
-			category:        "Debt",
+			category:        Debt,
 			displayName:     "Credit card",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
 			typ:             OtherDebt,
-			category:        "Debt",
+			category:        Debt,
 			displayName:     "Other debt",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
@@ -180,6 +215,14 @@ func init() {
 
 func (t AssetType) ValidEntryTypes() []EntryType {
 	return assetTypeInfos[t].validEntryTypes
+}
+
+func (t AssetType) Category() AssetCategory {
+	return assetTypeInfos[t].category
+}
+
+func (t AssetType) DisplayName() string {
+	return assetTypeInfos[t].displayName
 }
 
 type Asset struct {

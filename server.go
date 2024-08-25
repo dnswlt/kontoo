@@ -261,8 +261,8 @@ func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
 }
 
 type PositionTableRowGroup struct {
-	Label string
-	Rows  []*PositionTableRow
+	Category AssetCategory
+	Rows     []*PositionTableRow
 }
 
 func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
@@ -273,12 +273,10 @@ func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
 	return sum
 }
 
-type groupingFunc func(*PositionTableRow) string
-
 func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
-		c := strings.Compare(assetTypeInfos[a.Asset.Type].category, assetTypeInfos[b.Asset.Type].category)
+		c := int(a.Asset.Type.Category()) - int(b.Asset.Type.Category())
 		if c != 0 {
 			return c
 		}
@@ -327,26 +325,25 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	return res
 }
 
-func positionTableRowGroups(rows []*PositionTableRow, groupKey groupingFunc) []*PositionTableRowGroup {
+func positionTableRowGroups(rows []*PositionTableRow) []*PositionTableRowGroup {
 	var res []*PositionTableRowGroup
 	if len(rows) == 0 {
 		return res
 	}
-	label := groupKey(rows[0])
+	currentCategory := rows[0].Type.Category()
 	res = append(res, &PositionTableRowGroup{
-		Label: label,
-		Rows:  []*PositionTableRow{rows[0]},
+		Category: currentCategory,
+		Rows:     []*PositionTableRow{rows[0]},
 	})
 	for _, row := range rows[1:] {
-		l := groupKey(row)
-		if l == label {
+		if row.Type.Category() == currentCategory {
 			res[len(res)-1].Rows = append(res[len(res)-1].Rows, row)
 		} else {
 			res = append(res, &PositionTableRowGroup{
-				Label: l,
-				Rows:  []*PositionTableRow{row},
+				Category: row.Type.Category(),
+				Rows:     []*PositionTableRow{row},
 			})
-			label = l
+			currentCategory = row.Type.Category()
 		}
 	}
 	return res
@@ -511,9 +508,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
 	positions := positionTableRows(s.Store(), date)
-	groups := positionTableRowGroups(positions, func(r *PositionTableRow) string {
-		return assetTypeInfos[r.Type].category
-	})
+	groups := positionTableRowGroups(positions)
 	var total Micros
 	for _, g := range groups {
 		total += g.ValueBaseCurrency()

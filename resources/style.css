@@ -93,6 +93,7 @@ a.plain {
 
 div.field {
     width: 16em;
+    margin-bottom: 1ex;
 }
 
 .field-label {
@@ -108,7 +109,15 @@ form.columnar {
 
 .field-value {
     width: 100%;
-    margin-bottom: 1ex;
+}
+.field-details {
+    margin-top: 6px;
+    width: 100%;
+    /* border: 1px solid var(--light-border); */
+    padding: 6px;
+    background-color: var(--gray-passive);
+    border-radius: 5px;
+    box-sizing: border-box;
 }
 
 .field-value input,

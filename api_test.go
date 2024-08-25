@@ -83,7 +83,7 @@ func TestAssetTypeInfos(t *testing.T) {
 		if info.displayName == "" {
 			t.Errorf("Missing displayName in assetTypeInfos for %v", v)
 		}
-		if info.category == "" {
+		if info.category == UnspecfiedAssetCategory {
 			t.Errorf("Missing category in assetTypeInfos for %v", v)
 		}
 		if len(info.validEntryTypes) == 0 {

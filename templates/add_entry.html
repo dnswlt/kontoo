@@ -32,9 +32,7 @@
                     {{end}}
                 </datalist>
             </div>
-        </div>
-        <div id="AssetNameField" class="field">
-            <div class="field-value" id="AssetName">&nbsp;</div>
+            <div class="field-details" id="AssetName"></div>
         </div>
         <div id="TypeField" class="field">
             <div class="field-label">
@@ -160,7 +158,7 @@
                 document.querySelectorAll("#TypeList option").forEach((opt) => {
                     opt.disabled = false
                 });
-                document.querySelector("#AssetName").innerHTML = "&nbsp;";
+                document.querySelector("#AssetName").textContent = "Unknown asset";
                 return;
             }
             document.querySelector("#AssetName").textContent = asset.textContent;
@@ -169,7 +167,7 @@
                 opt.disabled = !entryTypes.includes(opt.value);
             });
         }
-        document.querySelector("#AssetID").addEventListener("change", function (event) {
+        document.querySelector("#AssetID").addEventListener("input", function (event) {
             assetIdChanged(event.target.value);
         });
         document.querySelector("#Type").addEventListener("keydown", function (event) {
@@ -183,20 +181,20 @@
             if (typ === "ExchangeRate") {
                 showFields(["QuoteCurrency", "Price"]);
             } else if (typ === "AccountBalance" || typ === "AccountDebit" || typ === "AccountCredit") {
-                showFields(["AssetID", "AssetName", "Value"]);
+                showFields(["AssetID", "Value"]);
             } else if (typ === "AssetHolding") {
-                showFields(["AssetID", "AssetName", "Value", "Quantity", "Price"]);
+                showFields(["AssetID", "Value", "Quantity", "Price"]);
             } else if (typ === "InterestPayment" || typ == "DividendPayment") {
-                showFields(["AssetID", "AssetName", "Value"]);
+                showFields(["AssetID", "Value"]);
             } else if (typ === "AssetPrice") {
-                showFields(["AssetID", "AssetName", "Price"]);
+                showFields(["AssetID", "Price"]);
             } else {
-                showFields(["AssetID", "AssetName", "Value", "Quantity", "Price", "Cost"]);
+                showFields(["AssetID", "Value", "Quantity", "Price", "Cost"]);
             }
         });
         function showFields(fieldNames) {
             const allFieldNames = [
-                "AssetID", "AssetName", "Value", "Quantity", "Price", "Cost", "QuoteCurrency"
+                "AssetID", "Value", "Quantity", "Price", "Cost", "QuoteCurrency"
             ];
             for (const fieldName of allFieldNames) {
                 if (fieldNames.includes(fieldName)) {
@@ -207,10 +205,8 @@
             }
         }
         document.addEventListener('DOMContentLoaded', function () {
-            const input = document.querySelector("#AssetID");
-            if (input.value) {
-                assetIdChanged(input.value);
-            }
+            // Adjust UI to preselected AssetID:
+            assetIdChanged(document.querySelector("#AssetID").value);
         });
     </script>
 </body>

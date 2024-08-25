@@ -30,7 +30,7 @@
                         class="selector" type="checkbox" name="quote" checked></td>
                 <td>{{.AssetID}}</td>
                 <td>{{.AssetName}}</td>
-                <td>{{.Symbol}}</td>
+                <td><a href="https://finance.yahoo.com/quote/{{.Symbol}}" target="_blank">{{.Symbol}}</a></td>
                 <td>{{.Currency}}</td>
                 <td>{{money .ClosingPrice}}</td>
                 <td>{{yyyymmdd .Date}}</td>
