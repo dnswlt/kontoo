@@ -18,10 +18,15 @@ async function initAssetPage() {
     asset.init();
 }
 
+async function initLedgerPage() {
+    const ledger = await import('./ledger.js');
+    ledger.init();
+}
+
 // Validate that input contains a decimal number with an optional '%' at the end.
 // (I.e., a string that can be JSON-parsed as Micros.)
 const microsRegex = new RegExp("^([0-9]+(\\.[0-9]{0,6})?|\\.[0-9]{1,6})%?$");
-function registerMicrosValidation(input) {
+function validateMicros(input) {
     input.addEventListener("change", function (event) {
         const input = event.target;
         let val = input.value;
@@ -41,10 +46,23 @@ function registerMicrosValidation(input) {
 
 // Set up date pickers on any page.
 document.querySelectorAll('.datepicker').forEach(flatpickr);
-document.querySelectorAll("input.micros").forEach(registerMicrosValidation);
+document.querySelectorAll("input.micros").forEach(validateMicros);
+document.querySelectorAll("input.noblanks").forEach((input) => {
+    input.addEventListener("change", function (event) {
+        input.value = input.value.replaceAll(" ", "");
+    });
+});
+document.querySelectorAll("input.trim").forEach((input) => {
+    input.addEventListener("change", function (event) {
+        input.value = input.value.trim();
+    });
+});
 
 // Page-specific initialisation.
 switch (document.body.id) {
+    case "ledger-page":
+        initLedgerPage();
+        break;
     case "entry-page":
         initEntryPage();
         break;

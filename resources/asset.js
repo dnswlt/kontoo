@@ -48,16 +48,6 @@ export function init() {
             event.preventDefault();
         }
     });
-    document.querySelectorAll(".noblanks").forEach((input) => {
-        input.addEventListener("change", function (event) {
-            input.value = input.value.replaceAll(" ", "");
-        });
-    });
-    document.querySelectorAll(".trim").forEach((input) => {
-        input.addEventListener("change", function (event) {
-            input.value = input.value.trim();
-        });
-    });
     document.querySelector("#Currency").addEventListener("change", function (event) {
         const input = event.target;
         input.value = input.value.toUpperCase();
