@@ -5,7 +5,7 @@
     {{template "head_common.html"}}
 </head>
 
-<body>
+<body id="positions-page">
     {{template "nav.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
@@ -72,19 +72,8 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
-    <script>
-        registerDropdown("months-dropdown", (item) => {
-            window.location.href = item.dataset.url;
-        });
-        registerDropdown("years-dropdown", (item) => {
-            window.location.href = item.dataset.url;
-        });
-        document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
-            registerContextMenu(td, (item) => {
-                window.location.href = item.dataset.url;
-            });
-        })
-    </script>
+
+    <script src="/kontoo/dist/bundle.js"></script>
 </body>
 
 </html>

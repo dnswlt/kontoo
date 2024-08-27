@@ -1,7 +1,6 @@
 import { callout, calloutStatus } from "./common";
 
 export function init() {
-    console.log("entry.init");
     const entryForm = document.querySelector("#entry-form");
     entryForm.addEventListener("submit", async function (event) {
         event.preventDefault(); // Prevent the default form submission

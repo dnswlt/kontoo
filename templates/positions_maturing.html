@@ -3,10 +3,11 @@
 <head>
     {{template "head_common.html"}}
 </head>
-<body>
+<body id="positions-maturing-page">
     {{template "nav.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
+    {{ $nav := .Nav }}
     <table>
         <thead>
             <tr>
@@ -27,7 +28,13 @@
         <tbody>
             {{range .TableRows}}
             <tr>
-                <td><a class="plain" href="/kontoo/ledger?q=id%3A{{urlquery .ID}}">{{ .Name }}</a></td>
+                <td class="contextmenu entry-actions">
+                    {{ .Name }}
+                    <div class="contextmenu-options">
+                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .ID}}' data-action="add-entry">Add entry</div>
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .ID) }}' data-action="show-ledger">Show ledger</div>
+                    </div>
+                </td>
                 <td>{{ .ID }}</td>
                 <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
@@ -46,13 +53,6 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
-    <script>
-        registerDropdown("months-dropdown", (item) => {
-            window.location.href = item.dataset.url;
-        });
-        registerDropdown("years-dropdown", (item) => {
-            window.location.href = item.dataset.url;
-        });
-    </script>
+    <script src="/kontoo/dist/bundle.js"></script>
 </body>
 </html>

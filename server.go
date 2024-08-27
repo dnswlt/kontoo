@@ -924,7 +924,10 @@ func (s *Server) handleQuotesPost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) reloadHandler(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if s.debugMode {
-			s.reloadTemplates()
+			err := s.reloadTemplates()
+			if err != nil {
+				log.Fatalf("Failed to reload templates: %v", err)
+			}
 		}
 		h.ServeHTTP(w, r)
 	}

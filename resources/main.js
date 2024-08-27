@@ -12,15 +12,25 @@ async function initEntryPage() {
     const entry = await import('./entry.js');
     entry.init();
 }
-
 async function initAssetPage() {
     const asset = await import('./asset.js');
     asset.init();
 }
-
 async function initLedgerPage() {
     const ledger = await import('./ledger.js');
     ledger.init();
+}
+async function initPositionsPage() {
+    const positions = await import('./positions.js');
+    positions.init();
+}
+async function initQuotesPage() {
+    const quotes = await import('./quotes.js');
+    quotes.init();
+}
+async function initUploadCsvPage() {
+    const uploadCsv = await import('./upload_csv.js');
+    uploadCsv.init();
 }
 
 // Validate that input contains a decimal number with an optional '%' at the end.
@@ -63,11 +73,23 @@ switch (document.body.id) {
     case "ledger-page":
         initLedgerPage();
         break;
+    case "positions-page":
+        initPositionsPage();
+        break;
+    case "positions-maturing-page":
+        initPositionsPage();
+        break;
     case "entry-page":
         initEntryPage();
         break;
     case "asset-page":
         initAssetPage();
+        break;
+    case "quotes-page":
+        initQuotesPage();
+        break;
+    case "upload-csv-page":
+        initUploadCsvPage();
         break;
     default:
         if (document.body.id) {

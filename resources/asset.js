@@ -1,7 +1,6 @@
 import { callout, calloutStatus } from './common';
 
 export function init() {
-    console.log("asset.init");
     const entryForm = document.querySelector("#asset-form");
     entryForm.addEventListener("submit", async function (event) {
         event.preventDefault(); // Prevent the default form submission
