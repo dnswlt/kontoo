@@ -302,7 +302,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 	if !found {
 		return fmt.Errorf("no asset found with ID=%q or ref=%q", e.AssetID, e.AssetRef)
 	}
-	if !assetTypeInfos[a.Type].valid(e.Type) {
+	if !slices.Contains(a.Type.ValidEntryTypes(), e.Type) {
 		return fmt.Errorf("%v is not a valid entry type for an asset of type %v", e.Type, a.Type)
 	}
 	if e.Currency != "" && e.Currency != a.Currency {

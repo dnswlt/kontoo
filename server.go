@@ -71,23 +71,25 @@ const (
 // END JSON API
 
 type Server struct {
-	addr         string
-	ledgerPath   string
-	resourcesDir string
-	templatesDir string
-	templates    *template.Template
-	store        *Store
-	debugMode    bool
+	addr       string
+	ledgerPath string
+	baseDir    string
+	templates  *template.Template
+	store      *Store
+	debugMode  bool
 	// Stock quote service
 	yFinance *YFinance
 }
 
-func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, error) {
-	if _, err := os.Stat(path.Join(resourcesDir, "style.css")); err != nil {
-		return nil, fmt.Errorf("invalid resourcesDir: %w", err)
+func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
+	expectedFiles := []string{
+		"resources/style.css",
+		"templates/ledger.html",
 	}
-	if _, err := os.Stat(path.Join(templatesDir, "ledger.html")); err != nil {
-		return nil, fmt.Errorf("invalid templatesDir: %w", err)
+	for _, f := range expectedFiles {
+		if _, err := os.Stat(path.Join(baseDir, f)); err != nil {
+			return nil, fmt.Errorf("invalid baseDir %q: file %q not found: %w", baseDir, f, err)
+		}
 	}
 	store, err := LoadStore(ledgerPath)
 	if err != nil {
@@ -99,12 +101,11 @@ func NewServer(addr, ledgerPath, resourcesDir, templatesDir string) (*Server, er
 		yf = nil // Should be nil anyway, but better be safe
 	}
 	s := &Server{
-		addr:         addr,
-		ledgerPath:   ledgerPath,
-		resourcesDir: resourcesDir,
-		templatesDir: templatesDir,
-		store:        store,
-		yFinance:     yf,
+		addr:       addr,
+		ledgerPath: ledgerPath,
+		baseDir:    baseDir,
+		store:      store,
+		yFinance:   yf,
 	}
 	if err := s.reloadTemplates(); err != nil {
 		return nil, err
@@ -121,7 +122,8 @@ func (s *Server) DebugMode(enabled bool) {
 }
 
 func (s *Server) reloadTemplates() error {
-	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(path.Join(s.templatesDir, "*.html"))
+	glob := path.Join(s.baseDir, "templates", "*.html")
+	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(glob)
 	if err != nil {
 		return fmt.Errorf("could not parse templates: %w", err)
 	}
@@ -435,7 +437,7 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date)
 			ctx[p] = v
 		}
 	}
-	return s.templates.ExecuteTemplate(w, "add_entry.html", ctx)
+	return s.templates.ExecuteTemplate(w, "entry.html", ctx)
 }
 
 func (s *Server) renderAddAssetTemplate(w io.Writer, r *http.Request) error {
@@ -451,7 +453,7 @@ func (s *Server) renderAddAssetTemplate(w io.Writer, r *http.Request) error {
 		"Today":      time.Now().Format("2006-01-02"),
 		"AssetTypes": assetTypes,
 	})
-	return s.templates.ExecuteTemplate(w, "add_asset.html", ctx)
+	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
 
 func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Time) error {
@@ -941,7 +943,10 @@ func jsonHandler(h http.HandlerFunc) http.HandlerFunc {
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Serve static resources like CSS from resources/ dir.
-	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources", http.FileServer(http.Dir(s.resourcesDir))))
+	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources",
+		http.FileServer(http.Dir(path.Join(s.baseDir, "resources")))))
+	mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo/dist",
+		http.FileServer(http.Dir(path.Join(s.baseDir, "dist")))))
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))

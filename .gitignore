@@ -25,3 +25,6 @@ kontoo
 !kontoo/
 
 ledger.json
+
+node_modules/
+dist/

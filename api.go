@@ -3,7 +3,6 @@ package kontoo
 import (
 	"fmt"
 	"regexp"
-	"slices"
 	"time"
 )
 
@@ -77,10 +76,6 @@ type assetTypeInfo struct {
 	category        AssetCategory
 	displayName     string
 	validEntryTypes []EntryType
-}
-
-func (i *assetTypeInfo) valid(t EntryType) bool {
-	return slices.Contains(i.validEntryTypes, t)
 }
 
 var (

@@ -2,12 +2,10 @@
 <html lang="en">
 
 <head>
-    {{template "head_common.html"}}
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    {{template "head_common_v2.html"}}
 </head>
 
-<body>
+<body id="asset-page">
     {{template "nav.html" .}}
     <h1>Add asset</h1>
     <div id="status-callout" class="callout hidden"></div>
@@ -38,7 +36,7 @@
                 <label for="Name">Name</label>
             </div>
             <div class="field-value">
-                <input id="Name" name="Name" type="text" required>
+                <input id="Name" name="Name" type="text" class="trim" required>
             </div>
         </div>
         <div class="field">
@@ -46,7 +44,7 @@
                 <label for="ShortName">Short name</label>
             </div>
             <div class="field-value">
-                <input id="ShortName" name="ShortName" type="text">
+                <input id="ShortName" name="ShortName" type="text" class="trim">
             </div>
         </div>
         <div class="field">
@@ -54,7 +52,7 @@
                 <label for="IssueDate">Issue date</label>
             </div>
             <div class="field-value">
-                <input id="IssueDate" name="IssueDate">
+                <input id="IssueDate" name="IssueDate" class="datepicker">
             </div>
         </div>
         <div class="field">
@@ -62,7 +60,7 @@
                 <label for="MaturityDate">Maturity date</label>
             </div>
             <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate">
+                <input id="MaturityDate" name="MaturityDate" class="datepicker">
             </div>
         </div>
         <div class="field">
@@ -78,7 +76,7 @@
                 <label for="IBAN">IBAN</label>
             </div>
             <div class="field-value">
-                <input id="IBAN" name="IBAN" type="text">
+                <input id="IBAN" name="IBAN" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -86,7 +84,7 @@
                 <label for="AccountNumber">Account number</label>
             </div>
             <div class="field-value">
-                <input id="AccountNumber" name="AccountNumber" type="text">
+                <input id="AccountNumber" name="AccountNumber" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -94,7 +92,7 @@
                 <label for="ISIN">ISIN</label>
             </div>
             <div class="field-value">
-                <input id="ISIN" name="ISIN" type="text">
+                <input id="ISIN" name="ISIN" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -102,7 +100,7 @@
                 <label for="WKN">WKN</label>
             </div>
             <div class="field-value">
-                <input id="WKN" name="WKN" type="text">
+                <input id="WKN" name="WKN" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -110,7 +108,7 @@
                 <label for="TickerSymbol">Ticker symbol</label>
             </div>
             <div class="field-value">
-                <input id="TickerSymbol" name="TickerSymbol" type="text">
+                <input id="TickerSymbol" name="TickerSymbol" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -118,7 +116,7 @@
                 <label for="YFSymbol">y!finance symbol</label>
             </div>
             <div class="field-value">
-                <input id="YFSymbol" name="QuoteServiceSymbols" type="text">
+                <input id="YFSymbol" name="QuoteServiceSymbols" type="text" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -126,7 +124,7 @@
                 <label for="CustomID">Custom ID</label>
             </div>
             <div class="field-value">
-                <input id="CustomID" name="CustomID" type="text">
+                <input id="CustomID" name="CustomID" type="text" class="noblanks">
             </div>
         </div>
 
@@ -143,57 +141,7 @@
         </div>
     </form>
 
-    <script>
-        flatpickr("#MaturityDate", {});
-        flatpickr("#IssueDate", {});
-        const entryForm = document.querySelector("#asset-form");
-        entryForm.addEventListener("submit", async function (event) {
-            event.preventDefault(); // Prevent the default form submission
-            const formData = new FormData(this);
-            const clickedButton = event.submitter;
-            const asset = {};
-            formData.forEach((value, key) => {
-                if (!value) {
-                    return;
-                }
-                if (key === "QuoteServiceSymbols") {
-                    asset[key] = {
-                        "YF": value
-                    };
-                } else {
-                    asset[key] = value;
-                }
-            })
-            try {
-                const response = await fetch("/kontoo/assets", {
-                    method: "POST",
-                    body: JSON.stringify(asset),
-                    headers: {
-                        "Content-Type": "application/json"
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (data.status === "OK") {
-                    callout(`Successfully added asset ${data.assetId}.`);
-                    this.reset();
-                } else {
-                    calloutStatus(data.status, data.error);
-                }
-            }
-            catch (error) {
-                console.error("Error on submit:", error);
-            }
-        });
-        document.querySelector("#Type").addEventListener("keydown", function (event) {
-            if (event.key === "Backspace") {
-                event.target.value = "";
-                event.preventDefault();
-            }
-        });
-    </script>
+    <script src="/kontoo/dist/bundle.js"></script>
 </body>
 
 </html>

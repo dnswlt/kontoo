@@ -154,6 +154,11 @@ input[type="text"]:focus {
     /* Changes the border color on focus */
 }
 
+input[type="text"].invalid {
+    border-color: var(--red-foreground);
+    background-color: var(--red-background);
+}
+
 input[type="submit"] {
     padding: 12px 20px;
     background-color: var(--gray-passive);
