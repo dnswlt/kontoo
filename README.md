@@ -10,3 +10,14 @@ Make sure you have NodeJS and `npm` installed. Then run
 npm run build
 go run cmd/kontoo/kontoo.go serve -debug -ledger ./ledger.json
 ```
+
+## Development
+
+Run
+
+```bash
+npx webpack --watch
+```
+
+to automatically update `.js` and `.css` resources (still requires
+a browser refresh).

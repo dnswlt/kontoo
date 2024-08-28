@@ -11,6 +11,9 @@
   "author": "Dennis Walter <dennis.walter@gmail.com>",
   "license": "ISC",
   "dependencies": {
+    "chart.js": "^4.4.4",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "date-fns": "^3.6.0",
     "flatpickr": "^4.6.13"
   },
   "devDependencies": {

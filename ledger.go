@@ -407,6 +407,40 @@ type AssetPosition struct {
 	Items []AssetPositionItem
 }
 
+func cmpLedgerEntry(a, b *LedgerEntry) int {
+	c := a.ValueDate.Compare(b.ValueDate)
+	if c != 0 {
+		return c
+	}
+	return int(a.SequenceNum - b.SequenceNum)
+}
+
+// AssetPositionsBetween returns all asset positions for assetID
+// on days with ledger entries between start and end.
+func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetPosition {
+	var entries []*LedgerEntry
+	for _, e := range s.L.Entries {
+		if e.AssetID == assetID && e.ValueDate.Between(start, end) {
+			entries = append(entries, e)
+		}
+	}
+	slices.SortFunc(entries, cmpLedgerEntry)
+	var res []*AssetPosition
+	asset, ok := s.assetMap[assetID]
+	if !ok {
+		return nil
+	}
+	pos := &AssetPosition{
+		Asset: asset,
+	}
+	for _, e := range entries {
+		pos.Update(e)
+		res = append(res, pos.Copy())
+	}
+	return res
+}
+
+// AssetPositionsAt returns the asset positions for each non-zero asset position at t.
 func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 	byAsset := make(map[string][]*LedgerEntry)
 	// Create sorted lists (ascending by ValueDate) per asset.
@@ -420,9 +454,7 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 		}
 	}
 	for _, es := range byAsset {
-		slices.SortFunc(es, func(a, b *LedgerEntry) int {
-			return a.ValueDate.Time.Compare(b.ValueDate.Time)
-		})
+		slices.SortFunc(es, cmpLedgerEntry)
 	}
 	// Calculate position values at date.
 	var res []*AssetPosition
@@ -442,6 +474,16 @@ func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
 		}
 	}
 	return res
+}
+
+// Copy returns a semi-deep copy of p: It shares the pointer to the asset,
+// but all other, position-specific values are copied.
+func (p *AssetPosition) Copy() *AssetPosition {
+	q := *p
+	items := make([]AssetPositionItem, len(p.Items))
+	copy(items, p.Items)
+	q.Items = items
+	return &q
 }
 
 func (p *AssetPosition) Name() string {

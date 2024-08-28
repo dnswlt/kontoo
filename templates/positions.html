@@ -12,6 +12,9 @@
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
     {{ $showSubtotals := gt (len .Groups) 1 }}
+    <div id="chart-div">
+        <canvas id="chart"></canvas>
+    </div>
     <table id="positions-table">
         <thead>
             <tr>
@@ -72,8 +75,6 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
-
-    <script src="/kontoo/dist/bundle.js"></script>
 </body>
 
 </html>

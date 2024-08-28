@@ -95,8 +95,6 @@ export function init() {
             }
         }
     }
-    document.addEventListener('DOMContentLoaded', function () {
-        // Adjust UI to preselected AssetID:
-        assetIdChanged(document.querySelector("#AssetID").value);
-    });
+    // Adjust UI to preselected AssetID:
+    assetIdChanged(document.querySelector("#AssetID").value);
 }

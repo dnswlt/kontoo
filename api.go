@@ -335,6 +335,13 @@ func (d Date) Compare(other Date) int {
 	return d.Time.Compare(other.Time)
 }
 
+func (d Date) Between(start, end Date) bool {
+	if start.After(end.Time) {
+		return false
+	}
+	return !start.After(d.Time) && !end.Before(d.Time)
+}
+
 // Convenience function for sorting *Date.
 func CompareDatePtr(l, r *Date) int {
 	if l == nil {

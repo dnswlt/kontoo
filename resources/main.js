@@ -54,8 +54,9 @@ function validateMicros(input) {
 // Main code
 //
 
-// Set up date pickers on any page.
+// Set up date pickers.
 document.querySelectorAll('.datepicker').forEach(flatpickr);
+// Set up input validators.
 document.querySelectorAll("input.micros").forEach(validateMicros);
 document.querySelectorAll("input.noblanks").forEach((input) => {
     input.addEventListener("change", function (event) {
@@ -92,10 +93,6 @@ switch (document.body.id) {
         initUploadCsvPage();
         break;
     default:
-        if (document.body.id) {
-            console.error(`Page with body id ${document.body.id} not handled in main.js`);
-        } else {
-            console.log("Skipping page-specific initialisation for page without body id.");
-        }
+        console.error(`Page with body id "${document.body.id}" not handled in main.js`);
         break;
 }

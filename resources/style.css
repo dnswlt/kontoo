@@ -399,3 +399,9 @@ ul.filter-chips a {
 .contextmenu-option:hover {
     background-color: var(--gray-passive); 
 }
+
+/* Charts */
+
+#chart-div {
+    width: 800px;
+}

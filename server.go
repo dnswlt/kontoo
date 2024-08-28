@@ -60,6 +60,28 @@ type AddQuotesResponse struct {
 	ItemsImported int        `json:"itemsImported"`
 }
 
+type PositionTimelineRequest struct {
+	AssetIDs       []string `json:"assetIds"`
+	StartTimestamp int64    `json:"startTimestamp"`
+	EndTimestamp   int64    `json:"endTimestamp"`
+}
+
+// PositionTimeline contains time series data about an asset position.
+type PositionTimeline struct {
+	AssetID    string  `json:"assetId"`
+	AssetName  string  `json:"assetName"`
+	Timestamps []int64 `json:"timestamps"`
+	// Send values as int64 micros: the JSON marshalling of Micros
+	// would send them as strings (e.g. "12.3").
+	QuantityMicros []int64 `json:"quantityMicros"`
+	ValueMicros    []int64 `json:"valueMicros"`
+}
+type PositionTimelineResponse struct {
+	Status    StatusCode          `json:"status"`
+	Error     string              `json:"error,omitempty"`
+	Timelines []*PositionTimeline `json:"timelines,omitempty"`
+}
+
 type StatusCode string
 
 const (
@@ -666,6 +688,45 @@ func ensureDateParam(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
 	return date, true
 }
 
+func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request) {
+	var req PositionTimelineRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	var timelines []*PositionTimeline
+	for _, assetId := range req.AssetIDs {
+		a, ok := s.Store().assetMap[assetId]
+		if !ok {
+			continue
+		}
+		start := time.UnixMilli(req.StartTimestamp).In(time.UTC)
+		end := time.UnixMilli(req.EndTimestamp).In(time.UTC)
+		positions := s.Store().AssetPositionsBetween(a.ID(), toDate(start), toDate(end))
+		t := &PositionTimeline{
+			AssetID:   a.ID(),
+			AssetName: a.Name,
+		}
+		for _, p := range positions {
+			t.Timestamps = append(t.Timestamps, p.LastUpdate.UnixMilli())
+			t.QuantityMicros = append(t.QuantityMicros, int64(p.QuantityMicros))
+			t.ValueMicros = append(t.ValueMicros, int64(p.CalculatedValueMicros()))
+		}
+		timelines = append(timelines, t)
+	}
+	if len(timelines) == 0 {
+		s.jsonResponse(w, PositionTimelineResponse{
+			Status: StatusInvalidArgument,
+			Error:  fmt.Sprintf("No assets found for given %d IDs", len(req.AssetIDs)),
+		})
+		return
+	}
+	s.jsonResponse(w, PositionTimelineResponse{
+		Status:    StatusOK,
+		Timelines: timelines,
+	})
+}
+
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	date, ok := ensureDateParam(w, r)
 	if !ok {
@@ -785,10 +846,6 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
-		http.Error(w, "only application/json is allowed", http.StatusBadRequest)
-		return
-	}
 	var e LedgerEntry
 	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
@@ -813,11 +870,6 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
-	contentType := r.Header.Get("Content-Type")
-	if contentType != "application/json" {
-		http.Error(w, "only application/json is allowed", http.StatusBadRequest)
-		return
-	}
 	var a Asset
 	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
@@ -958,6 +1010,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
+	mux.HandleFunc("POST /kontoo/positions/timeline", s.reloadHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
