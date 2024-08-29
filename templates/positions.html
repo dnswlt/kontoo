@@ -12,8 +12,11 @@
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
     {{ $showSubtotals := gt (len .Groups) 1 }}
-    <div id="chart-div">
+    <div id="chart-div" class="hidden">
         <canvas id="chart"></canvas>
+        <div id="chart-close-button">
+            <span>&times;</span>
+        </div>
     </div>
     <table id="positions-table">
         <thead>
@@ -36,6 +39,7 @@
                     <div class="contextmenu-options">
                         <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .ID}}' data-action="add-entry">Add entry</div>
                         <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .ID) }}' data-action="show-ledger">Show ledger</div>
+                        <div class="contextmenu-option" data-id='{{ .ID }}' data-action="toggle-chart">Show/hide in chart</div>
                     </div>
                 </td>
                 <td>{{ .ID }}</td>

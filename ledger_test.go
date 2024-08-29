@@ -514,7 +514,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdate:     DateVal(2024, 1, 1),
+				LastUpdated:    DateVal(2024, 1, 1),
 				QuantityMicros: 10 * u,
 				PriceMicros:    2 * u,
 				Items: []AssetPositionItem{
@@ -533,7 +533,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdate:     DateVal(2024, 1, 2),
+				LastUpdated:    DateVal(2024, 1, 2),
 				QuantityMicros: 30 * u,
 				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
@@ -554,7 +554,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdate:     DateVal(2024, 1, 3),
+				LastUpdated:    DateVal(2024, 1, 3),
 				QuantityMicros: 10 * u,
 				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
@@ -574,7 +574,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdate:     DateVal(2024, 1, 4),
+				LastUpdated:    DateVal(2024, 1, 4),
 				QuantityMicros: 0 * u,
 				PriceMicros:    3 * u,
 				Items:          nil,

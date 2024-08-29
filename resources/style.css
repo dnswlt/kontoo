@@ -404,4 +404,13 @@ ul.filter-chips a {
 
 #chart-div {
     width: 800px;
+    position: relative;
+}
+
+#chart-close-button {
+    position: absolute;
+    top: 0;
+    right: 0;
+    cursor: pointer;
+    font-size: 150%;
 }

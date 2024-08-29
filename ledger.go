@@ -395,8 +395,9 @@ type AssetPositionItem struct {
 // AssetPosition represents the "current" asset position.
 // It is typically calculated from ledger entries for the given asset.
 type AssetPosition struct {
-	Asset          *Asset
-	LastUpdate     Date
+	Asset *Asset
+	// Last value date of any ledger entry seen for this position.
+	LastUpdated    Date
 	ValueMicros    Micros
 	QuantityMicros Micros
 	PriceMicros    Micros
@@ -494,11 +495,11 @@ func (p *AssetPosition) Currency() Currency {
 }
 
 func (p *AssetPosition) Update(e *LedgerEntry) {
+	p.LastUpdated = e.ValueDate
 	switch e.Type {
 	case AssetPurchase:
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastUpdate = e.ValueDate
 		p.Items = append(p.Items, AssetPositionItem{
 			QuantityMicros: e.QuantityMicros,
 			PriceMicros:    e.PriceMicros,
@@ -507,7 +508,6 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 	case AssetSale:
 		p.QuantityMicros -= e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
-		p.LastUpdate = e.ValueDate
 		// Remove items
 		qty := e.QuantityMicros
 		for len(p.Items) > 0 {
@@ -528,25 +528,19 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.ValueMicros = 0
 		p.QuantityMicros = 0
 		p.PriceMicros = 0
-		p.LastUpdate = e.ValueDate
 		p.Items = nil
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
-		p.LastUpdate = e.ValueDate
 	case AccountCredit:
 		p.ValueMicros += e.ValueMicros
-		p.LastUpdate = e.ValueDate
 	case AccountDebit:
 		p.ValueMicros -= e.ValueMicros
-		p.LastUpdate = e.ValueDate
 	case AccountBalance:
 		p.ValueMicros = e.ValueMicros
-		p.LastUpdate = e.ValueDate
 	case AssetHolding:
 		if e.PriceMicros != 0 {
 			p.PriceMicros = e.PriceMicros
 		}
-		p.LastUpdate = e.ValueDate
 		if e.QuantityMicros != p.QuantityMicros {
 			// Only update position if the quantity has changed,
 			// otherwise consider it an informational ledger entry.

@@ -312,13 +312,13 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	})
 	res := make([]*PositionTableRow, len(positions))
 	for i, p := range positions {
-		var lastUpdate Date
+		var lastUpdated Date
 		a := p.Asset
 		var notes []string
 		val := p.CalculatedValueMicros()
-		if !p.LastUpdate.IsZero() {
-			notes = append(notes, fmt.Sprintf("Last updated: %s", p.LastUpdate))
-			lastUpdate = p.LastUpdate
+		if !p.LastUpdated.IsZero() {
+			notes = append(notes, fmt.Sprintf("Last updated: %s", p.LastUpdated))
+			lastUpdated = p.LastUpdated
 		}
 		bval := val
 		if a.Currency != s.BaseCurrency() {
@@ -330,8 +330,8 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 			} else {
 				bval = val.Frac(UnitValue, rate)
 				notes = append(notes, fmt.Sprintf("Exch. rate date: %s", rdate))
-				if lastUpdate.IsZero() || rdate.Before(lastUpdate.Time) {
-					lastUpdate = rdate
+				if lastUpdated.IsZero() || rdate.Before(lastUpdated.Time) {
+					lastUpdated = rdate
 				}
 			}
 		}
@@ -343,7 +343,7 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 			Value:             val,
 			ValueBaseCurrency: bval,
 			Notes:             notes,
-			DataAge:           date.Sub(lastUpdate.Time),
+			DataAge:           date.Sub(lastUpdated.Time),
 		}
 	}
 	return res
@@ -708,7 +708,7 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 			AssetName: a.Name,
 		}
 		for _, p := range positions {
-			t.Timestamps = append(t.Timestamps, p.LastUpdate.UnixMilli())
+			t.Timestamps = append(t.Timestamps, p.LastUpdated.UnixMilli())
 			t.QuantityMicros = append(t.QuantityMicros, int64(p.QuantityMicros))
 			t.ValueMicros = append(t.ValueMicros, int64(p.CalculatedValueMicros()))
 		}
