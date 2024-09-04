@@ -1,7 +1,7 @@
 package kontoo
 
 import (
-	"os"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -688,7 +688,7 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 	}
 }
 
-func TestSaveLoad(t *testing.T) {
+func TestSaveLoadStore(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{
 			{
@@ -698,31 +698,44 @@ func TestSaveLoad(t *testing.T) {
 		},
 	}
 	path := filepath.Join(t.TempDir(), "ledger.json")
-	if err := ref.Save(path); err != nil {
-		t.Fatalf("could not save ledger: %v", err)
-	}
-	l := &Ledger{}
-	err := l.Load(path)
+	s, err := NewStore(ref, path)
 	if err != nil {
-		t.Fatalf("could not load ledger: %v", err)
+		t.Fatalf("Could not create store: %v", err)
 	}
-	if diff := cmp.Diff(ref, l); diff != "" {
+	if len(s.L.Entries) != 1 {
+		t.Fatalf("Unexpected number of entries in ledger: %d", len(s.L.Entries))
+	}
+	if err := s.Save(); err != nil {
+		t.Fatalf("could not save store: %v", err)
+	}
+	s2, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("could not load store: %v", err)
+	}
+	if diff := cmp.Diff(s.L, s2.L); diff != "" {
 		t.Errorf("Loaded ledger differs (-want +got):\n%s", diff)
 	}
 }
 
 func TestSaveLoadEmpty(t *testing.T) {
-	ref := Ledger{}
+	l := Ledger{}
 	path := filepath.Join(t.TempDir(), "ledger.json")
-	if err := ref.Save(path); err != nil {
-		t.Fatalf("could not save ledger: %s", err)
-	}
-	data, err := os.ReadFile(path)
+	s, err := NewStore(&l, path)
 	if err != nil {
-		t.Fatalf("could not load ledger file: %s", err)
+		t.Fatalf("Could not create store: %v", err)
 	}
-	if string(data) != "{}" {
-		t.Errorf("expected empty list, got %s", data)
+	if err := s.Save(); err != nil {
+		t.Fatalf("could not save store: %s", err)
+	}
+	s2, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("could not load store: %v", err)
+	}
+	if len(s2.L.Entries) != 0 {
+		t.Errorf("Loaded ledger is not empty, has %d entries", len(s2.L.Entries))
+	}
+	if diff := cmp.Diff(s.L, s2.L); diff != "" {
+		t.Errorf("Loaded ledger differs (-want +got):\n%s", diff)
 	}
 }
 
@@ -762,7 +775,7 @@ func TestMarshalLedger(t *testing.T) {
 			},
 		},
 	}
-	js, err := l.Marshal()
+	js, err := json.MarshalIndent(l, "", "  ")
 	if err != nil {
 		t.Fatalf("could not marshal: %v", err)
 	}

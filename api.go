@@ -303,10 +303,9 @@ type AssetGroup struct {
 }
 
 type Ledger struct {
-	Header      *LedgerHeader  `json:",omitempty"`
-	Assets      []*Asset       `json:",omitempty"`
-	AssetGroups []*AssetGroup  `json:",omitempty"`
-	Entries     []*LedgerEntry `json:",omitempty"`
+	Header  *LedgerHeader  `json:",omitempty"`
+	Assets  []*Asset       `json:",omitempty"`
+	Entries []*LedgerEntry `json:",omitempty"`
 }
 
 const (
@@ -340,18 +339,4 @@ func (d Date) Between(start, end Date) bool {
 		return false
 	}
 	return !start.After(d.Time) && !end.Before(d.Time)
-}
-
-// Convenience function for sorting *Date.
-func CompareDatePtr(l, r *Date) int {
-	if l == nil {
-		if r == nil {
-			return 0
-		}
-		return -1
-	}
-	if r == nil {
-		return 1
-	}
-	return l.Compare(*r)
 }

@@ -251,10 +251,24 @@ type PositionTableRow struct {
 	YearsToMaturity float64
 }
 
+// Convenience function for sorting *Date. Nils come last.
+func compareDatePtr(l, r *Date) int {
+	if l == nil {
+		if r == nil {
+			return 0
+		}
+		return -1
+	}
+	if r == nil {
+		return 1
+	}
+	return l.Compare(*r)
+}
+
 func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
-		c := CompareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
+		c := compareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
 		if c != 0 {
 			return c
 		}
@@ -515,7 +529,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 			Date:         h.Timestamp,
 		})
 	}
-	quoteCurrencies := s.Store().FindQuoteCurrencies()
+	quoteCurrencies := s.Store().QuoteCurrencies()
 	if len(quoteCurrencies) > 0 {
 		var err error
 		exchangeRates, err = s.yFinance.GetDailyExchangeRates(s.Store().BaseCurrency(), quoteCurrencies, date)

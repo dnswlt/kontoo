@@ -9,7 +9,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -20,8 +19,7 @@ func NewDate(year int, month time.Month, day int) *Date {
 	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
 func today() Date {
-	y, m, d := time.Now().Date()
-	return DateVal(y, m, d)
+	return toDate(time.Now())
 }
 func toDate(t time.Time) Date {
 	y, m, d := t.Date()
@@ -55,11 +53,10 @@ type Store struct {
 	path          string                      // Path to the ledger JSON.
 	assetMap      map[string]*Asset           // Maps the ledger's assets by ID.
 	exchangeRates map[Currency][]*LedgerEntry // exchange rates from Base Currency to other currencies, ordered chronologically
-	mut           sync.Mutex
 }
 
 func (s *Store) BaseCurrency() Currency {
-	return s.L.GetHeader().BaseCurrency
+	return s.L.Header.BaseCurrency
 }
 
 func (s *Store) ValueDateRange() (min, max Date) {
@@ -72,14 +69,6 @@ func (s *Store) ValueDateRange() (min, max Date) {
 		}
 	}
 	return
-}
-
-// Always returns a non-nil value. Useful to avoid nil checks for missing headers all around.
-func (l *Ledger) GetHeader() *LedgerHeader {
-	if l.Header == nil {
-		return &LedgerHeader{}
-	}
-	return l.Header
 }
 
 // ExchangeRateAt returns the BaseCurrency/QuoteCurrency exchange rate at the given time.
@@ -102,15 +91,12 @@ func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, error) {
 	return rs[i-1].PriceMicros, rs[i-1].ValueDate, nil
 }
 
-func LoadStore(path string) (*Store, error) {
-	l := &Ledger{}
-	if err := l.Load(path); err != nil {
-		return nil, fmt.Errorf("failed to load ledger: %w", err)
-	}
-	return NewStore(l, path)
-}
-
 func NewStore(ledger *Ledger, path string) (*Store, error) {
+	// Ensure header is non-nil.
+	if ledger.Header == nil {
+		ledger.Header = &LedgerHeader{}
+	}
+	// Create indexes.
 	m := make(map[string]*Asset)
 	for _, asset := range ledger.Assets {
 		id := asset.ID()
@@ -120,7 +106,7 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		m[asset.ID()] = asset
 	}
 	rs := make(map[Currency][]*LedgerEntry)
-	baseCurrency := ledger.GetHeader().BaseCurrency
+	baseCurrency := ledger.Header.BaseCurrency
 	for _, e := range ledger.Entries {
 		if e.Type == ExchangeRate && e.Currency == baseCurrency {
 			rs[e.QuoteCurrency] = append(rs[e.QuoteCurrency], e)
@@ -139,10 +125,29 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 	}, nil
 }
 
+func LoadStore(path string) (*Store, error) {
+	var l Ledger
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open %s: %w", path, err)
+	}
+	defer f.Close()
+	err = json.NewDecoder(f).Decode(&l)
+	if err != nil {
+		return nil, err
+	}
+	return NewStore(&l, path)
+}
+
 func (s *Store) Save() error {
-	s.mut.Lock()
-	defer s.mut.Unlock()
-	return s.L.Save(s.path)
+	f, err := os.Create(s.path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	enc.SetIndent("", "  ")
+	return enc.Encode(s.L)
 }
 
 func (a *Asset) ID() string {
@@ -228,7 +233,7 @@ func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
 	return assets
 }
 
-func (s *Store) FindQuoteCurrencies() []Currency {
+func (s *Store) QuoteCurrencies() []Currency {
 	var currencies []Currency
 	seen := make(map[Currency]bool)
 	for _, a := range s.L.Assets {
@@ -273,8 +278,6 @@ func (s *Store) append(e *LedgerEntry) {
 }
 
 func (s *Store) Add(e *LedgerEntry) error {
-	s.mut.Lock()
-	defer s.mut.Unlock()
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
@@ -355,8 +358,6 @@ func (s *Store) Add(e *LedgerEntry) error {
 }
 
 func (s *Store) AddAsset(a *Asset) error {
-	s.mut.Lock()
-	defer s.mut.Unlock()
 	id := a.ID()
 	if id == "" {
 		return fmt.Errorf("Asset must have an ID")
@@ -582,24 +583,4 @@ func (p *AssetPosition) CalculatedValueMicros() Micros {
 		return p.QuantityMicros.Mul(p.PriceMicros)
 	}
 	return p.ValueMicros
-}
-
-func (l *Ledger) Save(path string) error {
-	data, err := l.Marshal()
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0644)
-}
-
-func (l *Ledger) Load(path string) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, l)
-}
-
-func (l *Ledger) Marshal() ([]byte, error) {
-	return json.MarshalIndent(l, "", "  ")
 }
