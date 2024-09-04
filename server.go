@@ -61,9 +61,9 @@ type AddQuotesResponse struct {
 }
 
 type PositionTimelineRequest struct {
-	AssetIDs       []string `json:"assetIds"`
-	StartTimestamp int64    `json:"startTimestamp"`
-	EndTimestamp   int64    `json:"endTimestamp"`
+	AssetIDs     []string `json:"assetIds"`
+	EndTimestamp int64    `json:"endTimestamp"`
+	Period       string   `json:"period"`
 }
 
 // PositionTimeline contains time series data about an asset position.
@@ -694,15 +694,19 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	end := toDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	start, err := parsePeriod(end, req.Period)
+	if err != nil {
+		http.Error(w, "invalid period: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 	var timelines []*PositionTimeline
 	for _, assetId := range req.AssetIDs {
 		a, ok := s.Store().assetMap[assetId]
 		if !ok {
 			continue
 		}
-		start := time.UnixMilli(req.StartTimestamp).In(time.UTC)
-		end := time.UnixMilli(req.EndTimestamp).In(time.UTC)
-		positions := s.Store().AssetPositionsBetween(a.ID(), toDate(start), toDate(end))
+		positions := s.Store().AssetPositionsBetween(a.ID(), start, end)
 		t := &PositionTimeline{
 			AssetID:   a.ID(),
 			AssetName: a.Name,
@@ -1010,7 +1014,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
-	mux.HandleFunc("POST /kontoo/positions/timeline", s.reloadHandler(s.handlePositionsTimeline))
+	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)

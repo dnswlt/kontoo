@@ -421,7 +421,7 @@ func cmpLedgerEntry(a, b *LedgerEntry) int {
 func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetPosition {
 	var entries []*LedgerEntry
 	for _, e := range s.L.Entries {
-		if e.AssetID == assetID && e.ValueDate.Between(start, end) {
+		if e.AssetID == assetID && !e.ValueDate.After(end.Time) {
 			entries = append(entries, e)
 		}
 	}
@@ -436,7 +436,9 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	}
 	for _, e := range entries {
 		pos.Update(e)
-		res = append(res, pos.Copy())
+		if !e.ValueDate.Before(start.Time) {
+			res = append(res, pos.Copy())
+		}
 	}
 	return res
 }

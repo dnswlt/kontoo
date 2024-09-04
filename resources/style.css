@@ -110,6 +110,7 @@ form.columnar {
 .field-value {
     width: 100%;
 }
+
 .field-details {
     margin-top: 6px;
     width: 100%;
@@ -375,9 +376,11 @@ ul.filter-chips a {
 .contextmenu {
     position: relative;
 }
+
 .contextmenu:hover {
     cursor: pointer;
 }
+
 .contextmenu-options {
     display: none;
     position: absolute;
@@ -396,21 +399,50 @@ ul.filter-chips a {
     padding: 10px;
     cursor: pointer;
 }
+
 .contextmenu-option:hover {
-    background-color: var(--gray-passive); 
+    background-color: var(--gray-passive);
 }
 
 /* Charts */
 
-#chart-div {
+.chart-container {
     width: 800px;
     position: relative;
 }
 
-#chart-close-button {
+.chart-container button.close {
     position: absolute;
     top: 0;
     right: 0;
     cursor: pointer;
     font-size: 150%;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+}
+
+.chart-container .chart-period {
+    display: flex;
+    gap: 0;
+}
+.chart-container .chart-period button {
+    font: inherit;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 3px 6px;
+    margin: 0;
+    color: inherit;
+    font-size: 90%;
+    min-width: 3em;
+}
+
+.chart-container .chart-period button:hover {
+    background-color: var(--gray-passive);
+}
+.chart-container .chart-period button.selected {
+    background-color: var(--gray-active);
 }

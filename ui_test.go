@@ -36,3 +36,27 @@ func TestJoinAny(t *testing.T) {
 		}
 	}
 }
+
+func TestParsePeriod(t *testing.T) {
+	tests := []struct {
+		end    Date
+		period string
+		want   Date
+	}{
+		{DateVal(2024, 1, 1), "1M", DateVal(2023, 12, 1)},
+		{DateVal(2024, 2, 29), "1Y", DateVal(2023, 3, 1)},
+		{DateVal(1999, 12, 1), "5D", DateVal(1999, 11, 26)},
+		{DateVal(2024, 1, 1), "Max", Date{}},
+		{DateVal(2023, 7, 31), "YTD", DateVal(2023, 1, 1)},
+		{DateVal(2023, 1, 1), "YTD", DateVal(2023, 1, 1)},
+	}
+	for _, tc := range tests {
+		got, err := parsePeriod(tc.end, tc.period)
+		if err != nil {
+			t.Fatal("Cannot parse period:", err)
+		}
+		if !got.Equal(tc.want) {
+			t.Errorf("Want: %v, got: %v", tc.want, got)
+		}
+	}
+}

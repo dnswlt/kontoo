@@ -6,6 +6,7 @@ import (
 	"math"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -91,6 +92,37 @@ func joinAny(items any, sep string) (string, error) {
 		elems[i] = fmt.Sprintf("%v", val.Index(i))
 	}
 	return strings.Join(elems, sep), nil
+}
+
+// Parses the period from a request as a duration.
+// Valid values are "Max", "YTD", and "<N><Unit>", where <Unit> must be one of
+// "D", "W", "M", "Y".
+func parsePeriod(end Date, p string) (Date, error) {
+	if p == "" {
+		return Date{}, fmt.Errorf("empty period given")
+	}
+	if p == "Max" {
+		return Date{}, nil
+	}
+	if p == "YTD" {
+		return DateVal(end.Year(), 1, 1), nil
+	}
+	n, err := strconv.Atoi(p[:len(p)-1])
+	if err != nil {
+		return Date{}, fmt.Errorf("invalid number in period %s", p)
+	}
+	switch p[len(p)-1] {
+	case 'D':
+		return Date{end.AddDate(0, 0, -n)}, nil
+	case 'W':
+		return Date{end.AddDate(0, 0, -7*n)}, nil
+	case 'M':
+		return Date{end.AddDate(0, -n, 0)}, nil
+	case 'Y':
+		return Date{end.AddDate(-n, 0, 0)}, nil
+	default:
+		return Date{}, fmt.Errorf("invalid period: %s", p)
+	}
 }
 
 func commonFuncs() template.FuncMap {

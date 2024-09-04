@@ -590,6 +590,104 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 	}
 }
 
+func newTestStore(entries []*LedgerEntry) (*Store, error) {
+	symbols := make(map[string]bool)
+	for _, e := range entries {
+		symbols[e.AssetID] = true
+	}
+	assets := make([]*Asset, len(symbols))
+	i := 0
+	for s := range symbols {
+		assets[i] = &Asset{
+			Type:         Stock,
+			TickerSymbol: s,
+		}
+		i++
+	}
+	s, err := NewStore(&Ledger{Assets: assets}, "/test")
+	if err != nil {
+		return nil, err
+	}
+	for _, e := range entries {
+		if err := s.Add(e); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+func TestAssetPositionsBetween(t *testing.T) {
+	entries := []*LedgerEntry{
+		{
+			ValueDate:      DateVal(2024, 1, 1),
+			Type:           AssetPurchase,
+			QuantityMicros: 1 * UnitValue,
+			PriceMicros:    1 * UnitValue,
+			AssetID:        "KO",
+		},
+	}
+	s, err := newTestStore(entries)
+	if err != nil {
+		t.Fatal("Cannot create store:", err)
+	}
+	ps := s.AssetPositionsBetween("KO", DateVal(2023, 1, 1), DateVal(2025, 1, 1))
+	if len(ps) != 1 {
+		t.Fatalf("Wrong number of positions: %d", len(ps))
+	}
+	if !ps[0].LastUpdated.Equal(DateVal(2024, 1, 1)) {
+		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, DateVal(2024, 1, 1))
+	}
+	if ps[0].CalculatedValueMicros() != 1*UnitValue {
+		t.Errorf("Wrong value: got: %v, want: %v", ps[0].CalculatedValueMicros(), 1*UnitValue)
+	}
+}
+
+func TestAssetPositionsBetweenPast(t *testing.T) {
+	// Previous entries outside the requested period need to be
+	// included in the calculation of position values.
+	entries := []*LedgerEntry{
+		// The first two purchases should be included in the requested
+		// position on 2024-02-01, the third one should not.
+		{
+			ValueDate:      DateVal(2024, 1, 1),
+			Type:           AssetPurchase,
+			QuantityMicros: 1 * UnitValue,
+			PriceMicros:    1 * UnitValue,
+			AssetID:        "KO",
+		},
+		{
+			ValueDate:      DateVal(2024, 2, 1),
+			Type:           AssetPurchase,
+			QuantityMicros: 1 * UnitValue,
+			PriceMicros:    1 * UnitValue,
+			AssetID:        "KO",
+		},
+		{
+			ValueDate:      DateVal(2024, 3, 1),
+			Type:           AssetPurchase,
+			QuantityMicros: 1 * UnitValue,
+			PriceMicros:    1 * UnitValue,
+			AssetID:        "KO",
+		},
+	}
+	s, err := newTestStore(entries)
+	if err != nil {
+		t.Fatal("Cannot create store:", err)
+	}
+	ps := s.AssetPositionsBetween("KO", DateVal(2024, 1, 15), DateVal(2024, 2, 15))
+	if len(ps) != 1 {
+		t.Fatalf("Wrong number of positions: %d", len(ps))
+	}
+	wantDate := DateVal(2024, 2, 1)
+	if !ps[0].LastUpdated.Equal(wantDate) {
+		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, wantDate)
+	}
+	wantValue := Micros(2 * UnitValue)
+	if ps[0].CalculatedValueMicros() != wantValue {
+		t.Errorf("Wrong value: got: %v, want: %v", ps[0].CalculatedValueMicros(), wantValue)
+	}
+}
+
 func TestSaveLoad(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{
