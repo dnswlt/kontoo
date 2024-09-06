@@ -29,14 +29,21 @@ func utcDate(date time.Time) time.Time {
 	y, m, d := date.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
+func DateParse(s string) (Date, error) {
+	t, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return Date{}, err
+	}
+	return Date{t}, nil
+}
 
 func (d *Date) UnmarshalJSON(data []byte) error {
+	var err error
 	s := strings.Trim(string(data), "\"")
-	t, err := time.Parse("2006-01-02", s)
+	*d, err = DateParse(s)
 	if err != nil {
 		return err
 	}
-	*d = Date{t}
 	return nil
 }
 
@@ -49,18 +56,18 @@ func (d Date) Equal(e Date) bool {
 }
 
 type Store struct {
-	L             *Ledger
+	ledger        *Ledger
 	path          string                      // Path to the ledger JSON.
 	assetMap      map[string]*Asset           // Maps the ledger's assets by ID.
-	exchangeRates map[Currency][]*LedgerEntry // exchange rates from Base Currency to other currencies, ordered chronologically
+	exchangeRates map[Currency][]*LedgerEntry // Exchange rates from Base Currency to other currencies, ordered chronologically
 }
 
 func (s *Store) BaseCurrency() Currency {
-	return s.L.Header.BaseCurrency
+	return s.ledger.Header.BaseCurrency
 }
 
 func (s *Store) ValueDateRange() (min, max Date) {
-	for _, e := range s.L.Entries {
+	for _, e := range s.ledger.Entries {
 		if e.ValueDate.After(max.Time) {
 			max = e.ValueDate
 		}
@@ -118,7 +125,7 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		})
 	}
 	return &Store{
-		L:             ledger,
+		ledger:        ledger,
 		path:          path,
 		assetMap:      m,
 		exchangeRates: rs,
@@ -147,7 +154,7 @@ func (s *Store) Save() error {
 	defer f.Close()
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	return enc.Encode(s.L)
+	return enc.Encode(s.ledger)
 }
 
 func (a *Asset) ID() string {
@@ -179,17 +186,17 @@ func (a *Asset) MatchRef(ref string) bool {
 }
 
 func (s *Store) nextSequenceNum() int64 {
-	if len(s.L.Entries) == 0 {
+	if len(s.ledger.Entries) == 0 {
 		return 0
 	}
-	return s.L.Entries[len(s.L.Entries)-1].SequenceNum + 1
+	return s.ledger.Entries[len(s.ledger.Entries)-1].SequenceNum + 1
 }
 
 func (s *Store) FindAssetByWKN(wkn string) (*Asset, bool) {
 	if wkn == "" {
 		return nil, false
 	}
-	for _, asset := range s.L.Assets {
+	for _, asset := range s.ledger.Assets {
 		if asset.WKN == wkn {
 			return asset, true
 		}
@@ -199,7 +206,7 @@ func (s *Store) FindAssetByWKN(wkn string) (*Asset, bool) {
 
 func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
 	var res *Asset
-	for _, asset := range s.L.Assets {
+	for _, asset := range s.ledger.Assets {
 		if asset.MatchRef(ref) {
 			if res != nil {
 				// Non-unique reference
@@ -225,7 +232,7 @@ func (s *Store) LookupAsset(e *LedgerEntry) (*Asset, bool) {
 func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
 	// TODO: only return assets still in possession at a given date.
 	var assets []*Asset
-	for _, a := range s.L.Assets {
+	for _, a := range s.ledger.Assets {
 		if _, ok := a.QuoteServiceSymbols[quoteService]; ok {
 			assets = append(assets, a)
 		}
@@ -236,8 +243,8 @@ func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
 func (s *Store) QuoteCurrencies() []Currency {
 	var currencies []Currency
 	seen := make(map[Currency]bool)
-	for _, a := range s.L.Assets {
-		if a.Currency == s.L.Header.BaseCurrency || seen[a.Currency] {
+	for _, a := range s.ledger.Assets {
+		if a.Currency == s.ledger.Header.BaseCurrency || seen[a.Currency] {
 			continue
 		}
 		seen[a.Currency] = true
@@ -260,7 +267,7 @@ func (s *Store) append(e *LedgerEntry) {
 		e.Created = time.Now()
 	}
 	e.SequenceNum = s.nextSequenceNum()
-	s.L.Entries = append(s.L.Entries, e)
+	s.ledger.Entries = append(s.ledger.Entries, e)
 	if e.Type == ExchangeRate {
 		// Insert rate, maintain chronological order.
 		rs := s.exchangeRates[e.QuoteCurrency]
@@ -286,7 +293,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 			return fmt.Errorf("QuoteCurrency must not be empty")
 		}
 		if e.Currency == "" {
-			e.Currency = s.L.Header.BaseCurrency
+			e.Currency = s.ledger.Header.BaseCurrency
 		}
 		if e.PriceMicros == 0 {
 			return fmt.Errorf("PriceMicros must be non-zero for ExchangeRate entry")
@@ -381,7 +388,7 @@ func (s *Store) AddAsset(a *Asset) error {
 		return fmt.Errorf("duplicate asset ID %q", id)
 	}
 	s.assetMap[id] = a
-	s.L.Assets = append(s.L.Assets, a)
+	s.ledger.Assets = append(s.ledger.Assets, a)
 	return nil
 }
 
@@ -420,18 +427,18 @@ func cmpLedgerEntry(a, b *LedgerEntry) int {
 // AssetPositionsBetween returns all asset positions for assetID
 // on days with ledger entries between start and end.
 func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetPosition {
+	asset, ok := s.assetMap[assetID]
+	if !ok {
+		return nil
+	}
 	var entries []*LedgerEntry
-	for _, e := range s.L.Entries {
+	for _, e := range s.ledger.Entries {
 		if e.AssetID == assetID && !e.ValueDate.After(end.Time) {
 			entries = append(entries, e)
 		}
 	}
 	slices.SortFunc(entries, cmpLedgerEntry)
 	var res []*AssetPosition
-	asset, ok := s.assetMap[assetID]
-	if !ok {
-		return nil
-	}
 	pos := &AssetPosition{
 		Asset: asset,
 	}
@@ -445,15 +452,15 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 }
 
 // AssetPositionsAt returns the asset positions for each non-zero asset position at t.
-func (s *Store) AssetPositionsAt(t time.Time) []*AssetPosition {
+func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 	byAsset := make(map[string][]*LedgerEntry)
 	// Create sorted lists (ascending by ValueDate) per asset.
-	for _, e := range s.L.Entries {
+	for _, e := range s.ledger.Entries {
 		if e.AssetID == "" {
 			// Ignore e.g. ExchangeRate
 			continue
 		}
-		if !e.ValueDate.After(t) {
+		if !e.ValueDate.After(date.Time) {
 			byAsset[e.AssetID] = append(byAsset[e.AssetID], e)
 		}
 	}

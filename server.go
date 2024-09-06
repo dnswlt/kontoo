@@ -214,7 +214,7 @@ func (e *LedgerEntryRow) Comment() string {
 
 func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 	var res []*LedgerEntryRow
-	for _, e := range s.L.Entries {
+	for _, e := range s.ledger.Entries {
 		r := &LedgerEntryRow{
 			E: e,
 			A: s.assetMap[e.AssetID],
@@ -265,7 +265,7 @@ func compareDatePtr(l, r *Date) int {
 	return l.Compare(*r)
 }
 
-func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
+func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
 		c := compareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
@@ -291,7 +291,7 @@ func maturingPositionTableRows(s *Store, date time.Time) []*PositionTableRow {
 			InterestRate:    a.InterestMicros,
 			IssueDate:       a.IssueDate,
 			MaturityDate:    a.MaturityDate,
-			YearsToMaturity: a.MaturityDate.Sub(date).Hours() / 24 / 365,
+			YearsToMaturity: a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
 		}
 		res = append(res, row)
 	}
@@ -311,7 +311,7 @@ func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
 	return sum
 }
 
-func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
+func positionTableRows(s *Store, date Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
 		c := int(a.Asset.Type.Category()) - int(b.Asset.Type.Category())
@@ -336,7 +336,7 @@ func positionTableRows(s *Store, date time.Time) []*PositionTableRow {
 		}
 		bval := val
 		if a.Currency != s.BaseCurrency() {
-			rate, rdate, err := s.ExchangeRateAt(a.Currency, toDate(date))
+			rate, rdate, err := s.ExchangeRateAt(a.Currency, date)
 			if err != nil {
 				// TODO: add error info to row
 				log.Printf("No exchange rate at %v for %s: %s", date, a.Currency, err)
@@ -441,8 +441,8 @@ func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query
 }
 
 func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date) error {
-	assets := make([]*Asset, len(s.Store().L.Assets))
-	copy(assets, s.Store().L.Assets)
+	assets := make([]*Asset, len(s.Store().ledger.Assets))
+	copy(assets, s.Store().ledger.Assets)
 	slices.SortFunc(assets, func(a, b *Asset) int {
 		return strings.Compare(a.Name, b.Name)
 	})
@@ -544,7 +544,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 	return s.templates.ExecuteTemplate(w, "quotes.html", ctx)
 }
 
-func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
+func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	positions := positionTableRows(s.Store(), date)
 	groups := positionTableRowGroups(positions)
 	var total Micros
@@ -557,7 +557,7 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time
 		"Groups":                 groups,
 		"ActiveChips": map[string]bool{
 			"all":   true,
-			"today": toDate(date).Equal(today()),
+			"today": date.Equal(today()),
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
@@ -565,14 +565,14 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date time
 	return s.templates.ExecuteTemplate(w, "positions.html", ctx)
 }
 
-func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date time.Time) error {
+func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	positions := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": positions,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
-			"today":    toDate(date).Equal(today()),
+			"today":    date.Equal(today()),
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
@@ -684,20 +684,20 @@ func dateParam(r *http.Request) (Date, error) {
 	return Date{date}, nil
 }
 
-func ensureDateParam(w http.ResponseWriter, r *http.Request) (time.Time, bool) {
+func ensureDateParam(w http.ResponseWriter, r *http.Request) (Date, bool) {
 	d := r.URL.Query().Get("date")
 	if d == "" {
-		now := time.Now()
+		now := today()
 		q := r.URL.Query()
 		q.Set("date", now.Format("2006-01-02"))
 		r.URL.RawQuery = q.Encode()
 		http.Redirect(w, r, r.URL.String(), http.StatusSeeOther)
-		return time.Time{}, false
+		return Date{}, false
 	}
-	date, err := time.Parse("2006-01-02", d)
+	date, err := DateParse(d)
 	if err != nil {
 		http.Error(w, "invalid date: "+err.Error(), http.StatusBadRequest)
-		return time.Time{}, false
+		return Date{}, false
 	}
 	return date, true
 }
@@ -1027,6 +1027,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
+	// TODO: Use different path, e.g. /kontoo/quotes/list? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))

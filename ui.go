@@ -21,7 +21,7 @@ type NamedOption struct {
 	Data  map[string]any
 }
 
-func yearOptions(url url.URL, date time.Time, minDate, maxDate Date) DropdownOptions {
+func yearOptions(url url.URL, date Date, minDate, maxDate Date) DropdownOptions {
 	res := DropdownOptions{
 		Selected: &NamedOption{
 			Name:  fmt.Sprintf("%d", date.Year()),
@@ -44,7 +44,7 @@ func yearOptions(url url.URL, date time.Time, minDate, maxDate Date) DropdownOpt
 	return res
 }
 
-func monthOptions(url url.URL, date time.Time, maxDate Date) DropdownOptions {
+func monthOptions(url url.URL, date Date, maxDate Date) DropdownOptions {
 	months := []string{
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",

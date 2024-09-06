@@ -259,20 +259,16 @@ func (yf *YFinance) GetDailyQuotes(symbols []string, date time.Time) ([]*DailyQu
 	}
 	var result []*DailyQuote
 	var uncached []string
-	if yf.cache != nil {
-		for _, sym := range symbols {
-			cached, err := yf.cache.Get(sym, date)
-			if err != nil {
-				if errors.Is(err, ErrNotCached) {
-					uncached = append(uncached, sym)
-					continue
-				}
-				return nil, fmt.Errorf("failed to read from cache: %w", err)
+	for _, sym := range symbols {
+		cached, err := yf.cache.Get(sym, date)
+		if err != nil {
+			if errors.Is(err, ErrNotCached) {
+				uncached = append(uncached, sym)
+				continue
 			}
-			result = append(result, cached)
+			return nil, fmt.Errorf("failed to read from cache: %w", err)
 		}
-	} else {
-		uncached = symbols
+		result = append(result, cached)
 	}
 	startDate := date.AddDate(0, 0, -8)
 	for _, sym := range uncached {
@@ -287,8 +283,6 @@ func (yf *YFinance) GetDailyQuotes(symbols []string, date time.Time) ([]*DailyQu
 		if err != nil {
 			return nil, fmt.Errorf("failed to add price history to cache: %w", err)
 		}
-		// TODO: deal with non-trading days and add them to the cache.
-		// If we don't cache those, we'll always have to fetch data.
 		result = append(result, hist[len(hist)-1])
 	}
 	return result, nil

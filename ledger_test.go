@@ -123,10 +123,10 @@ func TestStoreAddAsset(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to add entry: %v", err)
 		}
-		if len(s.L.Assets) != i+1 {
-			t.Fatalf("Entry was not added, len(l.Assets) = %d", len(s.L.Assets))
+		if len(s.ledger.Assets) != i+1 {
+			t.Fatalf("Entry was not added, len(l.Assets) = %d", len(s.ledger.Assets))
 		}
-		got := s.L.Assets[i]
+		got := s.ledger.Assets[i]
 		if got != tc.A {
 			t.Error("Assets are not pointer equal")
 		}
@@ -188,8 +188,8 @@ func TestStoreAddAssetFail(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s: expected error, got none", tc.name)
 		}
-		if len(s.L.Assets) != 0 {
-			t.Errorf("%s: errorneous entry was added, len(l.Assets) = %d", tc.name, len(s.L.Assets))
+		if len(s.ledger.Assets) != 0 {
+			t.Errorf("%s: errorneous entry was added, len(l.Assets) = %d", tc.name, len(s.ledger.Assets))
 		}
 	}
 }
@@ -375,7 +375,7 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 		{date: DateVal(2023, 3, 31), value: 1000 * UnitValue},
 	}
 	for _, p := range params {
-		ps := s.AssetPositionsAt(p.date.Time)
+		ps := s.AssetPositionsAt(p.date)
 		if len(ps) != 1 {
 			t.Fatalf("Wrong number of positions: want 1, got %d", len(ps))
 		}
@@ -476,7 +476,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ps := s.AssetPositionsAt(tc.date.Time)
+			ps := s.AssetPositionsAt(tc.date)
 			if len(ps) != len(tc.wantPos) {
 				t.Fatalf("Wrong number of positions: want %d, got %d", len(tc.wantPos), len(ps))
 			}
@@ -702,8 +702,8 @@ func TestSaveLoadStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Could not create store: %v", err)
 	}
-	if len(s.L.Entries) != 1 {
-		t.Fatalf("Unexpected number of entries in ledger: %d", len(s.L.Entries))
+	if len(s.ledger.Entries) != 1 {
+		t.Fatalf("Unexpected number of entries in ledger: %d", len(s.ledger.Entries))
 	}
 	if err := s.Save(); err != nil {
 		t.Fatalf("could not save store: %v", err)
@@ -712,7 +712,7 @@ func TestSaveLoadStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not load store: %v", err)
 	}
-	if diff := cmp.Diff(s.L, s2.L); diff != "" {
+	if diff := cmp.Diff(s.ledger, s2.ledger); diff != "" {
 		t.Errorf("Loaded ledger differs (-want +got):\n%s", diff)
 	}
 }
@@ -731,10 +731,10 @@ func TestSaveLoadEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not load store: %v", err)
 	}
-	if len(s2.L.Entries) != 0 {
-		t.Errorf("Loaded ledger is not empty, has %d entries", len(s2.L.Entries))
+	if len(s2.ledger.Entries) != 0 {
+		t.Errorf("Loaded ledger is not empty, has %d entries", len(s2.ledger.Entries))
 	}
-	if diff := cmp.Diff(s.L, s2.L); diff != "" {
+	if diff := cmp.Diff(s.ledger, s2.ledger); diff != "" {
 		t.Errorf("Loaded ledger differs (-want +got):\n%s", diff)
 	}
 }

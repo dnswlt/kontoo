@@ -1,0 +1,41 @@
+{
+    "Header": {
+        "BaseCurrency": "EUR"
+    },
+    "Assets": [
+        {
+            "Type": "CheckingAccount",
+            "Name": "Checking account",
+            "IBAN": "DE123",
+            "Currency": "EUR"
+        },
+        {
+            "Type": "Stock",
+            "Name": "Nestle SA",
+            "TickerSymbol": "NESN",
+            "QuoteServiceSymbols": {
+                "YF": "NESN.SW"
+            },
+            "Currency": "CHF"
+        }
+    ],
+    "Entries": [
+        {
+            "Created": "2024-01-01T00:00:00Z",
+            "SequenceNum": 0,
+            "ValueDate": "2024-01-01",
+            "Type": "AccountBalance",
+            "AssetID": "DE123",
+            "Value": "1000"
+        },
+        {
+            "Created": "2024-01-02T00:00:00Z",
+            "SequenceNum": 1,
+            "ValueDate": "2024-01-02",
+            "Type": "AssetPurchase",
+            "AssetID": "NESN",
+            "Quantity": "100",
+            "Price": "98.00"
+        }
+    ]
+}
