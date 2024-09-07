@@ -381,6 +381,9 @@ func (s *Store) AddAsset(a *Asset) error {
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
+	if len(a.Currency) == 0 {
+		return fmt.Errorf("Currency must not be empty")
+	}
 	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
 		return fmt.Errorf("Currency must use ISO code (3 uppercase letters)")
 	}

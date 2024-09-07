@@ -823,7 +823,8 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			asset, found := store.FindAssetByWKN(item.WKN)
 			if !found || item.Currency != "" && asset.Currency != item.Currency {
-				log.Printf("CSV import: skipping item with WKN %q (found:%v)", item.WKN, found)
+				log.Printf("CSV import: skipping item with WKN %q (found:%v, asset currency: %v, item currency: %v)",
+					item.WKN, found, asset.Currency, item.Currency)
 				skippedWKNs = append(skippedWKNs, item.WKN)
 				continue
 			}
@@ -1027,7 +1028,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
-	// TODO: Use different path, e.g. /kontoo/quotes/list? (for consistency)
+	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))

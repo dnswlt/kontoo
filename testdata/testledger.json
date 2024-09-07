@@ -1,41 +1,51 @@
 {
-    "Header": {
-        "BaseCurrency": "EUR"
+  "Header": {
+    "BaseCurrency": "EUR"
+  },
+  "Assets": [
+    {
+      "Type": "CheckingAccount",
+      "Name": "Checking account",
+      "IBAN": "DE123",
+      "Currency": "EUR"
     },
-    "Assets": [
-        {
-            "Type": "CheckingAccount",
-            "Name": "Checking account",
-            "IBAN": "DE123",
-            "Currency": "EUR"
-        },
-        {
-            "Type": "Stock",
-            "Name": "Nestle SA",
-            "TickerSymbol": "NESN",
-            "QuoteServiceSymbols": {
-                "YF": "NESN.SW"
-            },
-            "Currency": "CHF"
-        }
-    ],
-    "Entries": [
-        {
-            "Created": "2024-01-01T00:00:00Z",
-            "SequenceNum": 0,
-            "ValueDate": "2024-01-01",
-            "Type": "AccountBalance",
-            "AssetID": "DE123",
-            "Value": "1000"
-        },
-        {
-            "Created": "2024-01-02T00:00:00Z",
-            "SequenceNum": 1,
-            "ValueDate": "2024-01-02",
-            "Type": "AssetPurchase",
-            "AssetID": "NESN",
-            "Quantity": "100",
-            "Price": "98.00"
-        }
-    ]
+    {
+      "Type": "Stock",
+      "Name": "Nestle SA",
+      "TickerSymbol": "NESN",
+      "QuoteServiceSymbols": {
+        "YF": "NESN.SW"
+      },
+      "WKN": "3886335",
+      "Currency": "CHF"
+    }
+  ],
+  "Entries": [
+    {
+      "Created": "2024-01-02T00:00:00Z",
+      "SequenceNum": 0,
+      "ValueDate": "2024-01-02",
+      "Type": "ExchangeRate",
+      "Currency": "EUR",
+      "QuoteCurrency": "CHF",
+      "Price": "0.95"
+    },
+    {
+      "Created": "2024-01-01T00:00:00Z",
+      "SequenceNum": 1,
+      "ValueDate": "2024-01-01",
+      "Type": "AccountBalance",
+      "AssetID": "DE123",
+      "Value": "1000"
+    },
+    {
+      "Created": "2024-01-02T00:00:00Z",
+      "SequenceNum": 2,
+      "ValueDate": "2024-01-02",
+      "Type": "AssetPurchase",
+      "AssetID": "NESN",
+      "Quantity": "100",
+      "Price": "98"
+    }
+  ]
 }

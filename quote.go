@@ -561,7 +561,14 @@ func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 				}
 			}
 			if len(colIdx) != len(knownHdr) {
-				return nil, fmt.Errorf("not all expected headers present: %v", colIdx)
+				missing := make([]string, 0, len(knownHdr))
+				for k := range knownHdr {
+					if _, ok := colIdx[k]; !ok {
+						missing = append(missing, k)
+					}
+				}
+				return nil, fmt.Errorf("not all expected headers present: missing: %v",
+					strings.Join(missing, ";"))
 			}
 			firstRow = false
 			continue
