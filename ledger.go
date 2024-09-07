@@ -29,7 +29,7 @@ func utcDate(date time.Time) time.Time {
 	y, m, d := date.Date()
 	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 }
-func DateParse(s string) (Date, error) {
+func ParseDate(s string) (Date, error) {
 	t, err := time.Parse("2006-01-02", s)
 	if err != nil {
 		return Date{}, err
@@ -40,7 +40,7 @@ func DateParse(s string) (Date, error) {
 func (d *Date) UnmarshalJSON(data []byte) error {
 	var err error
 	s := strings.Trim(string(data), "\"")
-	*d, err = DateParse(s)
+	*d, err = ParseDate(s)
 	if err != nil {
 		return err
 	}

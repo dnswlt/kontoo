@@ -532,6 +532,11 @@ func ReadDepotExportCSVFile(path string) ([]*DepotExportItem, error) {
 	return ReadDepotExportCSV(encIn)
 }
 
+// ReadDepotExportCSV is designed to read CSV exports of account positions
+// provided by a specific German bank.
+// It expects a set of headers to be present (in any order) and ignores
+// all other headers. It also expects German formats for decimal
+// numbers and dates as well as the use of ; as the column separator.
 func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 	r := csv.NewReader(reader)
 	r.Comma = ';'

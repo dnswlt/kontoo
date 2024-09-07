@@ -162,7 +162,7 @@ func ParseDecimalOrPercent(args []string, m *Micros) error {
 	return nil
 }
 
-func ParseDate(args []string, d *Date) error {
+func LenientParseDate(args []string, d *Date) error {
 	if args == nil {
 		return nil
 	}
@@ -277,14 +277,14 @@ func (s *argSpec) decimalOrPercent(name string, d *Micros) {
 
 func (s *argSpec) date(name string, d *Date) {
 	s.args[name] = func(xs []string) error {
-		return ParseDate(xs, d)
+		return LenientParseDate(xs, d)
 	}
 }
 
 func (s *argSpec) datePtr(name string, d **Date) {
 	s.args[name] = func(xs []string) error {
 		t := new(Date)
-		if err := ParseDate(xs, t); err != nil {
+		if err := LenientParseDate(xs, t); err != nil {
 			return err
 		}
 		*d = t

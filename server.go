@@ -694,7 +694,7 @@ func ensureDateParam(w http.ResponseWriter, r *http.Request) (Date, bool) {
 		http.Redirect(w, r, r.URL.String(), http.StatusSeeOther)
 		return Date{}, false
 	}
-	date, err := DateParse(d)
+	date, err := ParseDate(d)
 	if err != nil {
 		http.Error(w, "invalid date: "+err.Error(), http.StatusBadRequest)
 		return Date{}, false
@@ -823,8 +823,8 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		for _, item := range items {
 			asset, found := store.FindAssetByWKN(item.WKN)
 			if !found || item.Currency != "" && asset.Currency != item.Currency {
-				log.Printf("CSV import: skipping item with WKN %q (found:%v, asset currency: %v, item currency: %v)",
-					item.WKN, found, asset.Currency, item.Currency)
+				log.Printf("CSV import: skipping item with WKN %q (found:%v, item currency: %v)",
+					item.WKN, found, item.Currency)
 				skippedWKNs = append(skippedWKNs, item.WKN)
 				continue
 			}

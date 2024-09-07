@@ -16,10 +16,16 @@
       "QuoteServiceSymbols": {
         "YF": "NESN.SW"
       },
-      "WKN": "3886335",
       "Currency": "CHF"
-    }
-  ],
+    },
+    {
+        "Type": "Stock",
+        "Name": "Mercedes-Benz Group",
+        "WKN": "710000",
+        "Currency": "EUR",
+        "Comment": "Used for CSV import"
+      }
+    ],
   "Entries": [
     {
       "Created": "2024-01-02T00:00:00Z",
