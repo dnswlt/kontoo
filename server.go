@@ -819,7 +819,6 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("error processing CSV: %v", err), http.StatusBadRequest)
 			return
 		}
-		log.Printf("Received file %s with %d items\n", file.Filename, len(items))
 		for _, item := range items {
 			asset, found := store.FindAssetByWKN(item.WKN)
 			if !found || item.Currency != "" && asset.Currency != item.Currency {

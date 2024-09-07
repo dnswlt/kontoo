@@ -688,6 +688,42 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 	}
 }
 
+func TestLoadStoreSingleRecord(t *testing.T) {
+	s, err := LoadStore("./testdata/testledger.json")
+	if err != nil {
+		t.Fatal("Cannot load ledger:", err)
+	}
+	if len(s.ledger.Entries) == 0 {
+		t.Error("No entries in ledger")
+	}
+}
+
+func TestLoadStoreRecords(t *testing.T) {
+	s, err := LoadStore("./testdata/testledger.jsons")
+	if err != nil {
+		t.Fatal("Cannot load ledger:", err)
+	}
+	if len(s.ledger.Entries) == 0 {
+		t.Error("No entries in ledger")
+	}
+}
+
+func TestLoadSaveStoreRecords(t *testing.T) {
+	// This test is only used to format the .jsons file after changes.
+	t.SkipNow()
+	s, err := LoadStore("./testdata/testledger.jsons")
+	if err != nil {
+		t.Fatal("Cannot load ledger:", err)
+	}
+	if len(s.ledger.Entries) == 0 {
+		t.Error("No entries in ledger")
+	}
+	err = s.Save()
+	if err != nil {
+		t.Error("Cannot save ledger:", err)
+	}
+}
+
 func TestSaveLoadStore(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{

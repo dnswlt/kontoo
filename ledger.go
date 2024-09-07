@@ -2,9 +2,12 @@ package kontoo
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
@@ -132,6 +135,17 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 	}, nil
 }
 
+// LedgerRecord is a wrapper for storing a ledger
+// in a file, row by row, instead of as a single record.
+// Only one of its fields may be set.
+// Header must be the first entry in the file,
+// assets and entries can then be mixed arbitrarily.
+type LedgerRecord struct {
+	Header *LedgerHeader `json:",omitempty"`
+	Entry  *LedgerEntry  `json:",omitempty"`
+	Asset  *Asset        `json:",omitempty"`
+}
+
 func LoadStore(path string) (*Store, error) {
 	var l Ledger
 	f, err := os.Open(path)
@@ -139,11 +153,39 @@ func LoadStore(path string) (*Store, error) {
 		return nil, fmt.Errorf("failed to open %s: %w", path, err)
 	}
 	defer f.Close()
-	err = json.NewDecoder(f).Decode(&l)
-	if err != nil {
-		return nil, err
+
+	ext := filepath.Ext(path)
+	if ext == ".json" {
+		// Stored as a single Ledger JSON record
+		err = json.NewDecoder(f).Decode(&l)
+		if err != nil {
+			return nil, err
+		}
+		return NewStore(&l, path)
 	}
-	return NewStore(&l, path)
+	// Stored as a sequence of LedgerRecords.
+	dec := json.NewDecoder(f)
+	for {
+		var rec LedgerRecord
+		if err := dec.Decode(&rec); err != nil {
+			if errors.Is(err, io.EOF) {
+				return NewStore(&l, path)
+			}
+			return nil, err
+		}
+		if rec.Header != nil {
+			if l.Header != nil {
+				return nil, fmt.Errorf("invalid ledger %q: multiple headers", path)
+			}
+			l.Header = rec.Header
+		} else if rec.Asset != nil {
+			l.Assets = append(l.Assets, rec.Asset)
+		} else if rec.Entry != nil {
+			l.Entries = append(l.Entries, rec.Entry)
+		} else {
+			return nil, fmt.Errorf("invalid ledger %q: empty record", path)
+		}
+	}
 }
 
 func (s *Store) Save() error {
@@ -154,7 +196,34 @@ func (s *Store) Save() error {
 	defer f.Close()
 	enc := json.NewEncoder(f)
 	enc.SetIndent("", "  ")
-	return enc.Encode(s.ledger)
+	if filepath.Ext(s.path) == ".json" {
+		// Store as single record
+		return enc.Encode(s.ledger)
+	}
+	// Store as sequence of LedgerRecord
+	l := s.ledger
+	if l.Header != nil {
+		if err := enc.Encode(LedgerRecord{
+			Header: l.Header,
+		}); err != nil {
+			return fmt.Errorf("failed to write header: %w", err)
+		}
+	}
+	for _, a := range l.Assets {
+		if err := enc.Encode(LedgerRecord{
+			Asset: a,
+		}); err != nil {
+			return fmt.Errorf("failed to write asset: %w", err)
+		}
+	}
+	for _, e := range l.Entries {
+		if err := enc.Encode(LedgerRecord{
+			Entry: e,
+		}); err != nil {
+			return fmt.Errorf("failed to write ledger entry: %w", err)
+		}
+	}
+	return nil
 }
 
 func (a *Asset) ID() string {
