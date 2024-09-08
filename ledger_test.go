@@ -78,9 +78,9 @@ func TestStoreAdd(t *testing.T) {
 		if got != tc.E {
 			t.Error("Entries are not pointer equal")
 		}
-		a, found := s.LookupAsset(tc.E)
-		if !found {
-			t.Fatalf("Asset not found for ID %q or ref %q", tc.E.AssetID, tc.E.AssetRef)
+		a := s.assets[tc.E.AssetID] // AssetID is set during insertion.
+		if a == nil {
+			t.Fatalf("Asset not found for ref %q", tc.E.AssetRef)
 		}
 		if got.AssetID != a.ID() {
 			t.Errorf("Wrong AssetID: want %q, got %q", a.ID(), got.AssetID)
@@ -130,7 +130,7 @@ func TestStoreAddAsset(t *testing.T) {
 		if got != tc.A {
 			t.Error("Assets are not pointer equal")
 		}
-		_, found := s.assetMap[tc.A.ID()]
+		_, found := s.assets[tc.A.ID()]
 		if !found {
 			t.Fatalf("Asset not found for ID %q", tc.A.ID())
 		}
@@ -728,8 +728,11 @@ func TestSaveLoadStore(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{
 			{
-				Created:     time.Date(2023, 1, 1, 17, 0, 0, 0, time.UTC),
-				ValueMicros: 1_000_000,
+				Type:          ExchangeRate,
+				Created:       time.Date(2023, 1, 1, 17, 0, 0, 0, time.UTC),
+				ValueDate:     DateVal(2024, 1, 1),
+				QuoteCurrency: "CHF",
+				PriceMicros:   1 * UnitValue,
 			},
 		},
 	}

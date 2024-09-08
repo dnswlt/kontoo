@@ -340,3 +340,7 @@ func (d Date) Between(start, end Date) bool {
 	}
 	return !start.After(d.Time) && !end.Before(d.Time)
 }
+
+func (t EntryType) NeedsAssetID() bool {
+	return t != ExchangeRate && t != UnspecifiedEntryType
+}

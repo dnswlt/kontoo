@@ -217,7 +217,7 @@ func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 	for _, e := range s.ledger.Entries {
 		r := &LedgerEntryRow{
 			E: e,
-			A: s.assetMap[e.AssetID],
+			A: s.assets[e.AssetID],
 		}
 		if !query.Match(r) {
 			continue
@@ -591,7 +591,7 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, entries []*LedgerEntry, sk
 	}
 	var rows []*Row
 	for _, entry := range entries {
-		asset := store.assetMap[entry.AssetID]
+		asset := store.assets[entry.AssetID]
 		if asset == nil {
 			continue
 		}
@@ -716,7 +716,7 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 	}
 	var timelines []*PositionTimeline
 	for _, assetId := range req.AssetIDs {
-		a, ok := s.Store().assetMap[assetId]
+		a, ok := s.Store().assets[assetId]
 		if !ok {
 			continue
 		}
@@ -913,7 +913,7 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*LedgerEntry, error) {
 	result := make([]*LedgerEntry, 0, len(r.Quotes)+len(r.ExchangeRates))
 	for _, q := range r.Quotes {
-		a, ok := s.Store().assetMap[q.AssetID]
+		a, ok := s.Store().assets[q.AssetID]
 		if !ok {
 			return nil, fmt.Errorf("asset %q does not exist", q.AssetID)
 		}

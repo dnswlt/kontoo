@@ -61,7 +61,8 @@ func (d Date) Equal(e Date) bool {
 type Store struct {
 	ledger        *Ledger
 	path          string                      // Path to the ledger JSON.
-	assetMap      map[string]*Asset           // Maps the ledger's assets by ID.
+	assets        map[string]*Asset           // Maps the ledger's assets by ID.
+	entries       map[string][]*LedgerEntry   // Entries by asset ID, ordered chronologically.
 	exchangeRates map[Currency][]*LedgerEntry // Exchange rates from Base Currency to other currencies, ordered chronologically
 }
 
@@ -102,37 +103,59 @@ func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, error) {
 }
 
 func NewStore(ledger *Ledger, path string) (*Store, error) {
-	// Ensure header is non-nil.
+	// Ensure header is non-nil to avoid nil checks elsewhere.
 	if ledger.Header == nil {
 		ledger.Header = &LedgerHeader{}
 	}
-	// Create indexes.
-	m := make(map[string]*Asset)
+	s := &Store{
+		ledger:        ledger,
+		path:          path,
+		entries:       make(map[string][]*LedgerEntry),
+		assets:        make(map[string]*Asset),
+		exchangeRates: make(map[Currency][]*LedgerEntry),
+	}
+	// Build asset index.
 	for _, asset := range ledger.Assets {
 		id := asset.ID()
-		if _, found := m[id]; found {
+		if _, found := s.assets[id]; found {
 			return nil, fmt.Errorf("duplicate ID in ledger assets: %q", id)
 		}
-		m[asset.ID()] = asset
+		s.assets[asset.ID()] = asset
 	}
-	rs := make(map[Currency][]*LedgerEntry)
+	// Validate ledger entries and add to asset-keyed index.
+	seqNums := make(map[int64]bool)
+	for _, e := range ledger.Entries {
+		if seqNums[e.SequenceNum] {
+			return nil, fmt.Errorf("invalid ledger: duplicate sequence number: %d", e.SequenceNum)
+		}
+		seqNums[e.SequenceNum] = true
+		if e.AssetID == "" && e.Type.NeedsAssetID() {
+			return nil, fmt.Errorf("invalid ledger: entry #%d has no AssetID", e.SequenceNum)
+		}
+		if err := s.validateEntry(e); err != nil {
+			return nil, fmt.Errorf("invalid ledger entry: %w", err)
+		}
+		if e.AssetID != "" {
+			s.entries[e.AssetID] = append(s.entries[e.AssetID], e)
+		}
+	}
+	// Sort entries map values chronologically.
+	for k := range s.entries {
+		slices.SortFunc(s.entries[k], cmpLedgerEntry)
+	}
+	// Build exchange rates (base => quote currency) map.
 	baseCurrency := ledger.Header.BaseCurrency
 	for _, e := range ledger.Entries {
 		if e.Type == ExchangeRate && e.Currency == baseCurrency {
-			rs[e.QuoteCurrency] = append(rs[e.QuoteCurrency], e)
+			s.exchangeRates[e.QuoteCurrency] = append(s.exchangeRates[e.QuoteCurrency], e)
 		}
 	}
-	for k := range rs {
-		slices.SortFunc(rs[k], func(a, b *LedgerEntry) int {
+	for k := range s.exchangeRates {
+		slices.SortFunc(s.exchangeRates[k], func(a, b *LedgerEntry) int {
 			return a.ValueDate.Compare(b.ValueDate)
 		})
 	}
-	return &Store{
-		ledger:        ledger,
-		path:          path,
-		assetMap:      m,
-		exchangeRates: rs,
-	}, nil
+	return s, nil
 }
 
 // LedgerRecord is a wrapper for storing a ledger
@@ -165,17 +188,19 @@ func LoadStore(path string) (*Store, error) {
 	}
 	// Stored as a sequence of LedgerRecords.
 	dec := json.NewDecoder(f)
-	for {
+	for i := 0; ; i++ {
 		var rec LedgerRecord
-		if err := dec.Decode(&rec); err != nil {
-			if errors.Is(err, io.EOF) {
-				return NewStore(&l, path)
+		err := dec.Decode(&rec)
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return nil, err
 			}
-			return nil, err
+			// We reached the end of the input.
+			return NewStore(&l, path)
 		}
 		if rec.Header != nil {
-			if l.Header != nil {
-				return nil, fmt.Errorf("invalid ledger %q: multiple headers", path)
+			if i > 0 {
+				return nil, fmt.Errorf("invalid ledger %q: header as record #%d", path, i)
 			}
 			l.Header = rec.Header
 		} else if rec.Asset != nil {
@@ -248,7 +273,7 @@ func (a *Asset) ID() string {
 	return ""
 }
 
-func (a *Asset) MatchRef(ref string) bool {
+func (a *Asset) matchRef(ref string) bool {
 	return a.IBAN == ref || a.ISIN == ref || a.WKN == ref ||
 		a.AccountNumber == ref || a.TickerSymbol == ref ||
 		a.ShortName == ref || a.Name == ref
@@ -273,29 +298,18 @@ func (s *Store) FindAssetByWKN(wkn string) (*Asset, bool) {
 	return nil, false
 }
 
-func (s *Store) FindAssetByRef(ref string) (*Asset, bool) {
+func (s *Store) FindAssetByRef(ref string) *Asset {
 	var res *Asset
 	for _, asset := range s.ledger.Assets {
-		if asset.MatchRef(ref) {
+		if asset.matchRef(ref) {
 			if res != nil {
 				// Non-unique reference
-				return nil, false
+				return nil
 			}
 			res = asset
 		}
 	}
-	if res == nil {
-		return nil, false
-	}
-	return res, true
-}
-
-func (s *Store) LookupAsset(e *LedgerEntry) (*Asset, bool) {
-	if e.AssetID != "" {
-		a, found := s.assetMap[e.AssetID]
-		return a, found
-	}
-	return s.FindAssetByRef(e.AssetRef)
+	return res
 }
 
 func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
@@ -331,29 +345,37 @@ func allZero(ms ...Micros) bool {
 	return true
 }
 
-func (s *Store) append(e *LedgerEntry) {
+// insert inserts the already validated entry e into the store.
+// It sets the entry's created date and sequence number
+// and updates internal ledger and all relevant indexes.
+func (s *Store) insert(e *LedgerEntry) {
 	if e.Created.IsZero() {
 		e.Created = time.Now()
 	}
 	e.SequenceNum = s.nextSequenceNum()
 	s.ledger.Entries = append(s.ledger.Entries, e)
-	if e.Type == ExchangeRate {
-		// Insert rate, maintain chronological order.
-		rs := s.exchangeRates[e.QuoteCurrency]
-		l := len(rs)
-		rs = append(rs, e)
+	ins := func(es []*LedgerEntry, e *LedgerEntry) []*LedgerEntry {
+		l := len(es)
+		es = append(es, e)
 		i := sort.Search(l, func(i int) bool {
-			return rs[i].ValueDate.Compare(e.ValueDate) > 0
+			return es[i].ValueDate.Compare(e.ValueDate) > 0
 		})
 		if i < l {
-			copy(rs[i+1:], rs[i:l])
-			rs[i] = e
+			copy(es[i+1:], es[i:l])
+			es[i] = e
 		}
-		s.exchangeRates[e.QuoteCurrency] = rs
+		return es
+	}
+	if e.Type == ExchangeRate {
+		// Insert rate, maintain chronological order.
+		s.exchangeRates[e.QuoteCurrency] = ins(s.exchangeRates[e.QuoteCurrency], e)
+	} else {
+		// Insert asset-based entry, maintain chronological order.
+		s.entries[e.AssetID] = ins(s.entries[e.AssetID], e)
 	}
 }
 
-func (s *Store) Add(e *LedgerEntry) error {
+func (s *Store) validateEntry(e *LedgerEntry) error {
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
@@ -370,16 +392,18 @@ func (s *Store) Add(e *LedgerEntry) error {
 		if !allZero(e.ValueMicros, e.CostMicros, e.QuantityMicros) {
 			return fmt.Errorf("only PriceMicros may be specified for ExchangeRate entry")
 		}
-		s.append(e)
 		return nil
 	}
 	if e.Type == UnspecifiedEntryType || !e.Type.Registered() {
-		return fmt.Errorf("invalid EntryType: %q", e.Type)
+		return fmt.Errorf("invalid EntryType: %v", e.Type)
 	}
 	// Must be an entry that refers to an asset.
-	a, found := s.LookupAsset(e)
+	if !e.Type.NeedsAssetID() {
+		log.Fatalf("Program error: unhandled non-asset-based entry type: %v", e.Type)
+	}
+	a, found := s.assets[e.AssetID]
 	if !found {
-		return fmt.Errorf("no asset found with ID=%q or ref=%q", e.AssetID, e.AssetRef)
+		return fmt.Errorf("no asset found with AssetID=%q", e.AssetID)
 	}
 	if !slices.Contains(a.Type.ValidEntryTypes(), e.Type) {
 		return fmt.Errorf("%v is not a valid entry type for an asset of type %v", e.Type, a.Type)
@@ -389,8 +413,6 @@ func (s *Store) Add(e *LedgerEntry) error {
 	} else if e.Currency == "" {
 		e.Currency = a.Currency
 	}
-	// Change soft-link to ID ref:
-	e.AssetRef, e.AssetID = "", a.ID()
 	// General validation
 	if e.QuoteCurrency != "" {
 		return fmt.Errorf("QuoteCurrency must only be specified for ExchangeRate entry, not %q", e.Type)
@@ -401,6 +423,7 @@ func (s *Store) Add(e *LedgerEntry) error {
 	if allZero(e.ValueMicros, e.QuantityMicros, e.PriceMicros) && e.Type != AssetMaturity {
 		return fmt.Errorf("entry must have at least one non-zero value")
 	}
+	// Type-specific validation
 	switch e.Type {
 	case AssetPurchase, AssetSale:
 		if e.PriceMicros == 0 {
@@ -429,7 +452,25 @@ func (s *Store) Add(e *LedgerEntry) error {
 			return fmt.Errorf("PriceMicros and QuantityMicros must both be 0, was (%v, %v)", e.PriceMicros, e.QuantityMicros)
 		}
 	}
-	s.append(e)
+
+	return nil
+}
+
+// Add validates the given entry e and, on successful validation, inserts
+// the entry into the store.
+func (s *Store) Add(e *LedgerEntry) error {
+	if e.Type.NeedsAssetID() && e.AssetID == "" {
+		// Change ref-link to ID if necessary:
+		a := s.FindAssetByRef(e.AssetRef)
+		if a == nil {
+			return fmt.Errorf("no asset found with ref=%q", e.AssetRef)
+		}
+		e.AssetRef, e.AssetID = "", a.ID()
+	}
+	if err := s.validateEntry(e); err != nil {
+		return fmt.Errorf("entry validation failed: %w", err)
+	}
+	s.insert(e)
 	return nil
 }
 
@@ -456,10 +497,10 @@ func (s *Store) AddAsset(a *Asset) error {
 	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
 		return fmt.Errorf("Currency must use ISO code (3 uppercase letters)")
 	}
-	if _, ok := s.assetMap[id]; ok {
+	if _, ok := s.assets[id]; ok {
 		return fmt.Errorf("duplicate asset ID %q", id)
 	}
-	s.assetMap[id] = a
+	s.assets[id] = a
 	s.ledger.Assets = append(s.ledger.Assets, a)
 	return nil
 }
@@ -499,22 +540,19 @@ func cmpLedgerEntry(a, b *LedgerEntry) int {
 // AssetPositionsBetween returns all asset positions for assetID
 // on days with ledger entries between start and end.
 func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetPosition {
-	asset, ok := s.assetMap[assetID]
+	asset, ok := s.assets[assetID]
 	if !ok {
 		return nil
 	}
-	var entries []*LedgerEntry
-	for _, e := range s.ledger.Entries {
-		if e.AssetID == assetID && !e.ValueDate.After(end.Time) {
-			entries = append(entries, e)
-		}
-	}
-	slices.SortFunc(entries, cmpLedgerEntry)
+	entries := s.entries[assetID]
 	var res []*AssetPosition
 	pos := &AssetPosition{
 		Asset: asset,
 	}
 	for _, e := range entries {
+		if e.ValueDate.After(end.Time) {
+			break
+		}
 		pos.Update(e)
 		if !e.ValueDate.Before(start.Time) {
 			res = append(res, pos.Copy())
@@ -525,24 +563,10 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 
 // AssetPositionsAt returns the asset positions for each non-zero asset position at t.
 func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
-	byAsset := make(map[string][]*LedgerEntry)
-	// Create sorted lists (ascending by ValueDate) per asset.
-	for _, e := range s.ledger.Entries {
-		if e.AssetID == "" {
-			// Ignore e.g. ExchangeRate
-			continue
-		}
-		if !e.ValueDate.After(date.Time) {
-			byAsset[e.AssetID] = append(byAsset[e.AssetID], e)
-		}
-	}
-	for _, es := range byAsset {
-		slices.SortFunc(es, cmpLedgerEntry)
-	}
 	// Calculate position values at date.
 	var res []*AssetPosition
-	for assetId, es := range byAsset {
-		asset, ok := s.assetMap[assetId]
+	for assetId, es := range s.entries {
+		asset, ok := s.assets[assetId]
 		if !ok {
 			log.Fatalf("Program error: ledger entry with invalid AssetId: %q", assetId)
 		}
@@ -550,6 +574,9 @@ func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 			Asset: asset,
 		}
 		for _, e := range es {
+			if e.ValueDate.After(date.Time) {
+				break
+			}
 			pos.Update(e)
 		}
 		if pos.CalculatedValueMicros() != 0 {
