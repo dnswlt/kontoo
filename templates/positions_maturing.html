@@ -13,16 +13,15 @@
             <tr>
                 <th>Name</th>
                 <th>Code</th>
-                <th>Category</th>
                 <th>Type</th>
                 <th>Currency</th>
                 <th>Market value</th>
                 <th>Purchase price</th>
                 <th>Nominal value</th>
-                <th>Interest rate</th>
+                <th>Interest</th>
                 <th>Issue date</th>
                 <th>Maturity date</th>
-                <th>Years to maturity</th>
+                <th title="Years to maturity">YTM</th>
             </tr>
         </thead>
         <tbody>
@@ -36,12 +35,11 @@
                     </div>
                 </td>
                 <td>{{ .ID }}</td>
-                <td>{{ assetCategory .Type }}</td>
                 <td>{{ assetType .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign">{{ money .Value }}</td>
-                <td class="ralign">{{ money .PurchasePrice }}</td>
-                <td class="ralign">{{ money .NominalValue }}</td>
+                <td class="ralign">{{if nonzero .PurchasePrice}}{{ money .PurchasePrice }}{{end}}</td>
+                <td class="ralign">{{if nonzero .NominalValue}}{{ money .NominalValue }}{{end}}</td>
                 <td class="ralign">{{ percent .InterestRate }}</td>
                 <td class="nowrap">{{ .IssueDate }}</td>
                 <td class="nowrap">{{ .MaturityDate }}</td>

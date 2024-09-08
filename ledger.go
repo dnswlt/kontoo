@@ -286,16 +286,16 @@ func (s *Store) nextSequenceNum() int64 {
 	return s.ledger.Entries[len(s.ledger.Entries)-1].SequenceNum + 1
 }
 
-func (s *Store) FindAssetByWKN(wkn string) (*Asset, bool) {
+func (s *Store) FindAssetByWKN(wkn string) *Asset {
 	if wkn == "" {
-		return nil, false
+		return nil
 	}
 	for _, asset := range s.ledger.Assets {
 		if asset.WKN == wkn {
-			return asset, true
+			return asset
 		}
 	}
-	return nil, false
+	return nil
 }
 
 func (s *Store) FindAssetByRef(ref string) *Asset {
@@ -561,24 +561,29 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	return res
 }
 
+func (s *Store) AssetPositionAt(assetId string, date Date) *AssetPosition {
+	asset, ok := s.assets[assetId]
+	if !ok {
+		return nil
+	}
+	pos := &AssetPosition{
+		Asset: asset,
+	}
+	for _, e := range s.entries[assetId] {
+		if e.ValueDate.After(date.Time) {
+			break
+		}
+		pos.Update(e)
+	}
+	return pos
+}
+
 // AssetPositionsAt returns the asset positions for each non-zero asset position at t.
 func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 	// Calculate position values at date.
 	var res []*AssetPosition
-	for assetId, es := range s.entries {
-		asset, ok := s.assets[assetId]
-		if !ok {
-			log.Fatalf("Program error: ledger entry with invalid AssetId: %q", assetId)
-		}
-		pos := &AssetPosition{
-			Asset: asset,
-		}
-		for _, e := range es {
-			if e.ValueDate.After(date.Time) {
-				break
-			}
-			pos.Update(e)
-		}
+	for assetId := range s.assets {
+		pos := s.AssetPositionAt(assetId, date)
 		if pos.CalculatedValueMicros() != 0 {
 			res = append(res, pos)
 		}

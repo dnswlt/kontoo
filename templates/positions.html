@@ -60,8 +60,11 @@
                     {{ money .Value }}
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
                 </td>
-                <td class="tooltip">{{if gt (days .DataAge) 35}}<i class="emoji emoji-warning"></i>{{end}}
+                <td class="tooltip">
+                    {{if gt (days .DataAge) 35}}
+                    <i class="emoji emoji-warning"></i>
                     <span class="tooltiptext">Data is {{days .DataAge}} days old.</span>
+                    {{end}}
                 </td>
             </tr>
             {{end}}

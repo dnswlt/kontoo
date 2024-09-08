@@ -1,4 +1,5 @@
 {{if .Entries }}
+<p>Rows with prices not yet stored in the ledger are preselected.</p>
 <table id="results">
     <thead>
         <th></th>
@@ -7,24 +8,35 @@
         <th>Name</th>
         <th>Currency</th>
         <th>Price</th>
+        <th>Qty (CSV)</th>
+        <th>Qty (Ledger)</th>
     </thead>
     <tbody>
+        {{$checkAll := true}}
         {{range .Entries}}
         <tr>
             <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{.PriceMicros}}"
-                    class="selector" type="checkbox" name="quote" checked></td>
+                    class="selector" type="checkbox" name="quote" {{if .Preselect}}checked{{end}}></td>
             <td>{{yyyymmdd .ValueDate}}</td>
             <td>{{.AssetID}}</td>
             <td>{{.AssetName}}</td>
             <td>{{.Currency}}</td>
             <td>{{price .PriceMicros}}</td>
+            <td>{{quantity .QuantityImportMicros}}</td>
+            <td class="tooltip">{{quantity .QuantityCurrentMicros}}
+                {{if ne .QuantityImportMicros .QuantityCurrentMicros}}
+                <i class="emoji emoji-warning"></i>
+                <span class="tooltiptext">Quantities in CSV and ledger differ at this value date</span>
+                {{end}}
+            </td>
+            {{$checkAll = and $checkAll .Preselect}}
         </tr>
         {{end}}
         <tr>
-            <td><input type="checkbox" id="select-all" checked></td>
+            <td><input type="checkbox" id="select-all" {{if $checkAll}}checked{{end}}></td>
             <td colspan="5"><label for="select-all">Check/uncheck all</label></td>
         </tr>
     </tbody>
 </table>
-<button id="submit">Confirm and submit</button>
+<button id="submit">Submit price data</button>
 {{end}}

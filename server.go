@@ -584,31 +584,37 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
 	return s.templates.ExecuteTemplate(w, "upload_csv.html", s.addCommonCtx(r, map[string]any{}))
 }
 
-func (s *Server) renderSnipUploadCsvData(w io.Writer, entries []*LedgerEntry, skipped []string, store *Store) error {
+func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, store *Store) error {
 	type Row struct {
-		*LedgerEntry
-		AssetName string
+		AssetID               string
+		AssetName             string
+		ValueDate             Date
+		PriceMicros           Micros
+		Currency              Currency
+		QuantityImportMicros  Micros
+		QuantityCurrentMicros Micros
+		Preselect             bool
 	}
 	var rows []*Row
-	for _, entry := range entries {
-		asset := store.assets[entry.AssetID]
+	for _, item := range items {
+		asset := store.FindAssetByWKN(item.WKN)
 		if asset == nil {
-			continue
+			log.Fatalf("Program error: renderSnipUploadCsvData expects WKN to exist: %q", item.WKN)
 		}
+		p := s.Store().AssetPositionAt(asset.ID(), item.ValueDate)
 		rows = append(rows, &Row{
-			LedgerEntry: entry,
-			AssetName:   asset.Name,
+			AssetID:               asset.ID(),
+			AssetName:             asset.Name,
+			ValueDate:             item.ValueDate,
+			PriceMicros:           item.PriceMicros,
+			Currency:              asset.Currency,
+			QuantityImportMicros:  item.QuantityMicros,
+			QuantityCurrentMicros: p.QuantityMicros,
+			Preselect:             p.LastUpdated.Before(item.ValueDate.Time),
 		})
-	}
-	slices.Sort(skipped)
-	suffix := ""
-	if len(skipped) > 5 {
-		skipped = skipped[:5]
-		suffix = ", ..."
 	}
 	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", map[string]any{
 		"Entries": rows,
-		"Skipped": strings.Join(skipped, ", ") + suffix,
 	})
 }
 
@@ -798,67 +804,57 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid form", http.StatusBadRequest)
 		return
 	}
-	var entries []*LedgerEntry
-	var skippedWKNs []string
-	store := s.Store()
-	for _, file := range r.MultipartForm.File["file"] {
-		ext := strings.ToLower(filepath.Ext(file.Filename))
-		if ext != ".csv" && ext != ".txt" {
-			http.Error(w, fmt.Sprintf("Invalid file extension: %s", ext), http.StatusBadRequest)
-			return
+	if len(r.MultipartForm.File["file"]) != 1 {
+		http.Error(w, "must upload exactly one CSV file", http.StatusBadRequest)
+		return
+	}
+	file := r.MultipartForm.File["file"][0]
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	if ext != ".csv" && ext != ".txt" {
+		http.Error(w, fmt.Sprintf("Invalid file extension: %s", ext), http.StatusBadRequest)
+		return
+	}
+	f, err := file.Open()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid form data: %v", err), http.StatusBadRequest)
+		return
+	}
+	// Assume ISO 8859-15 encoding.
+	enc := charmap.ISO8859_15.NewDecoder().Reader(f)
+	items, err := ReadDepotExportCSV(enc)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error processing CSV: %v", err), http.StatusBadRequest)
+		return
+	}
+	validItems := make([]*DepotExportItem, 0, len(items))
+	var skipped []string
+	for _, item := range items {
+		if a := s.Store().FindAssetByWKN(item.WKN); a == nil {
+			skipped = append(skipped, item.WKN)
+			continue
 		}
-		f, err := file.Open()
-		if err != nil {
-			http.Error(w, fmt.Sprintf("invalid form data: %v", err), http.StatusBadRequest)
-			return
-		}
-		// Assume ISO 8859-15 encoding.
-		enc := charmap.ISO8859_15.NewDecoder().Reader(f)
-		items, err := ReadDepotExportCSV(enc)
-		if err != nil {
-			http.Error(w, fmt.Sprintf("error processing CSV: %v", err), http.StatusBadRequest)
-			return
-		}
-		for _, item := range items {
-			asset, found := store.FindAssetByWKN(item.WKN)
-			if !found || item.Currency != "" && asset.Currency != item.Currency {
-				log.Printf("CSV import: skipping item with WKN %q (found:%v, item currency: %v)",
-					item.WKN, found, item.Currency)
-				skippedWKNs = append(skippedWKNs, item.WKN)
-				continue
-			}
-			entries = append(entries, &LedgerEntry{
-				Type:        AssetPrice,
-				ValueDate:   item.ValueDate,
-				AssetID:     asset.ID(),
-				Currency:    asset.Currency,
-				PriceMicros: item.PriceMicros,
-				Comment:     "CSV import",
-			})
-		}
+		validItems = append(validItems, item)
 	}
 	var buf bytes.Buffer
-	if err := s.renderSnipUploadCsvData(&buf, entries, skippedWKNs, store); err != nil {
+	if err := s.renderSnipUploadCsvData(&buf, validItems, s.Store()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
 	status := StatusOK
-	if len(skippedWKNs) > 0 {
-		if len(entries) > 0 {
-			status = StatusPartialSuccess
-		} else {
-			status = StatusInvalidArgument
-		}
+	if len(validItems) == 0 {
+		status = StatusInvalidArgument
+	} else if len(validItems) != len(items) {
+		status = StatusPartialSuccess
 	}
 	errorText := ""
-	if len(skippedWKNs) > 0 {
-		errorText = fmt.Sprintf("Successfully read %d rows. Skipped WKNs: %s", len(entries),
-			strings.Join(skippedWKNs, ", "))
+	if len(skipped) > 0 {
+		errorText = fmt.Sprintf("Successfully read %d rows. Skipped WKNs: %s", len(validItems),
+			strings.Join(skipped, ", "))
 	}
 	s.jsonResponse(w, CsvUploadResponse{
 		Status:     status,
 		Error:      errorText,
-		NumEntries: len(entries),
+		NumEntries: len(validItems),
 		InnerHTML:  buf.String(),
 	})
 }
