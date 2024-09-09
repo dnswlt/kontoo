@@ -65,6 +65,18 @@ func (m Micros) SplitFrac() (int64, int) {
 	return int64(m / 1_000_000), int(m % 1_000_000)
 }
 
+func (m Micros) Float() float64 {
+	f := float64(m)
+	return f / 1e6
+}
+
+func FloatAsMicros(f float64) Micros {
+	if math.Abs(f*1e6) > math.MaxInt64 {
+		panic(fmt.Sprintf("cannot represent %v as Micros", f))
+	}
+	return Micros(int64(f * 1e6))
+}
+
 func (m Micros) Format(format string) string {
 	// "()'.3"  "-.3"  ".3%"
 	// Must be a format string

@@ -55,7 +55,11 @@ function validateMicros(input) {
 //
 
 // Set up date pickers.
-document.querySelectorAll('.datepicker').forEach(flatpickr);
+document.querySelectorAll('.datepicker').forEach(input => {
+    flatpickr(input, {
+        allowInput: true
+    })
+});
 // Set up input validators.
 document.querySelectorAll("input.micros").forEach(validateMicros);
 document.querySelectorAll("input.noblanks").forEach((input) => {

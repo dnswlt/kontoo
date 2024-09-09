@@ -76,6 +76,10 @@ type assetTypeInfo struct {
 	category        AssetCategory
 	displayName     string
 	validEntryTypes []EntryType
+	// Reports whether the asset type tracks invididual credit/debit
+	// transactions in asset positions. The alternative is to only
+	// track the current balance.
+	useTransactionTracking bool
 }
 
 var (
@@ -127,10 +131,11 @@ var (
 			validEntryTypes: []EntryType{AssetPurchase, AssetSale, AssetPrice, AssetHolding, InterestPayment, AssetMaturity},
 		},
 		{
-			typ:             FixedDepositAccount,
-			category:        FixedIncome,
-			displayName:     "Fixed deposit",
-			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment, AssetMaturity},
+			typ:                    FixedDepositAccount,
+			category:               FixedIncome,
+			displayName:            "Fixed deposit",
+			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment, AssetMaturity},
+			useTransactionTracking: true,
 		},
 		{
 			typ:             MoneyMarketAccount,
@@ -157,10 +162,11 @@ var (
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 		},
 		{
-			typ:             PensionAccount,
-			category:        RetirementSavings,
-			displayName:     "Pension account",
-			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			typ:                    PensionAccount,
+			category:               RetirementSavings,
+			displayName:            "Pension account",
+			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			useTransactionTracking: true,
 		},
 		{
 			typ:             Commodity,
@@ -175,16 +181,18 @@ var (
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:             TaxLiability,
-			category:        Taxes,
-			displayName:     "Tax liability",
-			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			typ:                    TaxLiability,
+			category:               Taxes,
+			displayName:            "Tax liability",
+			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			useTransactionTracking: true,
 		},
 		{
-			typ:             TaxPayment,
-			category:        Taxes,
-			displayName:     "Tax payment",
-			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			typ:                    TaxPayment,
+			category:               Taxes,
+			displayName:            "Tax payment",
+			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			useTransactionTracking: true,
 		},
 		{
 			typ:             CreditCardDebt,
@@ -220,18 +228,31 @@ func (t AssetType) DisplayName() string {
 	return assetTypeInfos[t].displayName
 }
 
+func (t AssetType) UseTransactionTracking() bool {
+	return assetTypeInfos[t].useTransactionTracking
+}
+
+type InterestPaymentSchedule string
+
+const (
+	UnspecifiedPayment InterestPaymentSchedule = ""
+	AccruedPayment     InterestPaymentSchedule = "accrued" // Interest paid at maturity
+	AnnualPayment      InterestPaymentSchedule = "annual"  // Interest paid yearly
+)
+
 type Asset struct {
-	Type           AssetType
-	Name           string
-	ShortName      string `json:",omitempty"`
-	IssueDate      *Date  `json:",omitempty"`
-	MaturityDate   *Date  `json:",omitempty"`
-	InterestMicros Micros `json:"Interest,omitempty"`
-	IBAN           string `json:",omitempty"`
-	AccountNumber  string `json:",omitempty"`
-	ISIN           string `json:",omitempty"`
-	WKN            string `json:",omitempty"`
-	TickerSymbol   string `json:",omitempty"`
+	Type            AssetType
+	Name            string
+	ShortName       string                  `json:",omitempty"`
+	IssueDate       *Date                   `json:",omitempty"`
+	MaturityDate    *Date                   `json:",omitempty"`
+	InterestMicros  Micros                  `json:"Interest,omitempty"`
+	InterestPayment InterestPaymentSchedule `json:",omitempty"`
+	IBAN            string                  `json:",omitempty"`
+	AccountNumber   string                  `json:",omitempty"`
+	ISIN            string                  `json:",omitempty"`
+	WKN             string                  `json:",omitempty"`
+	TickerSymbol    string                  `json:",omitempty"`
 	// More ticker symbols, to get stock quotes online.
 	// Keyed by quote service. Not used as ID.
 	QuoteServiceSymbols map[string]string `json:",omitempty"`

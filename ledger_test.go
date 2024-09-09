@@ -313,7 +313,7 @@ func TestExchangeRatesLookup(t *testing.T) {
 	}
 }
 
-func TestPositionsAtSingleAsset(t *testing.T) {
+func TestPositionsAtSavingsAccount(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{
 			{
@@ -355,7 +355,7 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 			Type:        AccountDebit,
 			AssetID:     "DE12",
 			ValueDate:   DateVal(2023, 3, 31),
-			ValueMicros: 4000 * UnitValue,
+			ValueMicros: -4000 * UnitValue,
 		},
 	}
 	for _, e := range entries {
@@ -382,6 +382,83 @@ func TestPositionsAtSingleAsset(t *testing.T) {
 		gotValue := ps[0].ValueMicros
 		if gotValue != p.value {
 			t.Errorf("Wrong value: Want %v, got %v", p.value, gotValue)
+		}
+	}
+}
+
+func TestPositionAtFixedDeposit(t *testing.T) {
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Type:         FixedDepositAccount,
+				IBAN:         "DE12",
+				IssueDate:    NewDate(2023, 1, 1),
+				MaturityDate: NewDate(2024, 1, 1),
+			},
+		},
+	}
+	s, err := NewStore(l, "/test")
+	if err != nil {
+		t.Fatal("Could not create store", err)
+	}
+	entries := []*LedgerEntry{
+		{
+			Type:        AccountCredit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 1),
+			ValueMicros: 1000 * UnitValue,
+		},
+		{
+			Type:        InterestPayment,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 6, 1),
+			ValueMicros: 10 * UnitValue,
+		},
+		{
+			Type:        AccountBalance,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 6, 1),
+			ValueMicros: 1010 * UnitValue,
+		},
+		{
+			Type:        AssetMaturity,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2024, 1, 1),
+			ValueMicros: 1020 * UnitValue,
+		},
+	}
+	for _, e := range entries {
+		err = s.Add(e)
+		if err != nil {
+			t.Fatal("Cannot add to ledger:", err)
+		}
+	}
+	tests := []struct {
+		date  Date
+		value Micros
+		items []AssetPositionItem
+	}{
+		{date: DateVal(2023, 1, 1), value: 1000 * UnitValue,
+			items: []AssetPositionItem{
+				{ValueDate: DateVal(2023, 1, 1), TransactionValueMicros: 1000 * UnitValue},
+			}},
+		{date: DateVal(2023, 6, 1), value: 1010 * UnitValue,
+			items: []AssetPositionItem{
+				// AccountBalance should not have changed items:
+				{ValueDate: DateVal(2023, 1, 1), TransactionValueMicros: 1000 * UnitValue},
+			}},
+		{date: DateVal(2024, 1, 1), value: 0},
+	}
+	for _, tc := range tests {
+		p := s.AssetPositionAt("DE12", tc.date)
+		if p == nil {
+			t.Fatalf("No position obtained at %v", tc.date)
+		}
+		if p.MarketValue() != tc.value {
+			t.Errorf("Wrong value: Want %v, got %v", tc.value, p.MarketValue())
+		}
+		if diff := cmp.Diff(tc.items, p.Items); diff != "" {
+			t.Errorf("Wrong items (-want, +got): %s", diff)
 		}
 	}
 }
@@ -481,7 +558,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 				t.Fatalf("Wrong number of positions: want %d, got %d", len(tc.wantPos), len(ps))
 			}
 			for _, gotPos := range ps {
-				gotValue := gotPos.CalculatedValueMicros()
+				gotValue := gotPos.MarketValue()
 				assetId := gotPos.Asset.ID()
 				if gotValue != tc.wantPos[assetId] {
 					t.Errorf("Wrong value for asset %s: Want %v, got %v", assetId, tc.wantPos[assetId], gotValue)
@@ -518,7 +595,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				QuantityMicros: 10 * u,
 				PriceMicros:    2 * u,
 				Items: []AssetPositionItem{
-					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 				},
 			},
 		},
@@ -537,8 +614,8 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				QuantityMicros: 30 * u,
 				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
-					{QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
-					{QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
+					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
 				},
 			},
 		},
@@ -558,7 +635,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				QuantityMicros: 10 * u,
 				PriceMicros:    3 * u,
 				Items: []AssetPositionItem{
-					{QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
+					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
 				},
 			},
 		},
@@ -578,6 +655,68 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				QuantityMicros: 0 * u,
 				PriceMicros:    3 * u,
 				Items:          nil,
+			},
+		},
+	}
+	p := &AssetPosition{Asset: asset}
+	for i, tc := range tests {
+		p.Update(tc.E)
+		if diff := cmp.Diff(tc.P, p); diff != "" {
+			t.Errorf("Update mismatch at element %d (-want, +got): %s", i, diff)
+		}
+	}
+}
+
+func TestAssetPositionAssetHolding(t *testing.T) {
+	asset := &Asset{
+		Type:         CorporateBond,
+		Name:         "Papa Joe 2030",
+		TickerSymbol: "PJ30",
+		Currency:     "USD",
+	}
+	const u = UnitValue
+	tests := []struct {
+		E *LedgerEntry
+		P *AssetPosition
+	}{
+		{
+			// This entry should update Items.
+			E: &LedgerEntry{
+				Type:           AssetHolding,
+				AssetID:        "PJ30",
+				ValueDate:      DateVal(2024, 1, 1),
+				QuantityMicros: 1000 * u,
+				PriceMicros:    1 * u,
+				CostMicros:     50 * u,
+			},
+			P: &AssetPosition{
+				Asset:          asset,
+				LastUpdated:    DateVal(2024, 1, 1),
+				QuantityMicros: 1000 * u,
+				PriceMicros:    1 * u,
+				Items: []AssetPositionItem{
+					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
+				},
+			},
+		},
+		{
+			// This entry should not update Items, as its quantity is the same as before.
+			// The price has doubled, which should be reflected in the position.
+			E: &LedgerEntry{
+				Type:           AssetHolding,
+				AssetID:        "PJ30",
+				ValueDate:      DateVal(2024, 1, 2),
+				QuantityMicros: 1000 * u,
+				PriceMicros:    2 * u,
+			},
+			P: &AssetPosition{
+				Asset:          asset,
+				LastUpdated:    DateVal(2024, 1, 2),
+				QuantityMicros: 1000 * u,
+				PriceMicros:    2 * u,
+				Items: []AssetPositionItem{
+					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
+				},
 			},
 		},
 	}
@@ -637,8 +776,8 @@ func TestAssetPositionsBetween(t *testing.T) {
 	if !ps[0].LastUpdated.Equal(DateVal(2024, 1, 1)) {
 		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, DateVal(2024, 1, 1))
 	}
-	if ps[0].CalculatedValueMicros() != 1*UnitValue {
-		t.Errorf("Wrong value: got: %v, want: %v", ps[0].CalculatedValueMicros(), 1*UnitValue)
+	if ps[0].MarketValue() != 1*UnitValue {
+		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), 1*UnitValue)
 	}
 }
 
@@ -683,8 +822,8 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, wantDate)
 	}
 	wantValue := Micros(2 * UnitValue)
-	if ps[0].CalculatedValueMicros() != wantValue {
-		t.Errorf("Wrong value: got: %v, want: %v", ps[0].CalculatedValueMicros(), wantValue)
+	if ps[0].MarketValue() != wantValue {
+		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), wantValue)
 	}
 }
 

@@ -1,6 +1,7 @@
 <table>
     <thead>
         <tr>
+            <th class="ralign">#</th>
             <th>Value Date</th>
             <th>Created</th>
             <th>Entry Type</th>
@@ -18,6 +19,7 @@
     <tbody>
         {{range .TableRows}}
         <tr>
+            <td class="ralign">{{ .SequenceNum }}</td>
             <td class="nowrap">{{ .ValueDate }}</td>
             <td class="nowrap">{{ ymdhm .Created }}</td>
             <td>{{ .EntryType }}</td>

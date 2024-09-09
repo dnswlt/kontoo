@@ -79,6 +79,8 @@ export function init() {
             showFields(["AssetID", "Value"]);
         } else if (typ === "AssetPrice") {
             showFields(["AssetID", "Price"]);
+        } else if (typ === "AssetMaturity") {
+            showFields(["AssetID", "Value"]);
         } else {
             showFields(["AssetID", "Value", "Quantity", "Price", "Cost"]);
         }

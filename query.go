@@ -147,6 +147,8 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 			fval = e.EntryType()
 		case "class":
 			fval = e.AssetType()
+		case "num":
+			fval = strconv.FormatInt(e.SequenceNum(), 10)
 		}
 		if fval == "" {
 			//  Match fails for unsupported (and empty) fields

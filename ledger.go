@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -438,11 +439,27 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 		}
 	case AccountBalance:
 		if e.PriceMicros != 0 || e.QuantityMicros != 0 {
-			return fmt.Errorf("PriceMicros and QuantityMicros must both be 0, was (%v, %v)", e.PriceMicros, e.QuantityMicros)
+			return fmt.Errorf("PriceMicros and QuantityMicros must be 0 for %v, was (%v, %v)",
+				e.Type, e.PriceMicros, e.QuantityMicros)
+		}
+	case AccountCredit, AccountDebit:
+		if e.PriceMicros != 0 || e.QuantityMicros != 0 {
+			return fmt.Errorf("PriceMicros and QuantityMicros must be 0 for %v, was (%v, %v)",
+				e.Type, e.PriceMicros, e.QuantityMicros)
+		}
+		if e.Type == AccountCredit && e.ValueMicros <= 0 {
+			return fmt.Errorf("ValueMicros must be positive for %v, was %v", e.Type, e.ValueMicros)
+		} else if e.Type == AccountDebit && e.ValueMicros >= 0 {
+			return fmt.Errorf("ValueMicros must be negative for %v, was %v", e.Type, e.ValueMicros)
 		}
 	case AssetHolding:
 		if e.QuantityMicros == 0 || e.PriceMicros == 0 {
 			return fmt.Errorf("QuantityMicros and PriceMicros must be specified for %s", e.Type)
+		}
+	case AssetMaturity:
+		// ValueMicros is allowed to specify the final account balance, e.g. for fixed deposit accounts.
+		if !allZero(e.QuantityMicros, e.PriceMicros, e.CostMicros) {
+			return fmt.Errorf("QuantityMicros, PriceMicros, CostMicros should be zero for %s", e.Type)
 		}
 	case InterestPayment, DividendPayment:
 		if e.ValueMicros == 0 {
@@ -508,9 +525,13 @@ func (s *Store) AddAsset(a *Asset) error {
 // AssetPositionItem tracks an individual purchase that is part of the
 // accumulated asset position.
 type AssetPositionItem struct {
+	ValueDate      Date
 	QuantityMicros Micros
 	PriceMicros    Micros
 	CostMicros     Micros
+	// Used for accounts that track individual inpayment/outflow events.
+	// Negative values represent outflows.
+	TransactionValueMicros Micros
 }
 
 // AssetPosition represents the "current" asset position.
@@ -584,7 +605,7 @@ func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 	var res []*AssetPosition
 	for assetId := range s.assets {
 		pos := s.AssetPositionAt(assetId, date)
-		if pos.CalculatedValueMicros() != 0 {
+		if pos.MarketValue() != 0 {
 			res = append(res, pos)
 		}
 	}
@@ -615,6 +636,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
 		p.Items = append(p.Items, AssetPositionItem{
+			ValueDate:      e.ValueDate,
 			QuantityMicros: e.QuantityMicros,
 			PriceMicros:    e.PriceMicros,
 			CostMicros:     e.CostMicros,
@@ -645,12 +667,23 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.Items = nil
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
-	case AccountCredit:
+	case AccountCredit, AccountDebit:
 		p.ValueMicros += e.ValueMicros
-	case AccountDebit:
-		p.ValueMicros -= e.ValueMicros
+		// In a "normal" account, we don't keep track of individual credit/debit
+		// transactions in the AssetPosition, since we only care about the account
+		// balance. For accounts like FixedDepositAccount or PensionAccount, we
+		// do care about individual credits (and debits, though those are not typical)
+		if p.Asset.Type.UseTransactionTracking() {
+			p.Items = append(p.Items, AssetPositionItem{
+				ValueDate:              e.ValueDate,
+				TransactionValueMicros: e.ValueMicros,
+			})
+		}
 	case AccountBalance:
 		p.ValueMicros = e.ValueMicros
+		// Items are not influenced by AccountBalance entries, not even for
+		// those with transaction tracking. Credit/Debit entries must be used
+		// to keep track of all inpayments/outflows.
 	case AssetHolding:
 		if e.PriceMicros != 0 {
 			p.PriceMicros = e.PriceMicros
@@ -663,6 +696,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			p.Items = nil
 			if e.QuantityMicros > 0 {
 				p.Items = append(p.Items, AssetPositionItem{
+					ValueDate:      e.ValueDate,
 					QuantityMicros: e.QuantityMicros,
 					PriceMicros:    e.PriceMicros,
 					CostMicros:     e.CostMicros,
@@ -682,16 +716,57 @@ func (p *AssetPosition) CostMicros() Micros {
 
 func (p *AssetPosition) PurchasePrice() Micros {
 	var price Micros
-	for _, item := range p.Items {
-		price += item.CostMicros
-		price += item.QuantityMicros.Mul(item.PriceMicros)
+	if p.Asset.Type.UseTransactionTracking() {
+		for _, item := range p.Items {
+			price += item.TransactionValueMicros
+		}
+	} else {
+		// Price*qty based pricing.
+		for _, item := range p.Items {
+			price += item.CostMicros
+			price += item.QuantityMicros.Mul(item.PriceMicros)
+		}
 	}
 	return price
 }
 
-func (p *AssetPosition) CalculatedValueMicros() Micros {
+func (p *AssetPosition) MarketValue() Micros {
 	if p.QuantityMicros != 0 {
 		return p.QuantityMicros.Mul(p.PriceMicros)
 	}
 	return p.ValueMicros
+}
+
+// totalEarningsAtMaturity calculates the predicted earnings of a fixed-income
+// asset position by its maturity date. These earnings include both interest
+// and capital gains (or losses) from price appreciation or depreciation.
+// It assumes the asset matures at 100% of its nominal value.
+func totalEarningsAtMaturity(p *AssetPosition) Micros {
+	md := p.Asset.MaturityDate
+	if md == nil {
+		return 0
+	}
+	interestRate := p.Asset.InterestMicros
+	var interest, gains Micros
+	for _, item := range p.Items {
+		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
+		var value Micros
+		if p.Asset.Type.UseTransactionTracking() {
+			value = item.TransactionValueMicros
+			// No capital gains for fixed deposit.
+		} else {
+			value = item.QuantityMicros
+			// Capital gains are nominal value (i.e. price at 100%) minus invested sum.
+			gains += item.QuantityMicros - item.QuantityMicros.Mul(item.PriceMicros) - item.CostMicros
+		}
+		switch p.Asset.InterestPayment {
+		case AccruedPayment:
+			interest += value.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - value
+		case AnnualPayment:
+			interest += value.Mul(interestRate).Mul(FloatAsMicros(years))
+		default:
+			// If no payment schedule is specified, we can't calculate the interest
+		}
+	}
+	return interest + gains
 }

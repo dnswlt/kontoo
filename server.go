@@ -158,6 +158,9 @@ type LedgerEntryRow struct {
 	A *Asset
 }
 
+func (e *LedgerEntryRow) SequenceNum() int64 {
+	return e.E.SequenceNum
+}
 func (e *LedgerEntryRow) ValueDate() Date {
 	return e.E.ValueDate
 }
@@ -243,12 +246,13 @@ type PositionTableRow struct {
 	// above a threshold.
 	DataAge time.Duration
 
-	PurchasePrice   Micros
-	NominalValue    Micros
-	InterestRate    Micros
-	IssueDate       *Date
-	MaturityDate    *Date
-	YearsToMaturity float64
+	PurchasePrice           Micros
+	NominalValue            Micros
+	InterestRate            Micros
+	IssueDate               *Date
+	MaturityDate            *Date
+	TotalEarningsAtMaturity Micros
+	YearsToMaturity         float64
 }
 
 // Convenience function for sorting *Date. Nils come last.
@@ -281,17 +285,18 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			continue
 		}
 		row := &PositionTableRow{
-			ID:              a.ID(),
-			Name:            a.Name,
-			Type:            a.Type,
-			Currency:        a.Currency,
-			Value:           p.CalculatedValueMicros(),
-			PurchasePrice:   p.PurchasePrice(),
-			NominalValue:    p.QuantityMicros,
-			InterestRate:    a.InterestMicros,
-			IssueDate:       a.IssueDate,
-			MaturityDate:    a.MaturityDate,
-			YearsToMaturity: a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
+			ID:                      a.ID(),
+			Name:                    a.Name,
+			Type:                    a.Type,
+			Currency:                a.Currency,
+			Value:                   p.MarketValue(),
+			PurchasePrice:           p.PurchasePrice(),
+			NominalValue:            p.QuantityMicros,
+			InterestRate:            a.InterestMicros,
+			IssueDate:               a.IssueDate,
+			MaturityDate:            a.MaturityDate,
+			TotalEarningsAtMaturity: totalEarningsAtMaturity(p),
+			YearsToMaturity:         a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
 		}
 		res = append(res, row)
 	}
@@ -329,7 +334,7 @@ func positionTableRows(s *Store, date Date) []*PositionTableRow {
 		var lastUpdated Date
 		a := p.Asset
 		var notes []string
-		val := p.CalculatedValueMicros()
+		val := p.MarketValue()
 		if !p.LastUpdated.IsZero() {
 			notes = append(notes, fmt.Sprintf("Last updated: %s", p.LastUpdated))
 			lastUpdated = p.LastUpdated
@@ -734,7 +739,7 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 		for _, p := range positions {
 			t.Timestamps = append(t.Timestamps, p.LastUpdated.UnixMilli())
 			t.QuantityMicros = append(t.QuantityMicros, int64(p.QuantityMicros))
-			t.ValueMicros = append(t.ValueMicros, int64(p.CalculatedValueMicros()))
+			t.ValueMicros = append(t.ValueMicros, int64(p.MarketValue()))
 		}
 		timelines = append(timelines, t)
 	}

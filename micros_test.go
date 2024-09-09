@@ -213,3 +213,28 @@ func TestOverflowInt64(t *testing.T) {
 		t.Errorf("Want -2, got %v", z)
 	}
 }
+
+func TestFloatAsMicros(t *testing.T) {
+	tests := []struct {
+		f    float64
+		want Micros
+	}{
+		{0.0, 0},
+		{1.0, 1 * UnitValue},
+		{-1.0, -1 * UnitValue},
+		{1e-6, 1},
+		{-0.5, -500 * Millis},
+		// Maximum values
+		{math.MaxInt64 / 1e6, 9223372036854_775807},
+		{-math.MaxInt64 / 1e6, -9223372036854_775808},
+		// Some imprecision at high (> 53 bit spread) values
+		{287104476244.992576, 287104476244_992544}, // (0xff << 50 + 123456) / 1e6
+	}
+	for _, tc := range tests {
+		got := FloatAsMicros(tc.f)
+		if got != tc.want {
+			t.Errorf("FloatAsMicros(%v): want %v, got %v", tc.f, tc.want, got)
+		}
+	}
+
+}
