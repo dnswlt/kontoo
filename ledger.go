@@ -348,7 +348,7 @@ func allZero(ms ...Micros) bool {
 
 // insert inserts the already validated entry e into the store.
 // It sets the entry's created date and sequence number
-// and updates internal ledger and all relevant indexes.
+// and updates the internal ledger and all relevant indexes.
 func (s *Store) insert(e *LedgerEntry) {
 	if e.Created.IsZero() {
 		e.Created = time.Now()
@@ -367,7 +367,7 @@ func (s *Store) insert(e *LedgerEntry) {
 		}
 		return es
 	}
-	if e.Type == ExchangeRate {
+	if e.Type == ExchangeRate && e.Currency == s.ledger.Header.BaseCurrency {
 		// Insert rate, maintain chronological order.
 		s.exchangeRates[e.QuoteCurrency] = ins(s.exchangeRates[e.QuoteCurrency], e)
 	} else {
@@ -488,6 +488,44 @@ func (s *Store) Add(e *LedgerEntry) error {
 		return fmt.Errorf("entry validation failed: %w", err)
 	}
 	s.insert(e)
+	return nil
+}
+
+func (s *Store) Delete(sequenceNum int64) error {
+	i := 0
+	es := s.ledger.Entries
+	for ; i < len(es); i++ {
+		if es[i].SequenceNum == sequenceNum {
+			break
+		}
+	}
+	if i == len(es) {
+		return fmt.Errorf("sequence number %d not found in ledger", sequenceNum)
+	}
+	if es[i].AssetID != "" {
+		// Delete from .entries index.
+		aes := s.entries[es[i].AssetID]
+		for j, e := range aes {
+			if e == es[i] {
+				copy(aes[j:], aes[j+1:])
+				s.entries[es[i].AssetID] = aes[:len(aes)-1]
+				break
+			}
+		}
+	} else if es[i].Type == ExchangeRate {
+		// Delete from .exchangeRates index.
+		qes := s.exchangeRates[es[i].QuoteCurrency]
+		for j, e := range qes {
+			if e == es[i] {
+				copy(qes[j:], qes[j+1:])
+				s.exchangeRates[es[i].QuoteCurrency] = qes[:len(qes)-1]
+				break
+			}
+		}
+	}
+	// Delete from ledger.
+	copy(es[i:], es[i+1:])
+	s.ledger.Entries = es[:len(es)-1]
 	return nil
 }
 

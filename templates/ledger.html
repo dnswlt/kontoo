@@ -8,8 +8,10 @@
 <body id="ledger-page">
     {{template "nav.html" .}}
     <h1>Ledger</h1>
-    <div>
+    <div style="display: flex; align-items: baseline; gap: 10px;">
         <input id="filter" type="text" class="filter" value="{{.Query}}">
+        <span class="vsep">&nbsp;</span>
+        <button id="toggle-row-actions" type="button">Edit</button>
     </div>
     <div id="ledger-table-div">
         {{template "snip_ledger_table.html" .}}

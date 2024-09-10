@@ -13,7 +13,7 @@ export function init() {
             }
         })
         try {
-            const response = await fetch("/kontoo/entries", {
+            const response = await fetch("/kontoo/entries/add", {
                 method: "POST",
                 body: JSON.stringify(entry),
                 headers: {

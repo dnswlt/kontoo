@@ -53,6 +53,17 @@ tr.total td {
     font-weight: bold;
 }
 
+/* Vertical bar separator */
+span.vsep {
+    border-left: 2px solid var(--light-border);
+    display: inline-block;
+    /* Set width to 0 to hide the &nbsp; content, which we need to have a propber baseline and
+    alignment with the adjacent inputs and buttons. Ugly, but works. */
+    width: 0;
+}
+
+/* Emojis */
+
 i.emoji {
     font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
     font-style: normal;
@@ -71,6 +82,22 @@ i.emoji-page-facing-up::before {
     content: '\1F4C4';
 }
 
+i.emoji-wastebasket::before {
+    content: '\01F5D1\FE0F';
+}
+
+/* Emoji buttons */
+button.emoji-button {
+    font: inherit;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+}
+
+/* No outline for focused elements to avoid visual clutter. */
 :focus {
     outline: none;
 }
@@ -428,6 +455,7 @@ ul.filter-chips a {
     display: flex;
     gap: 0;
 }
+
 .chart-container .chart-period button {
     font: inherit;
     cursor: pointer;
@@ -443,6 +471,7 @@ ul.filter-chips a {
 .chart-container .chart-period button:hover {
     background-color: var(--gray-passive);
 }
+
 .chart-container .chart-period button.selected {
     background-color: var(--gray-active);
 }

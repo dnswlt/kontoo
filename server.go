@@ -25,6 +25,15 @@ type AddLedgerEntryResponse struct {
 	Error       string     `json:"error,omitempty"`
 	SequenceNum int64      `json:"sequenceNum"`
 }
+type DeleteLedgerEntryRequest struct {
+	// We use a pointer to detect if the field was explicitly set.
+	SequenceNum *int64 `json:"sequenceNum"`
+}
+type DeleteLedgerEntryResponse struct {
+	Status      StatusCode `json:"status"`
+	Error       string     `json:"error,omitempty"`
+	SequenceNum int64      `json:"sequenceNum"`
+}
 
 type AddAssetResponse struct {
 	Status  StatusCode `json:"status"`
@@ -864,7 +873,7 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEntriesAdd(w http.ResponseWriter, r *http.Request) {
 	var e LedgerEntry
 	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
@@ -877,7 +886,6 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-
 	if err := s.Store().Save(); err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
@@ -885,6 +893,33 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	s.jsonResponse(w, AddLedgerEntryResponse{
 		Status:      StatusOK,
 		SequenceNum: e.SequenceNum,
+	})
+}
+
+func (s *Server) handleEntriesDelete(w http.ResponseWriter, r *http.Request) {
+	var req DeleteLedgerEntryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.SequenceNum == nil {
+		http.Error(w, "sequenceNum must be set", http.StatusBadRequest)
+		return
+	}
+	if err := s.Store().Delete(*req.SequenceNum); err != nil {
+		s.jsonResponse(w, DeleteLedgerEntryResponse{
+			Status: StatusInvalidArgument,
+			Error:  err.Error(),
+		})
+		return
+	}
+	if err := s.Store().Save(); err != nil {
+		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
+		return
+	}
+	s.jsonResponse(w, DeleteLedgerEntryResponse{
+		Status:      StatusOK,
+		SequenceNum: *req.SequenceNum,
 	})
 }
 
@@ -1031,7 +1066,8 @@ func (s *Server) createMux() *http.ServeMux {
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
-	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
+	mux.HandleFunc("POST /kontoo/entries/add", jsonHandler(s.handleEntriesAdd))
+	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))

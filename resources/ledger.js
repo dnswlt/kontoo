@@ -1,4 +1,38 @@
 export function init() {
+    // Per-row buttons
+    document.getElementById("toggle-row-actions").addEventListener("click", () => {
+        document.querySelectorAll(".action-column").forEach(elem => {
+            elem.classList.toggle("hidden");
+        });    
+    });
+    document.querySelectorAll("button.delete").forEach(button => {
+        button.addEventListener("click", async function () {
+            try {
+                const response = await fetch("/kontoo/entries/delete", {
+                    method: "POST",
+                    body: JSON.stringify({
+                        sequenceNum: parseInt(button.dataset.seq)
+                    }),
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (data.status === "OK") {
+                    console.log(`Deleted ledger entry ${data.sequenceNum}.`);
+                } else {
+                    console.error("Could not delete ledger entry:", data.status, data.error);
+                }
+            }
+            catch (error) {
+                console.error("Error on submit:", error);
+            }
+        });
+    });
+    // Filter
     const filter = document.getElementById("filter");
     filter.addEventListener('keydown', async function (event) {
         if (event.key !== 'Enter') {

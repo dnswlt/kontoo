@@ -91,6 +91,118 @@ func TestStoreAdd(t *testing.T) {
 	}
 }
 
+func TestStoreDelete(t *testing.T) {
+	entries := []*LedgerEntry{
+		{
+			Type:        AccountCredit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 1),
+			ValueMicros: 100 * UnitValue,
+		},
+		{
+			Type:        AccountDebit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 2),
+			ValueMicros: -50 * UnitValue,
+		},
+		{
+			Type:        AccountCredit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 1, 3),
+			ValueMicros: 50 * UnitValue,
+		},
+	}
+	s, err := newTestStore(entries, CheckingAccount)
+	if err != nil {
+		t.Fatalf("Failed to create Store: %v", err)
+	}
+	tests := []struct {
+		seq       int64
+		wantLen   int
+		wantValue Micros
+		wantErr   bool
+	}{
+		{seq: 100, wantErr: true},
+		{seq: 1, wantLen: 2, wantValue: 150 * UnitValue},
+		{seq: 0, wantLen: 1, wantValue: 50 * UnitValue},
+		{seq: 2, wantLen: 0, wantValue: 0 * UnitValue},
+		{seq: 2, wantErr: true},
+	}
+	for i, tc := range tests {
+		err = s.Delete(tc.seq)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("Wanted error, got none for %v", tc)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Failed to delete entry %d in round %d: %v", tc.seq, i, err)
+		}
+		if len(s.ledger.Entries) != tc.wantLen {
+			t.Errorf("Wrong ledger length: want %d, got %d", tc.wantLen, len(s.ledger.Entries))
+		}
+		if len(s.entries["DE12"]) != tc.wantLen {
+			t.Errorf("Wrong entries index length: want %d, got %d", tc.wantLen, len(s.entries["DE12"]))
+		}
+		p := s.AssetPositionAt("DE12", DateVal(2023, 1, 3))
+		if p == nil {
+			t.Fatal("No position returned in round", i)
+		}
+		if p.MarketValue() != tc.wantValue {
+			t.Errorf("Wrong value in round %d: want %v, got %v", i, tc.wantValue, p.MarketValue())
+		}
+	}
+}
+
+func TestStoreDeleteExchangeRate(t *testing.T) {
+	entries := []*LedgerEntry{
+		{
+			Type:          ExchangeRate,
+			ValueDate:     DateVal(2023, 1, 1),
+			Currency:      "EUR",
+			QuoteCurrency: "CHF",
+			PriceMicros:   950 * Millis,
+		},
+		{
+			Type:          ExchangeRate,
+			ValueDate:     DateVal(2023, 1, 2),
+			Currency:      "EUR",
+			QuoteCurrency: "CHF",
+			PriceMicros:   960 * Millis,
+		},
+	}
+	s, err := newTestStore(entries, CheckingAccount)
+	if err != nil {
+		t.Fatalf("Failed to create Store: %v", err)
+	}
+	tests := []struct {
+		seq     int64
+		wantLen int
+		wantErr bool
+	}{
+		{seq: 100, wantErr: true},
+		{seq: 0, wantLen: 1},
+		{seq: 1, wantLen: 0},
+		{seq: 2, wantErr: true},
+	}
+	for i, tc := range tests {
+		err = s.Delete(tc.seq)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("Wanted error, got none for %v", tc)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Failed to delete entry %d in round %d: %v", tc.seq, i, err)
+		}
+		if len(s.exchangeRates["CHF"]) != tc.wantLen {
+			t.Errorf("Wrong exchangeRates length: want %d, got %d", tc.wantLen, len(s.exchangeRates["CHF"]))
+		}
+	}
+}
+
 func TestStoreAddAsset(t *testing.T) {
 	tests := []struct {
 		A *Asset
@@ -729,21 +841,28 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 	}
 }
 
-func newTestStore(entries []*LedgerEntry) (*Store, error) {
+// newTestStore is a test helper to create a store from a list of ledger entries.
+// All assets will use CustomID as the ID field and have asset type t.
+// The ledger's base currency is EUR.
+func newTestStore(entries []*LedgerEntry, t AssetType) (*Store, error) {
 	symbols := make(map[string]bool)
 	for _, e := range entries {
-		symbols[e.AssetID] = true
+		if e.AssetID != "" {
+			symbols[e.AssetID] = true
+		}
 	}
 	assets := make([]*Asset, len(symbols))
 	i := 0
 	for s := range symbols {
 		assets[i] = &Asset{
-			Type:         Stock,
-			TickerSymbol: s,
+			Type:     t,
+			CustomID: s,
 		}
 		i++
 	}
-	s, err := NewStore(&Ledger{Assets: assets}, "/test")
+	s, err := NewStore(&Ledger{
+		Header: &LedgerHeader{BaseCurrency: "EUR"},
+		Assets: assets}, "/test")
 	if err != nil {
 		return nil, err
 	}
@@ -765,7 +884,7 @@ func TestAssetPositionsBetween(t *testing.T) {
 			AssetID:        "KO",
 		},
 	}
-	s, err := newTestStore(entries)
+	s, err := newTestStore(entries, Stock)
 	if err != nil {
 		t.Fatal("Cannot create store:", err)
 	}
@@ -809,7 +928,7 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 			AssetID:        "KO",
 		},
 	}
-	s, err := newTestStore(entries)
+	s, err := newTestStore(entries, Stock)
 	if err != nil {
 		t.Fatal("Cannot create store:", err)
 	}
