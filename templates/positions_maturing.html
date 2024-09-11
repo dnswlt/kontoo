@@ -1,13 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     {{template "head_common.html"}}
 </head>
+
 <body id="positions-maturing-page">
     {{template "nav.html" .}}
     <h1>Positions</h1>
     {{template "positions_subnav.html" .}}
     {{ $nav := .Nav }}
+    {{ $baseCurrency := .BaseCurrency }}
     <table>
         <thead>
             <tr>
@@ -22,21 +25,23 @@
                 <th>Issue date</th>
                 <th>Maturity date</th>
                 <th class="ralign" title="Total earnings at maturity">TEM</th>
-                <th class="ralign" title="Years to maturity">YTM</th>
+                <th class="ralign" title="Time to maturity (in years)">TTM</th>
             </tr>
         </thead>
         <tbody>
             {{range .TableRows}}
             <tr>
                 <td class="contextmenu entry-actions">
-                    {{ .Name }}
+                    {{ .AssetName }}
                     <div class="contextmenu-options">
-                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .ID}}' data-action="add-entry">Add entry</div>
-                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .ID) }}' data-action="show-ledger">Show ledger</div>
+                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .AssetID}}'
+                            data-action="add-entry">Add entry</div>
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .AssetID) }}'
+                            data-action="show-ledger">Show ledger</div>
                     </div>
                 </td>
-                <td>{{ .ID }}</td>
-                <td>{{ assetType .Type }}</td>
+                <td>{{ .AssetID }}</td>
+                <td>{{ assetType .AssetType }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign">{{ money .Value }}</td>
                 <td class="ralign">{{if nonzero .PurchasePrice}}{{ money .PurchasePrice }}{{end}}</td>
@@ -45,13 +50,29 @@
                 <td class="nowrap">{{ .IssueDate }}</td>
                 <td class="nowrap">{{ .MaturityDate }}</td>
                 <td class="ralign">{{ money .TotalEarningsAtMaturity }}</td>
-                <td class="ralign {{if lt .YearsToMaturity 0.0}}warning{{end}}">{{ printf "%.1f" .YearsToMaturity }}</td>
+                <td class="ralign {{if lt .YearsToMaturity 0.0}}warning{{end}}">{{ printf "%.1f" .YearsToMaturity }}
+                </td>
             </tr>
             {{end}}
+            <tr class="total">
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td class="ralign">{{ $baseCurrency }}</td>
+                <td class="ralign">{{ money .Totals.Value }}</td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td></td>
+                <td class="ralign">{{ money .Totals.EarningsAtMaturity }}</td>
+                <td></td>
+            </tr>
         </tbody>
-    </table>    
+    </table>
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
 </body>
+
 </html>

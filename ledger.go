@@ -88,8 +88,11 @@ func (s *Store) ValueDateRange() (min, max Date) {
 // The rate is derived from ExchangeRate entries in the ledger; the most recent rate
 // before t is used and its date is returned as the second return value.
 // If no exchange rate between the given currency c and the base currency is known at t,
-// an error is returned.
+// the result is zero and an error is returned.
 func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, error) {
+	if c == s.BaseCurrency() {
+		return UnitValue, t, nil
+	}
 	rs, ok := s.exchangeRates[c]
 	if !ok || len(rs) == 0 {
 		return 0, Date{}, fmt.Errorf("no exchange rates for currency %s", c)

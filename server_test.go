@@ -165,7 +165,9 @@ func TestHandleGetAllPaths(t *testing.T) {
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != tc.status {
-			t.Errorf("Expected status %d for path %q, got %d", tc.status, tc.path, resp.StatusCode)
+			body, _ := io.ReadAll(resp.Body)
+			t.Errorf("Expected status %d for path %q, got %d. Body was: %s",
+				tc.status, tc.path, resp.StatusCode, string(body))
 		}
 	}
 }

@@ -42,19 +42,19 @@
             {{range .Rows}}
             <tr>
                 <td class="contextmenu entry-actions">
-                    {{ .Name }}
+                    {{ .AssetName }}
                     <div class="contextmenu-options">
-                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .ID}}'
+                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .AssetID}}'
                             data-action="add-entry">Add entry</div>
-                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .ID) }}'
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .AssetID) }}'
                             data-action="show-ledger">Show ledger</div>
-                        <div class="contextmenu-option" data-id='{{ .ID }}' data-action="toggle-chart">Show/hide in
+                        <div class="contextmenu-option" data-id='{{ .AssetID }}' data-action="toggle-chart">Show/hide in
                             chart</div>
                     </div>
                 </td>
-                <td>{{ .ID }}</td>
-                <td>{{ assetCategory .Type }}</td>
-                <td>{{ assetType .Type }}</td>
+                <td>{{ .AssetID }}</td>
+                <td>{{ assetCategory .AssetType }}</td>
+                <td>{{ assetType .AssetType }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign tooltip">
                     {{ money .Value }}

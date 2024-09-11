@@ -1,57 +1,76 @@
 {
-  "Header": {
-    "BaseCurrency": "EUR"
-  },
-  "Assets": [
-    {
-      "Type": "CheckingAccount",
-      "Name": "Checking account",
-      "IBAN": "DE123",
-      "Currency": "EUR"
+    "Header": {
+        "BaseCurrency": "EUR"
     },
-    {
-      "Type": "Stock",
-      "Name": "Nestle SA",
-      "TickerSymbol": "NESN",
-      "QuoteServiceSymbols": {
-        "YF": "NESN.SW"
-      },
-      "Currency": "CHF"
-    },
-    {
-        "Type": "Stock",
-        "Name": "Mercedes-Benz Group",
-        "WKN": "710000",
-        "Currency": "EUR",
-        "Comment": "Used for CSV import"
-      }
+    "Assets": [
+        {
+            "Type": "CheckingAccount",
+            "Name": "Checking account",
+            "IBAN": "DE123",
+            "Currency": "EUR"
+        },
+        {
+            "Type": "Stock",
+            "Name": "Nestle SA",
+            "TickerSymbol": "NESN",
+            "QuoteServiceSymbols": {
+                "YF": "NESN.SW"
+            },
+            "Currency": "CHF"
+        },
+        {
+            "Type": "Stock",
+            "Name": "Mercedes-Benz Group",
+            "WKN": "710000",
+            "Currency": "EUR",
+            "Comment": "Used for CSV import"
+        },
+        {
+            "Type": "GovernmentBond",
+            "Name": "10-Year T-Note Futures",
+            "ISIN": "US912810FP85",
+            "Currency": "USD",
+            "IssueDate": "2001-02-15",
+            "MaturityDate": "2031-02-15",
+            "Interest": "0.053750",
+            "InterestPayment": "annual"
+        }
     ],
-  "Entries": [
-    {
-      "Created": "2024-01-02T00:00:00Z",
-      "SequenceNum": 0,
-      "ValueDate": "2024-01-02",
-      "Type": "ExchangeRate",
-      "Currency": "EUR",
-      "QuoteCurrency": "CHF",
-      "Price": "0.95"
-    },
-    {
-      "Created": "2024-01-01T00:00:00Z",
-      "SequenceNum": 1,
-      "ValueDate": "2024-01-01",
-      "Type": "AccountBalance",
-      "AssetID": "DE123",
-      "Value": "1000"
-    },
-    {
-      "Created": "2024-01-02T00:00:00Z",
-      "SequenceNum": 2,
-      "ValueDate": "2024-01-02",
-      "Type": "AssetPurchase",
-      "AssetID": "NESN",
-      "Quantity": "100",
-      "Price": "98"
-    }
-  ]
+    "Entries": [
+        {
+            "Created": "2024-01-02T00:00:00Z",
+            "SequenceNum": 0,
+            "ValueDate": "2024-01-02",
+            "Type": "ExchangeRate",
+            "Currency": "EUR",
+            "QuoteCurrency": "CHF",
+            "Price": "0.95"
+        },
+        {
+            "Created": "2024-01-01T00:00:00Z",
+            "SequenceNum": 1,
+            "ValueDate": "2024-01-01",
+            "Type": "AccountBalance",
+            "AssetID": "DE123",
+            "Value": "1000"
+        },
+        {
+            "Created": "2024-01-02T00:00:00Z",
+            "SequenceNum": 2,
+            "ValueDate": "2024-01-02",
+            "Type": "AssetPurchase",
+            "AssetID": "NESN",
+            "Quantity": "100",
+            "Price": "98"
+        },
+        {
+            "Created": "2024-01-02T00:00:00Z",
+            "SequenceNum": 3,
+            "ValueDate": "2024-01-03",
+            "Type": "AssetPurchase",
+            "AssetID": "US912810FP85",
+            "Quantity": "10000",
+            "Price": "1.110700"
+        }
+    ]
 }

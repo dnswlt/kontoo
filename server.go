@@ -240,16 +240,17 @@ func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 }
 
 type PositionTableRow struct {
-	ID       string
-	Name     string
-	Type     AssetType
-	Currency Currency
-	Value    Micros
-	// The value expressed in the base currency, converted using
-	// the latest available exchange rate. 0 if no exchange rate
-	// was available.
-	ValueBaseCurrency Micros
-	Notes             []string
+	AssetID   string
+	AssetName string
+	AssetType AssetType
+	Currency  Currency
+	Value     Micros
+	// BaseCurrency/Currency exchange rate. Used to calculate all monetary values
+	// of this position in the base currency.
+	ExchangeRate Micros
+	// Notes about the position to be displayed to the user
+	// (e.g. about old data being shown).
+	Notes []string
 	// Maximum age of the data on which the Value and ValueBaseCurrency
 	// are calculated. Used to display warnings in the UI if the age is
 	// above a threshold.
@@ -293,11 +294,13 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 		if a.MaturityDate == nil {
 			continue
 		}
+		rate, _, _ := s.ExchangeRateAt(a.Currency, date)
 		row := &PositionTableRow{
-			ID:                      a.ID(),
-			Name:                    a.Name,
-			Type:                    a.Type,
+			AssetID:                 a.ID(),
+			AssetName:               a.Name,
+			AssetType:               a.Type,
 			Currency:                a.Currency,
+			ExchangeRate:            rate,
 			Value:                   p.MarketValue(),
 			PurchasePrice:           p.PurchasePrice(),
 			NominalValue:            p.QuantityMicros,
@@ -320,7 +323,10 @@ type PositionTableRowGroup struct {
 func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
 	var sum Micros
 	for _, r := range g.Rows {
-		sum += r.ValueBaseCurrency
+		if r.ExchangeRate == 0 {
+			return 0 // Cannot calculate sum in base currency
+		}
+		sum += r.Value.Frac(UnitValue, r.ExchangeRate)
 	}
 	return sum
 }
@@ -340,38 +346,23 @@ func positionTableRows(s *Store, date Date) []*PositionTableRow {
 	})
 	res := make([]*PositionTableRow, len(positions))
 	for i, p := range positions {
-		var lastUpdated Date
 		a := p.Asset
 		var notes []string
-		val := p.MarketValue()
 		if !p.LastUpdated.IsZero() {
 			notes = append(notes, fmt.Sprintf("Last updated: %s", p.LastUpdated))
-			lastUpdated = p.LastUpdated
 		}
-		bval := val
-		if a.Currency != s.BaseCurrency() {
-			rate, rdate, err := s.ExchangeRateAt(a.Currency, date)
-			if err != nil {
-				// TODO: add error info to row
-				log.Printf("No exchange rate at %v for %s: %s", date, a.Currency, err)
-				bval = 0
-			} else {
-				bval = val.Frac(UnitValue, rate)
-				notes = append(notes, fmt.Sprintf("Exch. rate date: %s", rdate))
-				if lastUpdated.IsZero() || rdate.Before(lastUpdated.Time) {
-					lastUpdated = rdate
-				}
-			}
-		}
+		// Ignoring the error is fine: we interpret a 0 exchange rate as a missing value
+		// and we can't do much more here if the rate is missing anyway.
+		rate, _, _ := s.ExchangeRateAt(a.Currency, date)
 		res[i] = &PositionTableRow{
-			ID:                a.ID(),
-			Name:              a.Name,
-			Type:              a.Type,
-			Currency:          a.Currency,
-			Value:             val,
-			ValueBaseCurrency: bval,
-			Notes:             notes,
-			DataAge:           date.Sub(lastUpdated.Time),
+			AssetID:      a.ID(),
+			AssetName:    a.Name,
+			AssetType:    a.Type,
+			Currency:     a.Currency,
+			ExchangeRate: rate,
+			Value:        p.MarketValue(),
+			Notes:        notes,
+			DataAge:      date.Sub(p.LastUpdated.Time),
 		}
 	}
 	return res
@@ -382,20 +373,20 @@ func positionTableRowGroups(rows []*PositionTableRow) []*PositionTableRowGroup {
 	if len(rows) == 0 {
 		return res
 	}
-	currentCategory := rows[0].Type.Category()
+	currentCategory := rows[0].AssetType.Category()
 	res = append(res, &PositionTableRowGroup{
 		Category: currentCategory,
 		Rows:     []*PositionTableRow{rows[0]},
 	})
 	for _, row := range rows[1:] {
-		if row.Type.Category() == currentCategory {
+		if row.AssetType.Category() == currentCategory {
 			res[len(res)-1].Rows = append(res[len(res)-1].Rows, row)
 		} else {
 			res = append(res, &PositionTableRowGroup{
-				Category: row.Type.Category(),
+				Category: row.AssetType.Category(),
 				Rows:     []*PositionTableRow{row},
 			})
-			currentCategory = row.Type.Category()
+			currentCategory = row.AssetType.Category()
 		}
 	}
 	return res
@@ -559,8 +550,8 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 }
 
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
-	positions := positionTableRows(s.Store(), date)
-	groups := positionTableRowGroups(positions)
+	rows := positionTableRows(s.Store(), date)
+	groups := positionTableRowGroups(rows)
 	var total Micros
 	for _, g := range groups {
 		total += g.ValueBaseCurrency()
@@ -582,11 +573,24 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	positions := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
+	var totalValue, totalEarnings Micros
+	for _, r := range positions {
+		if r.ExchangeRate == 0 {
+			totalValue, totalEarnings = 0, 0
+			break
+		}
+		totalValue += r.Value.Frac(UnitValue, r.ExchangeRate)
+		totalEarnings += r.TotalEarningsAtMaturity.Frac(UnitValue, r.ExchangeRate)
+	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": positions,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
 			"today":    date.Equal(today()),
+		},
+		"Totals": map[string]Micros{
+			"Value":              totalValue,
+			"EarningsAtMaturity": totalEarnings,
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
