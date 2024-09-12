@@ -554,12 +554,12 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 	}{
 		{date: DateVal(2023, 1, 1), value: 1000 * UnitValue,
 			items: []AssetPositionItem{
-				{ValueDate: DateVal(2023, 1, 1), TransactionValueMicros: 1000 * UnitValue},
+				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 1000 * UnitValue, PriceMicros: UnitValue},
 			}},
 		{date: DateVal(2023, 6, 1), value: 1010 * UnitValue,
 			items: []AssetPositionItem{
 				// AccountBalance should not have changed items:
-				{ValueDate: DateVal(2023, 1, 1), TransactionValueMicros: 1000 * UnitValue},
+				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 1000 * UnitValue, PriceMicros: UnitValue},
 			}},
 		{date: DateVal(2024, 1, 1), value: 0},
 	}

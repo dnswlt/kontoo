@@ -570,9 +570,6 @@ type AssetPositionItem struct {
 	QuantityMicros Micros
 	PriceMicros    Micros
 	CostMicros     Micros
-	// Used for accounts that track individual inpayment/outflow events.
-	// Negative values represent outflows.
-	TransactionValueMicros Micros
 }
 
 // AssetPosition represents the "current" asset position.
@@ -654,9 +651,6 @@ func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 }
 
 func (a *AssetPositionItem) PurchasePrice() Micros {
-	if a.TransactionValueMicros != 0 {
-		return a.TransactionValueMicros + a.CostMicros
-	}
 	return a.QuantityMicros.Mul(a.PriceMicros) + a.CostMicros
 }
 
@@ -720,11 +714,13 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		// In a "normal" account, we don't keep track of individual credit/debit
 		// transactions in the AssetPosition, since we only care about the account
 		// balance. For accounts like FixedDepositAccount or PensionAccount, we
-		// do care about individual credits (and debits, though those are not typical)
+		// do care about individual credits (and debits, though those are not typical),
+		// e.g. to calculate total earnings at maturity.
 		if p.Asset.Type.UseTransactionTracking() {
 			p.Items = append(p.Items, AssetPositionItem{
-				ValueDate:              e.ValueDate,
-				TransactionValueMicros: e.ValueMicros,
+				ValueDate:      e.ValueDate,
+				QuantityMicros: e.ValueMicros,
+				PriceMicros:    UnitValue,
 			})
 		}
 	case AccountDebit:
@@ -734,11 +730,11 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			val := e.ValueMicros
 			for len(p.Items) > 0 {
 				hd := &p.Items[0]
-				if hd.TransactionValueMicros > val {
-					hd.TransactionValueMicros += val
+				if hd.QuantityMicros > val {
+					hd.QuantityMicros += val
 					break
 				}
-				val -= hd.TransactionValueMicros
+				val -= hd.QuantityMicros
 				p.Items = p.Items[1:]
 			}
 			if len(p.Items) == 0 {
@@ -782,16 +778,8 @@ func (p *AssetPosition) CostMicros() Micros {
 
 func (p *AssetPosition) PurchasePrice() Micros {
 	var price Micros
-	if p.Asset.Type.UseTransactionTracking() {
-		for _, item := range p.Items {
-			price += item.TransactionValueMicros
-		}
-	} else {
-		// Price*qty based pricing.
-		for _, item := range p.Items {
-			price += item.CostMicros
-			price += item.QuantityMicros.Mul(item.PriceMicros)
-		}
+	for _, item := range p.Items {
+		price += item.QuantityMicros.Mul(item.PriceMicros) + item.CostMicros
 	}
 	return price
 }
@@ -816,20 +804,12 @@ func totalEarningsAtMaturity(p *AssetPosition) Micros {
 	var interest, gains Micros
 	for _, item := range p.Items {
 		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
-		var value Micros
-		if p.Asset.Type.UseTransactionTracking() {
-			value = item.TransactionValueMicros
-			// No capital gains for fixed deposit.
-		} else {
-			value = item.QuantityMicros
-			// Capital gains are nominal value (i.e. price at 100%) minus invested sum.
-			gains += item.QuantityMicros - item.PurchasePrice()
-		}
+		gains += item.QuantityMicros - item.PurchasePrice()
 		switch p.Asset.InterestPayment {
 		case AccruedPayment:
-			interest += value.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - value
+			interest += item.QuantityMicros.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - item.QuantityMicros
 		case AnnualPayment:
-			interest += value.Mul(interestRate).Mul(FloatAsMicros(years))
+			interest += item.QuantityMicros.Mul(interestRate).Mul(FloatAsMicros(years))
 		default:
 			// If no payment schedule is specified, we can't calculate the interest
 		}
@@ -904,7 +884,7 @@ func internalRateOfReturn(p *AssetPosition) Micros {
 		xs[i] = item.PurchasePrice().Float()
 		xsSum += xs[i]
 	}
-	irr, err := bisect(xsSum+tem, 0, 0.05, func(r float64) float64 {
+	irr, err := bisect(xsSum+tem, 0, 0.1, func(r float64) float64 {
 		// Calculate returns y using r as the (accruing) interest rate.
 		var y float64
 		for i := 0; i < len(ts); i++ {
