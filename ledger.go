@@ -653,6 +653,13 @@ func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 	return res
 }
 
+func (a *AssetPositionItem) PurchasePrice() Micros {
+	if a.TransactionValueMicros != 0 {
+		return a.TransactionValueMicros + a.CostMicros
+	}
+	return a.QuantityMicros.Mul(a.PriceMicros) + a.CostMicros
+}
+
 // Copy returns a semi-deep copy of p: It shares the pointer to the asset,
 // but all other, position-specific values are copied.
 func (p *AssetPosition) Copy() *AssetPosition {
@@ -708,7 +715,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		p.Items = nil
 	case AssetPrice:
 		p.PriceMicros = e.PriceMicros
-	case AccountCredit, AccountDebit:
+	case AccountCredit:
 		p.ValueMicros += e.ValueMicros
 		// In a "normal" account, we don't keep track of individual credit/debit
 		// transactions in the AssetPosition, since we only care about the account
@@ -719,6 +726,24 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 				ValueDate:              e.ValueDate,
 				TransactionValueMicros: e.ValueMicros,
 			})
+		}
+	case AccountDebit:
+		p.ValueMicros += e.ValueMicros
+		// See the note in AccountCredit case above.
+		if p.Asset.Type.UseTransactionTracking() {
+			val := e.ValueMicros
+			for len(p.Items) > 0 {
+				hd := &p.Items[0]
+				if hd.TransactionValueMicros > val {
+					hd.TransactionValueMicros += val
+					break
+				}
+				val -= hd.TransactionValueMicros
+				p.Items = p.Items[1:]
+			}
+			if len(p.Items) == 0 {
+				p.Items = nil // allow GC of Items
+			}
 		}
 	case AccountBalance:
 		p.ValueMicros = e.ValueMicros
@@ -798,7 +823,7 @@ func totalEarningsAtMaturity(p *AssetPosition) Micros {
 		} else {
 			value = item.QuantityMicros
 			// Capital gains are nominal value (i.e. price at 100%) minus invested sum.
-			gains += item.QuantityMicros - item.QuantityMicros.Mul(item.PriceMicros) - item.CostMicros
+			gains += item.QuantityMicros - item.PurchasePrice()
 		}
 		switch p.Asset.InterestPayment {
 		case AccruedPayment:
@@ -810,4 +835,85 @@ func totalEarningsAtMaturity(p *AssetPosition) Micros {
 		}
 	}
 	return interest + gains
+}
+
+// bisect finds a zero of f(x)-y. f is assumed to be monotonically increasing.
+// [low, high] is the initial interval that is assumed to contain a zero,
+// but it will be adjusted dynamically if that is not the case.
+// bisect returns an error if low >= high or if no zero was found after
+// 50 iterations.
+func bisect(y, low, high float64, f func(float64) float64) (float64, error) {
+	const maxIter = 50
+	const precision = 1e-7
+	if low >= high {
+		return 0, fmt.Errorf("bisect: low(%v) must be less than high(%v)", low, high)
+	}
+	// Adjust boundaries if necessary, to find a change in sign
+	step := high - low
+	k := 0
+	for ; k < maxIter && f(low)-y > 0; k++ {
+		high = low
+		low -= step
+		step *= 2
+	}
+	for ; k < maxIter && f(high)-y < 0; k++ {
+		low = high
+		high += step
+		step *= 2
+	}
+	for ; k < maxIter; k++ { // Give up after maxIter attempts
+		x := (low + high) / 2
+		fx := f(x)
+		if high-low < precision {
+			return x, nil
+		}
+		if fx < y {
+			low = x
+		} else {
+			high = x
+		}
+	}
+	return 0, fmt.Errorf("bisect: failed to converge after %d iterations", maxIter)
+}
+
+func internalRateOfReturn(p *AssetPosition) Micros {
+	md := p.Asset.MaturityDate
+	if md == nil || len(p.Items) == 0 {
+		return 0
+	}
+	tem := totalEarningsAtMaturity(p).Float()
+	if tem == 0 {
+		return 0
+	}
+	if len(p.Items) == 1 {
+		// Fast path: with one position item we can use a closed form.
+		// y = x * (1+irr)^t
+		// ==>
+		// irr = (y/x)^(1/t) - 1
+		t := md.Sub(p.Items[0].ValueDate.Time).Hours() / 24 / 365
+		x := p.Items[0].PurchasePrice().Float()
+		y := x + tem
+		return FloatAsMicros(math.Pow(y/x, 1/t) - 1)
+	}
+	// More than one item: use bisection.
+	ts := make([]float64, len(p.Items))
+	xs := make([]float64, len(p.Items))
+	var xsSum float64
+	for i, item := range p.Items {
+		ts[i] = md.Sub(item.ValueDate.Time).Hours() / 24 / 365
+		xs[i] = item.PurchasePrice().Float()
+		xsSum += xs[i]
+	}
+	irr, err := bisect(xsSum+tem, 0, 0.05, func(r float64) float64 {
+		// Calculate returns y using r as the (accruing) interest rate.
+		var y float64
+		for i := 0; i < len(ts); i++ {
+			y += xs[i] * math.Pow(1+r, ts[i])
+		}
+		return y
+	})
+	if err != nil {
+		return 0
+	}
+	return FloatAsMicros(irr)
 }

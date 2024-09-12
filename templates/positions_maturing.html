@@ -17,14 +17,15 @@
                 <th>Name</th>
                 <th>Code</th>
                 <th>Type</th>
-                <th class="ralign">Currency</th>
-                <th class="ralign">Market value</th>
-                <th class="ralign" title="Purchase price including costs">Purchase price</th>
-                <th class="ralign">Nominal value</th>
+                <th class="ralign">Ccy</th>
+                <th class="ralign">Mkt value</th>
+                <th class="ralign" title="Purchase price including costs">Buy price</th>
+                <th class="ralign">Nom value</th>
                 <th class="ralign">Interest</th>
                 <th>Issue date</th>
                 <th>Maturity date</th>
                 <th class="ralign" title="Total earnings at maturity">TEM</th>
+                <th class="ralign" title="Internal rate of return">IRR</th>
                 <th class="ralign" title="Time to maturity (in years)">TTM</th>
             </tr>
         </thead>
@@ -50,6 +51,7 @@
                 <td class="nowrap">{{ .IssueDate }}</td>
                 <td class="nowrap">{{ .MaturityDate }}</td>
                 <td class="ralign">{{ money .TotalEarningsAtMaturity }}</td>
+                <td class="ralign">{{if nonzero .InternalRateOfReturn}}{{ percent .InternalRateOfReturn }}{{end}}</td>
                 <td class="ralign {{if lt .YearsToMaturity 0.0}}warning{{end}}">{{ printf "%.1f" .YearsToMaturity }}
                 </td>
             </tr>
@@ -66,6 +68,7 @@
                 <td></td>
                 <td></td>
                 <td class="ralign">{{ money .Totals.EarningsAtMaturity }}</td>
+                <td></td>
                 <td></td>
             </tr>
         </tbody>

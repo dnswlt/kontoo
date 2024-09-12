@@ -262,6 +262,7 @@ type PositionTableRow struct {
 	IssueDate               *Date
 	MaturityDate            *Date
 	TotalEarningsAtMaturity Micros
+	InternalRateOfReturn    Micros
 	YearsToMaturity         float64
 }
 
@@ -308,6 +309,7 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			IssueDate:               a.IssueDate,
 			MaturityDate:            a.MaturityDate,
 			TotalEarningsAtMaturity: totalEarningsAtMaturity(p),
+			InternalRateOfReturn:    internalRateOfReturn(p),
 			YearsToMaturity:         a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
 		}
 		res = append(res, row)
