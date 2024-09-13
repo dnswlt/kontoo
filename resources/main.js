@@ -35,7 +35,7 @@ async function initUploadCsvPage() {
 
 // Validate that input contains a decimal number with an optional '%' at the end.
 // (I.e., a string that can be JSON-parsed as Micros.)
-const microsRegex = new RegExp("^([0-9]+(\\.[0-9]{0,6})?|\\.[0-9]{1,6})%?$");
+const microsRegex = new RegExp("^-?([0-9]+(\\.[0-9]{0,6})?|\\.[0-9]{1,6})%?$");
 function validateMicros(input) {
     input.addEventListener("change", function (event) {
         const input = event.target;
@@ -79,9 +79,8 @@ switch (document.body.id) {
         initLedgerPage();
         break;
     case "positions-page":
-        initPositionsPage();
-        break;
     case "positions-maturing-page":
+    case "positions-equity-page":
         initPositionsPage();
         break;
     case "entry-page":

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{template "head_common.html"}}
+</head>
+
+<body id="positions-equity-page">
+    {{template "nav.html" .}}
+    <h1>Positions</h1>
+    {{template "positions_subnav.html" .}}
+    {{ $nav := .Nav }}
+    {{ $baseCurrency := .BaseCurrency }}
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Type</th>
+                <th class="ralign">Ccy</th>
+                <th class="ralign">Mkt value</th>
+                <th class="ralign" title="Purchase price including costs">Buy price</th>
+                <th class="ralign">Qty</th>
+                <th class="ralign">Price</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .TableRows}}
+            <tr>
+                <td class="contextmenu entry-actions">
+                    {{ .AssetName }}
+                    <div class="contextmenu-options">
+                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .AssetID}}'
+                            data-action="add-entry">Add entry</div>
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .AssetID) }}'
+                            data-action="show-ledger">Show ledger</div>
+                    </div>
+                </td>
+                <td>{{ .AssetID }}</td>
+                <td>{{ assetType .AssetType }}</td>
+                <td class="ralign">{{ .Currency }}</td>
+                <td class="ralign">{{ money .Value }}</td>
+                <td class="ralign">{{if nonzero .PurchasePrice}}{{ money .PurchasePrice }}{{end}}</td>
+                <td class="ralign">{{ quantity .Quantity }}</td>
+                <td class="ralign">{{ price .Price }}</td>
+            </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    <p class="footer">
+        Report date: {{.Date}} (generated {{.Now}})
+    </p>
+</body>
+
+</html>

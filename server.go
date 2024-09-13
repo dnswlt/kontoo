@@ -34,8 +34,11 @@ type DeleteLedgerEntryResponse struct {
 	Error       string     `json:"error,omitempty"`
 	SequenceNum int64      `json:"sequenceNum"`
 }
-
-type AddAssetResponse struct {
+type UpsertAssetRequest struct {
+	AssetID string `json:"assetId,omitempty"`
+	Asset   *Asset `json:"asset"`
+}
+type UpsertAssetResponse struct {
 	Status  StatusCode `json:"status"`
 	Error   string     `json:"error,omitempty"`
 	AssetID string     `json:"assetId,omitempty"`
@@ -148,6 +151,15 @@ func (s *Server) Store() *Store {
 	return s.store
 }
 
+func (s *Server) ReloadStore() error {
+	store, err := LoadStore(s.ledgerPath)
+	if err != nil {
+		return err
+	}
+	s.store = store
+	return nil
+}
+
 func (s *Server) DebugMode(enabled bool) {
 	s.debugMode = enabled
 }
@@ -256,6 +268,9 @@ type PositionTableRow struct {
 	// above a threshold.
 	DataAge time.Duration
 
+	Quantity Micros
+	Price    Micros
+
 	PurchasePrice           Micros
 	NominalValue            Micros
 	InterestRate            Micros
@@ -317,20 +332,36 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	return res
 }
 
-type PositionTableRowGroup struct {
-	Category AssetCategory
-	Rows     []*PositionTableRow
-}
-
-func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
-	var sum Micros
-	for _, r := range g.Rows {
-		if r.ExchangeRate == 0 {
-			return 0 // Cannot calculate sum in base currency
+func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
+	positions := s.AssetPositionsAt(date)
+	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+		c := int(a.Asset.Type) - int(b.Asset.Type)
+		if c != 0 {
+			return c
 		}
-		sum += r.Value.Frac(UnitValue, r.ExchangeRate)
+		return strings.Compare(a.Name(), b.Name())
+	})
+	var res []*PositionTableRow
+	for _, p := range positions {
+		a := p.Asset
+		if a.Type.Category() != Equity {
+			continue
+		}
+		rate, _, _ := s.ExchangeRateAt(a.Currency, date)
+		row := &PositionTableRow{
+			AssetID:       a.ID(),
+			AssetName:     a.Name,
+			AssetType:     a.Type,
+			Currency:      a.Currency,
+			ExchangeRate:  rate,
+			Value:         p.MarketValue(),
+			Quantity:      p.QuantityMicros,
+			Price:         p.PriceMicros,
+			PurchasePrice: p.PurchasePrice(),
+		}
+		res = append(res, row)
 	}
-	return sum
+	return res
 }
 
 func positionTableRows(s *Store, date Date) []*PositionTableRow {
@@ -368,6 +399,22 @@ func positionTableRows(s *Store, date Date) []*PositionTableRow {
 		}
 	}
 	return res
+}
+
+type PositionTableRowGroup struct {
+	Category AssetCategory
+	Rows     []*PositionTableRow
+}
+
+func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
+	var sum Micros
+	for _, r := range g.Rows {
+		if r.ExchangeRate == 0 {
+			return 0 // Cannot calculate sum in base currency
+		}
+		sum += r.Value.Frac(UnitValue, r.ExchangeRate)
+	}
+	return sum
 }
 
 func positionTableRowGroups(rows []*PositionTableRow) []*PositionTableRowGroup {
@@ -420,6 +467,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		"positions": newURL("/kontoo/positions", ctxQ).String(),
 		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
 		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
+		"editAsset": newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
 		"uploadCSV": newURL("/kontoo/csv/upload", ctxQ).String(),
 		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
 	}
@@ -483,7 +531,7 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date)
 	return s.templates.ExecuteTemplate(w, "entry.html", ctx)
 }
 
-func (s *Server) renderAddAssetTemplate(w io.Writer, r *http.Request) error {
+func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *Asset) error {
 	assetTypeVals := AssetTypeValues()
 	assetTypes := make([]string, 0, len(assetTypeVals))
 	for _, a := range assetTypeVals {
@@ -492,9 +540,13 @@ func (s *Server) renderAddAssetTemplate(w io.Writer, r *http.Request) error {
 		}
 		assetTypes = append(assetTypes, a.String())
 	}
+	if asset == nil {
+		asset = &Asset{} // Ensure template can render empty values.
+	}
 	ctx := s.addCommonCtx(r, map[string]any{
-		"Today":      time.Now().Format("2006-01-02"),
-		"AssetTypes": assetTypes,
+		"AssetTypes":           assetTypes,
+		"InterestPaymentTypes": allInterestPaymentSchedules,
+		"Asset":                asset,
 	})
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
@@ -573,10 +625,10 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date
 }
 
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
-	positions := maturingPositionTableRows(s.Store(), date)
+	rows := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
 	var totalValue, totalEarnings Micros
-	for _, r := range positions {
+	for _, r := range rows {
 		if r.ExchangeRate == 0 {
 			totalValue, totalEarnings = 0, 0
 			break
@@ -585,7 +637,7 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 		totalEarnings += r.TotalEarningsAtMaturity.Frac(UnitValue, r.ExchangeRate)
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
-		"TableRows": positions,
+		"TableRows": rows,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
 			"today":    date.Equal(today()),
@@ -598,6 +650,21 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
+}
+
+func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
+	rows := equityPositionTableRows(s.Store(), date)
+	minDate, maxDate := s.Store().ValueDateRange()
+	ctx := s.addCommonCtx(r, map[string]any{
+		"TableRows": rows,
+		"ActiveChips": map[string]bool{
+			"equity": true,
+			"today":  date.Equal(today()),
+		},
+		"MonthOptions": monthOptions(*r.URL, date, maxDate),
+		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
+	})
+	return s.templates.ExecuteTemplate(w, "positions_equity.html", ctx)
 }
 
 func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
@@ -655,6 +722,14 @@ func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
+func (s *Server) handleLedgerReload(w http.ResponseWriter, r *http.Request) {
+	if err := s.ReloadStore(); err != nil {
+		http.Error(w, "Failed to reload store: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Write([]byte("Store reloaded"))
+}
+
 func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 	date, err := dateParam(r)
 	if err != nil {
@@ -672,7 +747,27 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 	var buf bytes.Buffer
-	if err := s.renderAddAssetTemplate(&buf, r); err != nil {
+	if err := s.renderAssetTemplate(&buf, r, nil); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleAssetsEdit(w http.ResponseWriter, r *http.Request) {
+	assetID := r.PathValue("assetID")
+	if assetID == "" {
+		http.Error(w, "missing assetID", http.StatusNotFound)
+		return
+	}
+	asset, ok := s.Store().assets[assetID]
+	if !ok {
+		http.Error(w, "assetID not found", http.StatusNotFound)
+		return
+	}
+	var buf bytes.Buffer
+	if err := s.renderAssetTemplate(&buf, r, asset); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -793,6 +888,21 @@ func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request)
 	}
 	var buf bytes.Buffer
 	err := s.renderMaturingPositionsTemplate(&buf, r, date)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleEquityPositions(w http.ResponseWriter, r *http.Request) {
+	date, ok := ensureDateParam(w, r)
+	if !ok {
+		return
+	}
+	var buf bytes.Buffer
+	err := s.renderEquityPositionsTemplate(&buf, r, date)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
@@ -930,25 +1040,41 @@ func (s *Server) handleEntriesDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
-	var a Asset
-	if err := json.NewDecoder(r.Body).Decode(&a); err != nil {
+	var req UpsertAssetRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.Store().AddAsset(&a); err != nil {
-		s.jsonResponse(w, AddAssetResponse{
-			Status: StatusInvalidArgument,
-			Error:  err.Error(),
-		})
+	if req.Asset == nil {
+		http.Error(w, "missing asset", http.StatusBadRequest)
 		return
+	}
+	if req.AssetID == "" {
+		// Insert
+		if err := s.Store().AddAsset(req.Asset); err != nil {
+			s.jsonResponse(w, UpsertAssetResponse{
+				Status: StatusInvalidArgument,
+				Error:  err.Error(),
+			})
+			return
+		}
+	} else {
+		// Update
+		if err := s.Store().UpdateAsset(req.AssetID, req.Asset); err != nil {
+			s.jsonResponse(w, UpsertAssetResponse{
+				Status: StatusInvalidArgument,
+				Error:  err.Error(),
+			})
+			return
+		}
 	}
 	if err := s.Store().Save(); err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	s.jsonResponse(w, AddAssetResponse{
+	s.jsonResponse(w, UpsertAssetResponse{
 		Status:  StatusOK,
-		AssetID: a.ID(),
+		AssetID: req.Asset.ID(),
 	})
 }
 
@@ -1066,8 +1192,10 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
 	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handleMaturingPositions))
+	mux.HandleFunc("GET /kontoo/positions/equity", s.reloadHandler(s.handleEquityPositions))
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
+	mux.HandleFunc("GET /kontoo/assets/edit/{assetID}", s.reloadHandler(s.handleAssetsEdit))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
@@ -1077,6 +1205,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))
+	mux.HandleFunc("POST /kontoo/ledger/reload", s.reloadHandler(s.handleLedgerReload))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
 	})

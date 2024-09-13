@@ -10,12 +10,15 @@
     <h1>Add asset</h1>
     <div id="status-callout" class="callout hidden"></div>
     <form class="columnar" id="asset-form" method="post" action="/kontoo/assets">
+        {{if .Asset}}
+        <input type="hidden" name="AssetId" value="{{.Asset.ID}}">
+        {{end}}
         <div class="field">
             <div class="field-label">
                 <label for="Type">Type</label>
             </div>
             <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList">
+                <input id="Type" type="text" name="Type" list="TypeList" value="{{if .Asset.Type}}{{.Asset.Type}}{{end}}">
                 <datalist id="TypeList">
                     {{range .AssetTypes}}
                     <option value="{{.}}"></option>
@@ -28,7 +31,7 @@
                 <label for="Currency">Currency</label>
             </div>
             <div class="field-value">
-                <input id="Currency" name="Currency" type="text" pattern="[A-Z]{3}" required>
+                <input id="Currency" name="Currency" type="text" pattern="[A-Z]{3}" value="{{.Asset.Currency}}" required>
             </div>
         </div>
         <div class="field">
@@ -36,7 +39,7 @@
                 <label for="Name">Name</label>
             </div>
             <div class="field-value">
-                <input id="Name" name="Name" type="text" class="trim" required>
+                <input id="Name" name="Name" type="text" class="trim" value="{{.Asset.Name}}" required>
             </div>
         </div>
         <div class="field">
@@ -44,7 +47,7 @@
                 <label for="ShortName">Short name</label>
             </div>
             <div class="field-value">
-                <input id="ShortName" name="ShortName" type="text" class="trim">
+                <input id="ShortName" name="ShortName" type="text" value="{{.Asset.ShortName}}" class="trim">
             </div>
         </div>
         <div class="field">
@@ -52,7 +55,7 @@
                 <label for="IssueDate">Issue date</label>
             </div>
             <div class="field-value">
-                <input id="IssueDate" name="IssueDate" class="datepicker">
+                <input id="IssueDate" name="IssueDate" value="{{if .Asset.IssueDate}}{{.Asset.IssueDate}}{{end}}" class="datepicker">
             </div>
         </div>
         <div class="field">
@@ -60,7 +63,7 @@
                 <label for="MaturityDate">Maturity date</label>
             </div>
             <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate" class="datepicker">
+                <input id="MaturityDate" name="MaturityDate" value="{{if .Asset.MaturityDate}}{{.Asset.MaturityDate}}{{end}}" class="datepicker">
             </div>
         </div>
         <div class="field">
@@ -68,7 +71,20 @@
                 <label for="Interest">Interest</label>
             </div>
             <div class="field-value">
-                <input id="Interest" name="Interest" type="text" pattern="\d+(\.\d+)?%?">
+                <input id="Interest" name="Interest" type="text" value="{{if nonzero .Asset.InterestMicros}}{{percent .Asset.InterestMicros}}{{end}}" pattern="\d+(\.\d+)?%?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="InterestPayment">InterestPayment</label>
+            </div>
+            <div class="field-value">
+                <input id="InterestPayment" type="text" name="InterestPayment" list="InterestPaymentList" value="{{.Asset.InterestPayment}}">
+                <datalist id="InterestPaymentList">
+                    {{range .InterestPaymentTypes}}
+                    <option value="{{.}}"></option>
+                    {{end}}
+                </datalist>
             </div>
         </div>
         <div class="field">
@@ -76,7 +92,7 @@
                 <label for="IBAN">IBAN</label>
             </div>
             <div class="field-value">
-                <input id="IBAN" name="IBAN" type="text" class="noblanks">
+                <input id="IBAN" name="IBAN" type="text" value="{{.Asset.IBAN}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -84,7 +100,7 @@
                 <label for="AccountNumber">Account number</label>
             </div>
             <div class="field-value">
-                <input id="AccountNumber" name="AccountNumber" type="text" class="noblanks">
+                <input id="AccountNumber" name="AccountNumber" type="text" value="{{.Asset.AccountNumber}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -92,7 +108,7 @@
                 <label for="ISIN">ISIN</label>
             </div>
             <div class="field-value">
-                <input id="ISIN" name="ISIN" type="text" class="noblanks">
+                <input id="ISIN" name="ISIN" type="text" value="{{.Asset.ISIN}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -100,7 +116,7 @@
                 <label for="WKN">WKN</label>
             </div>
             <div class="field-value">
-                <input id="WKN" name="WKN" type="text" class="noblanks">
+                <input id="WKN" name="WKN" type="text" value="{{.Asset.WKN}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -108,7 +124,7 @@
                 <label for="TickerSymbol">Ticker symbol</label>
             </div>
             <div class="field-value">
-                <input id="TickerSymbol" name="TickerSymbol" type="text" class="noblanks">
+                <input id="TickerSymbol" name="TickerSymbol" type="text" value="{{.Asset.TickerSymbol}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -116,7 +132,7 @@
                 <label for="YFSymbol">y!finance symbol</label>
             </div>
             <div class="field-value">
-                <input id="YFSymbol" name="QuoteServiceSymbols" type="text" class="noblanks">
+                <input id="YFSymbol" name="QuoteServiceSymbols" type="text" value="{{.Asset.QuoteServiceSymbols.YF}}" class="noblanks">
             </div>
         </div>
         <div class="field">
@@ -124,7 +140,7 @@
                 <label for="CustomID">Custom ID</label>
             </div>
             <div class="field-value">
-                <input id="CustomID" name="CustomID" type="text" class="noblanks">
+                <input id="CustomID" name="CustomID" type="text" value="{{.Asset.CustomID}}" class="noblanks">
             </div>
         </div>
 
@@ -133,7 +149,7 @@
                 <label for="Comment">Comment</label>
             </div>
             <div class="field-value">
-                <textarea rows="3" id="Comment" name="Comment"></textarea>
+                <textarea rows="3" id="Comment" name="Comment">{{.Asset.Comment}}</textarea>
             </div>
         </div>
         <div class="button-field">

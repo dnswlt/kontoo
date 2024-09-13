@@ -19,7 +19,7 @@ import (
 func DateVal(year int, month time.Month, day int) Date {
 	return Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
-func NewDate(year int, month time.Month, day int) *Date {
+func newDate(year int, month time.Month, day int) *Date {
 	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
 func today() Date {
@@ -256,6 +256,9 @@ func (s *Store) Save() error {
 }
 
 func (a *Asset) ID() string {
+	if a.CustomID != "" {
+		return a.CustomID
+	}
 	if a.ISIN != "" {
 		return a.ISIN
 	}
@@ -270,9 +273,6 @@ func (a *Asset) ID() string {
 	}
 	if a.TickerSymbol != "" {
 		return a.TickerSymbol
-	}
-	if a.CustomID != "" {
-		return a.CustomID
 	}
 	return ""
 }
@@ -436,6 +436,11 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 		if e.QuantityMicros == 0 {
 			return fmt.Errorf("QuantityMicros must be specified for %s", e.Type)
 		}
+		if e.Type == AssetPurchase && e.QuantityMicros < 0 {
+			return fmt.Errorf("QuantityMicros must be positive for %v, was %v", e.Type, e.QuantityMicros)
+		} else if e.Type == AssetSale && e.QuantityMicros > 0 {
+			return fmt.Errorf("QuantityMicros must be negative for %v, was %v", e.Type, e.QuantityMicros)
+		}
 	case AssetPrice:
 		if e.PriceMicros == 0 {
 			return fmt.Errorf("PriceMicros must be specified for %s", e.Type)
@@ -532,7 +537,7 @@ func (s *Store) Delete(sequenceNum int64) error {
 	return nil
 }
 
-func (s *Store) AddAsset(a *Asset) error {
+func (s *Store) validateAsset(a *Asset) error {
 	id := a.ID()
 	if id == "" {
 		return fmt.Errorf("Asset must have an ID")
@@ -540,11 +545,25 @@ func (s *Store) AddAsset(a *Asset) error {
 	if strings.TrimSpace(a.Name) == "" {
 		return fmt.Errorf("Asset name must not be empty")
 	}
-	if a.MaturityDate != nil && a.MaturityDate.IsZero() {
-		return fmt.Errorf("MaturityDate must be nil or non-zero")
+	cat := a.Type.Category()
+	if (a.InterestMicros != 0 || a.InterestPayment != "") && (cat == Equity || cat == Commodities) {
+		return fmt.Errorf("interest must not be specified for asset category %s", cat)
 	}
-	if a.IssueDate != nil && a.IssueDate.IsZero() {
-		return fmt.Errorf("IssueDate must be nil or non-zero")
+	if a.MaturityDate != nil {
+		if a.MaturityDate.IsZero() {
+			return fmt.Errorf("MaturityDate must be nil or non-zero")
+		}
+		if a.Type.Category() != FixedIncome {
+			return fmt.Errorf("MaturityDate must only be specified for fixed-income assets")
+		}
+	}
+	if a.IssueDate != nil {
+		if a.IssueDate.IsZero() {
+			return fmt.Errorf("IssueDate must be nil or non-zero")
+		}
+		if a.Type.Category() != FixedIncome {
+			return fmt.Errorf("IssueDate must only be specified for fixed-income assets")
+		}
 	}
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
@@ -555,11 +574,44 @@ func (s *Store) AddAsset(a *Asset) error {
 	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
 		return fmt.Errorf("Currency must use ISO code (3 uppercase letters)")
 	}
+	return nil
+}
+
+func (s *Store) AddAsset(a *Asset) error {
+	if err := s.validateAsset(a); err != nil {
+		return err
+	}
+	id := a.ID()
 	if _, ok := s.assets[id]; ok {
 		return fmt.Errorf("duplicate asset ID %q", id)
 	}
 	s.assets[id] = a
 	s.ledger.Assets = append(s.ledger.Assets, a)
+	return nil
+}
+
+func (s *Store) UpdateAsset(assetID string, a *Asset) error {
+	old := s.assets[assetID]
+	if old == nil {
+		return fmt.Errorf("no asset with ID %q", assetID)
+	}
+	id := a.ID()
+	if id != old.ID() {
+		return fmt.Errorf("asset ID change is not supported")
+	}
+	if err := s.validateAsset(a); err != nil {
+		return err
+	}
+	// Check that immutable fields do not change:
+	hasEntries := len(s.entries[id]) > 0
+	if hasEntries && old.Type.Category() != a.Type.Category() {
+		return fmt.Errorf("cannot modify asset category (%s => %s): asset has ledger entries",
+			old.Type.Category(), a.Type.Category())
+	}
+	if hasEntries && old.Currency != a.Currency {
+		return fmt.Errorf("cannot modify currency: asset has ledger entries")
+	}
+	*old = *a
 	return nil
 }
 
@@ -684,19 +736,19 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			CostMicros:     e.CostMicros,
 		})
 	case AssetSale:
-		p.QuantityMicros -= e.QuantityMicros
+		p.QuantityMicros += e.QuantityMicros
 		p.PriceMicros = e.PriceMicros
 		// Remove items
 		qty := e.QuantityMicros
 		for len(p.Items) > 0 {
 			hd := &p.Items[0]
-			if hd.QuantityMicros > qty {
+			if hd.QuantityMicros > -qty {
 				oldQ := hd.QuantityMicros
-				hd.QuantityMicros -= qty
+				hd.QuantityMicros += qty
 				hd.CostMicros = hd.CostMicros.Frac(hd.QuantityMicros, oldQ)
 				break
 			}
-			qty -= hd.QuantityMicros
+			qty += hd.QuantityMicros
 			p.Items = p.Items[1:]
 		}
 		if len(p.Items) == 0 {
@@ -730,7 +782,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			val := e.ValueMicros
 			for len(p.Items) > 0 {
 				hd := &p.Items[0]
-				if hd.QuantityMicros > val {
+				if hd.QuantityMicros > -val {
 					hd.QuantityMicros += val
 					break
 				}

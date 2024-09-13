@@ -6,6 +6,8 @@ export function init() {
         event.preventDefault(); // Prevent the default form submission
         const formData = new FormData(this);
         const asset = {};
+        let assetId = formData.get("AssetId");
+        formData.delete("AssetId");  // Don't add it as a field to the asset.
         formData.forEach((value, key) => {
             if (!value) {
                 return;
@@ -21,7 +23,10 @@ export function init() {
         try {
             const response = await fetch("/kontoo/assets", {
                 method: "POST",
-                body: JSON.stringify(asset),
+                body: JSON.stringify({
+                    "assetId": assetId,
+                    "asset": asset
+                }),
                 headers: {
                     "Content-Type": "application/json"
                 }
@@ -31,8 +36,12 @@ export function init() {
             }
             const data = await response.json();
             if (data.status === "OK") {
-                callout(`Successfully added asset ${data.assetId}.`);
-                this.reset();
+                if (assetId) {
+                    callout(`Successfully updated asset ${data.assetId}.`);
+                } else {
+                    this.reset();
+                    callout(`Successfully added asset ${data.assetId}.`);
+                }
             } else {
                 calloutStatus(data.status, data.error);
             }

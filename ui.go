@@ -166,7 +166,7 @@ func commonFuncs() template.FuncMap {
 		"days": func(d time.Duration) int {
 			return int(math.Round(d.Seconds() / 60 / 60 / 24))
 		},
-		"setp": func(rawURL string, param, value string) (string, error) {
+		"setp": func(rawURL, param, value string) (string, error) {
 			u, err := url.Parse(rawURL)
 			if err != nil {
 				return "", err
@@ -174,6 +174,14 @@ func commonFuncs() template.FuncMap {
 			q := u.Query()
 			q.Set(param, value)
 			u.RawQuery = q.Encode()
+			return u.String(), nil
+		},
+		"setpvar": func(rawURL, pathParam, value string) (string, error) {
+			u, err := url.Parse(rawURL)
+			if err != nil {
+				return "", err
+			}
+			u.Path = strings.ReplaceAll(u.Path, "{"+pathParam+"}", url.PathEscape(value))
 			return u.String(), nil
 		},
 		"join": joinAny,

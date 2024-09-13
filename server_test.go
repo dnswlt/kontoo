@@ -189,11 +189,26 @@ func TestHandlePostJson(t *testing.T) {
 		},
 		{
 			path: "/kontoo/assets",
-			data: &Asset{
-				Type:         Stock,
-				Name:         "Mercedes-Benz Group AG",
-				TickerSymbol: "MBG.DE",
-				Currency:     "EUR",
+			data: &UpsertAssetRequest{
+				Asset: &Asset{
+					Type:         Stock,
+					Name:         "Mercedes-Benz Group AG",
+					TickerSymbol: "MBG.DE",
+					Currency:     "EUR",
+				},
+			},
+		},
+		{
+			path: "/kontoo/assets",
+			data: &UpsertAssetRequest{
+				AssetID: "NESN",
+				Asset: &Asset{
+					Type:         Stock,
+					Name:         "Nestle SA",
+					ShortName:    "Nestli",
+					TickerSymbol: "NESN",
+					Currency:     "CHF",
+				},
 			},
 		},
 		{
@@ -217,11 +232,11 @@ func TestHandlePostJson(t *testing.T) {
 		}
 		resp, err := http.Post(srv.URL+tc.path, "application/json", &buf)
 		if err != nil {
-			t.Fatal("Get failed:", err)
+			t.Fatal("Post failed:", err)
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			t.Errorf("Expected OK status for path %q, got %d", tc.path, resp.StatusCode)
+			t.Fatalf("Expected OK status for path %q, got %d", tc.path, resp.StatusCode)
 		}
 		// Every response should have these two fields.
 		var r struct {

@@ -240,6 +240,12 @@ const (
 	AnnualPayment      InterestPaymentSchedule = "annual"  // Interest paid yearly
 )
 
+var allInterestPaymentSchedules = [...]InterestPaymentSchedule{
+	UnspecifiedPayment,
+	AccruedPayment,
+	AnnualPayment,
+}
+
 type Asset struct {
 	Type            AssetType
 	Name            string
@@ -258,7 +264,6 @@ type Asset struct {
 	QuoteServiceSymbols map[string]string `json:",omitempty"`
 	CustomID            string            `json:",omitempty"`
 	Currency            Currency
-	AssetGroup          string `json:",omitempty"`
 	Comment             string `json:",omitempty"`
 }
 

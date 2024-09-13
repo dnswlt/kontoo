@@ -9,7 +9,7 @@ function followUrl(item) {
 
 function contextMenuSelected(item) {
     const action = item.dataset.action;
-    if (["add-entry", "show-ledger"].includes(action)) {
+    if (["add-entry", "show-ledger", "edit-asset"].includes(action)) {
         return followUrl(item);
     }
     if (action === "toggle-chart") {
@@ -141,7 +141,10 @@ function drawTimelines(timelines) {
 
 async function fetchAndDrawTimelines() {
     if (uiState.assetIds.length == 0) {
-        document.getElementById("positions-chart").classList.add("hidden");
+        const chart = document.getElementById("positions-chart");
+        if (chart) {
+            chart.classList.add("hidden");
+        }
         return;
     }
     try {

@@ -37,7 +37,7 @@ func TestStoreAdd(t *testing.T) {
 				Type:           AssetSale,
 				AssetRef:       "NESN",
 				ValueDate:      DateVal(2023, 1, 3),
-				QuantityMicros: 10 * UnitValue,
+				QuantityMicros: -10 * UnitValue,
 				PriceMicros:    10 * UnitValue,
 			},
 		},
@@ -215,8 +215,8 @@ func TestStoreAddAsset(t *testing.T) {
 				ISIN:         "DE123",
 				Name:         "Bund123",
 				Currency:     "EUR",
-				IssueDate:    NewDate(2023, 1, 1),
-				MaturityDate: NewDate(2030, 1, 1),
+				IssueDate:    newDate(2023, 1, 1),
+				MaturityDate: newDate(2030, 1, 1),
 			},
 		},
 		{
@@ -263,8 +263,8 @@ func TestStoreAddAssetFail(t *testing.T) {
 				ISIN:         "DE123",
 				Name:         "Bund123",
 				Currency:     "EUR",
-				IssueDate:    NewDate(2023, 1, 1),
-				MaturityDate: NewDate(2021, 1, 1),
+				IssueDate:    newDate(2023, 1, 1),
+				MaturityDate: newDate(2021, 1, 1),
 			},
 		},
 		{
@@ -506,8 +506,8 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 			{
 				Type:         FixedDepositAccount,
 				IBAN:         "DE12",
-				IssueDate:    NewDate(2023, 1, 1),
-				MaturityDate: NewDate(2024, 1, 1),
+				IssueDate:    newDate(2023, 1, 1),
+				MaturityDate: newDate(2024, 1, 1),
 			},
 		},
 	}
@@ -535,10 +535,16 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 			ValueMicros: 1010 * UnitValue,
 		},
 		{
+			Type:        AccountDebit,
+			AssetID:     "DE12",
+			ValueDate:   DateVal(2023, 9, 1),
+			ValueMicros: -100 * UnitValue,
+		},
+		{
 			Type:        AssetMaturity,
 			AssetID:     "DE12",
 			ValueDate:   DateVal(2024, 1, 1),
-			ValueMicros: 1020 * UnitValue,
+			ValueMicros: 920 * UnitValue,
 		},
 	}
 	for _, e := range entries {
@@ -560,6 +566,11 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 			items: []AssetPositionItem{
 				// AccountBalance should not have changed items:
 				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 1000 * UnitValue, PriceMicros: UnitValue},
+			}},
+		{date: DateVal(2023, 9, 1), value: 910 * UnitValue,
+			items: []AssetPositionItem{
+				// AccountDebit should have reduced nominal value (stored in QuantityMicros):
+				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 900 * UnitValue, PriceMicros: UnitValue},
 			}},
 		{date: DateVal(2024, 1, 1), value: 0},
 	}
@@ -612,7 +623,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 			Type:           AssetSale,
 			AssetID:        "DE99",
 			ValueDate:      DateVal(2023, 2, 20),
-			QuantityMicros: 500 * UnitValue,
+			QuantityMicros: -500 * UnitValue,
 			PriceMicros:    1100 * Millis,
 		},
 		{
@@ -739,7 +750,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				Type:           AssetSale,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 3),
-				QuantityMicros: 20 * u,
+				QuantityMicros: -20 * u,
 				PriceMicros:    3 * u,
 				CostMicros:     10 * u,
 			},
@@ -759,7 +770,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				Type:           AssetSale,
 				AssetID:        "MSFT",
 				ValueDate:      DateVal(2024, 1, 4),
-				QuantityMicros: 10 * u,
+				QuantityMicros: -10 * u,
 				PriceMicros:    3 * u,
 				CostMicros:     10 * u,
 			},
@@ -988,7 +999,7 @@ func TestInternalRateOfReturn(t *testing.T) {
 	asset := &Asset{
 		ISIN:            "DE12",
 		Type:            GovernmentBond,
-		MaturityDate:    NewDate(2022, 1, 1),
+		MaturityDate:    newDate(2022, 1, 1),
 		Currency:        "EUR",
 		InterestMicros:  40 * Millis, // 4%
 		InterestPayment: AnnualPayment,
@@ -1009,7 +1020,7 @@ func TestInternalRateOfReturn(t *testing.T) {
 		},
 	}
 	got := internalRateOfReturn(p)
-	want := Micros(66343) // Verified using Excel's XIRR() function.
+	want := Micros(66344) // Verified using Excel's XIRR() function.
 	if got != want {
 		t.Errorf("Wrong IRR: want %v, got %v", want, got)
 	}
@@ -1019,7 +1030,7 @@ func TestInternalRateOfReturnVaryingIntervals(t *testing.T) {
 	asset := &Asset{
 		ISIN:            "DE12",
 		Type:            GovernmentBond,
-		MaturityDate:    NewDate(2022, 1, 1),
+		MaturityDate:    newDate(2022, 1, 1),
 		Currency:        "EUR",
 		InterestMicros:  30 * Millis, // 3%
 		InterestPayment: AnnualPayment,
@@ -1055,7 +1066,7 @@ func TestInternalRateOfReturn1(t *testing.T) {
 	asset := &Asset{
 		ISIN:            "DE12",
 		Type:            GovernmentBond,
-		MaturityDate:    NewDate(2023, 1, 1),
+		MaturityDate:    newDate(2023, 1, 1),
 		Currency:        "EUR",
 		InterestMicros:  40 * Millis, // 4%
 		InterestPayment: AnnualPayment,
@@ -1071,7 +1082,7 @@ func TestInternalRateOfReturn1(t *testing.T) {
 		},
 	}
 	got := internalRateOfReturn(p)
-	want := Micros(38496)
+	want := Micros(38497)
 	if got != want {
 		t.Errorf("Wrong IRR: want %v, got %v", want, got)
 	}

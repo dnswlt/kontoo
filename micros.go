@@ -74,7 +74,7 @@ func FloatAsMicros(f float64) Micros {
 	if math.Abs(f*1e6) > math.MaxInt64 {
 		panic(fmt.Sprintf("cannot represent %v as Micros", f))
 	}
-	return Micros(int64(f * 1e6))
+	return Micros(int64(math.Round(f * 1e6)))
 }
 
 func (m Micros) Format(format string) string {

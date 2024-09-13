@@ -3,7 +3,21 @@ export function init() {
     document.getElementById("toggle-row-actions").addEventListener("click", () => {
         document.querySelectorAll(".action-column").forEach(elem => {
             elem.classList.toggle("hidden");
-        });    
+        });
+    });
+    document.getElementById("reload-ledger").addEventListener("click", async function () {
+        try {
+            const resp = await fetch("/kontoo/ledger/reload", {
+                method: "POST"
+            });
+            if (!resp.ok) {
+                throw new Error(`HTTP error: status ${resp.status}`);
+            }
+            location.reload();
+        }
+        catch (error) {
+            console.error("Failed to reload:", error);
+        }
     });
     document.querySelectorAll("button.delete").forEach(button => {
         button.addEventListener("click", async function () {
@@ -23,6 +37,7 @@ export function init() {
                 const data = await response.json();
                 if (data.status === "OK") {
                     console.log(`Deleted ledger entry ${data.sequenceNum}.`);
+                    location.reload();
                 } else {
                     console.error("Could not delete ledger entry:", data.status, data.error);
                 }

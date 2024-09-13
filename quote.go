@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -519,7 +518,7 @@ func parseCSVFloat(s string) (Micros, error) {
 	if err != nil {
 		return 0, err
 	}
-	return Micros(math.Round(f / p * 1e6)), nil
+	return FloatAsMicros(f / p), nil
 }
 
 func ReadDepotExportCSVFile(path string) ([]*DepotExportItem, error) {

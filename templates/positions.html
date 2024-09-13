@@ -50,6 +50,7 @@
                             data-action="show-ledger">Show ledger</div>
                         <div class="contextmenu-option" data-id='{{ .AssetID }}' data-action="toggle-chart">Show/hide in
                             chart</div>
+                        <div class="contextmenu-option" data-url='{{setpvar $nav.editAsset "assetID" .AssetID}}' data-action="edit-asset">Edit asset</div>
                     </div>
                 </td>
                 <td>{{ .AssetID }}</td>

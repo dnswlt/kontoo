@@ -438,7 +438,6 @@ func assetArgSpec(a *Asset) *argSpec {
 	s.dict("QuoteServiceSymbols", &a.QuoteServiceSymbols)
 	s.str("CustomID", &a.CustomID)
 	s.currency("Currency", &a.Currency)
-	s.str("AssetGroup", &a.AssetGroup)
 	s.strings("Comment", " ", &a.Comment)
 	return s
 }
