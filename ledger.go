@@ -9,7 +9,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -290,6 +289,23 @@ func (s *Store) nextSequenceNum() int64 {
 	return s.ledger.Entries[len(s.ledger.Entries)-1].SequenceNum + 1
 }
 
+// EntriesInRange returns all ledger entries for the given asset
+// in the (inclusive) range [start, end].
+func (s *Store) EntriesInRange(assetId string, start, end Date) []*LedgerEntry {
+	var result []*LedgerEntry
+	es := s.entries[assetId]
+	if len(es) == 0 {
+		return result
+	}
+	i := sort.Search(len(es), func(i int) bool {
+		return es[i].ValueDate.Compare(start) >= 0
+	})
+	for ; i < len(es) && !es[i].ValueDate.After(end.Time); i++ {
+		result = append(result, es[i])
+	}
+	return result
+}
+
 func (s *Store) FindAssetByWKN(wkn string) *Asset {
 	if wkn == "" {
 		return nil
@@ -383,6 +399,12 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
+	if e.Currency != "" && !validCurrency(e.Currency) {
+		return fmt.Errorf("invalid currency: %q", e.Currency)
+	}
+	if e.QuoteCurrency != "" && !validCurrency(e.QuoteCurrency) {
+		return fmt.Errorf("invalid quote currency: %q", e.QuoteCurrency)
+	}
 	if e.Type == ExchangeRate {
 		if e.QuoteCurrency == "" {
 			return fmt.Errorf("QuoteCurrency must not be empty")
@@ -412,10 +434,8 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	if !slices.Contains(a.Type.ValidEntryTypes(), e.Type) {
 		return fmt.Errorf("%v is not a valid entry type for an asset of type %v", e.Type, a.Type)
 	}
-	if e.Currency != "" && e.Currency != a.Currency {
-		return fmt.Errorf("wrong currency (%s) for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
-	} else if e.Currency == "" {
-		e.Currency = a.Currency
+	if e.Currency != a.Currency {
+		return fmt.Errorf("wrong currency %s for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
 	}
 	// General validation
 	if e.QuoteCurrency != "" {
@@ -491,6 +511,12 @@ func (s *Store) Add(e *LedgerEntry) error {
 			return fmt.Errorf("no asset found with ref=%q", e.AssetRef)
 		}
 		e.AssetRef, e.AssetID = "", a.ID()
+	}
+	if e.Currency == "" && e.AssetID != "" {
+		// Copy currency from asset.
+		if a := s.assets[e.AssetID]; a != nil {
+			e.Currency = a.Currency
+		}
 	}
 	if err := s.validateEntry(e); err != nil {
 		return fmt.Errorf("entry validation failed: %w", err)
@@ -568,11 +594,8 @@ func (s *Store) validateAsset(a *Asset) error {
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
-	if len(a.Currency) == 0 {
-		return fmt.Errorf("Currency must not be empty")
-	}
-	if ok, _ := regexp.MatchString("^[A-Z]{3}$", string(a.Currency)); !ok {
-		return fmt.Errorf("Currency must use ISO code (3 uppercase letters)")
+	if !validCurrency(a.Currency) {
+		return fmt.Errorf("unknown or invalid currency %q: must use ISO code (3 uppercase letters)", a.Currency)
 	}
 	return nil
 }

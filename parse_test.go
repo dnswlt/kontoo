@@ -136,7 +136,7 @@ func TestParseLedgerEntry(t *testing.T) {
 			want: &LedgerEntry{
 				Type:     AssetPurchase,
 				AssetRef: "foo",
-				Currency: EUR,
+				Currency: "EUR",
 			},
 		},
 		{

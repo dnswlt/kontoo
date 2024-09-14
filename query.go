@@ -146,7 +146,7 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 		case "type":
 			fval = e.EntryType()
 		case "class":
-			fval = e.AssetType()
+			fval = e.AssetType().String()
 		case "num":
 			fval = strconv.FormatInt(e.SequenceNum(), 10)
 		}

@@ -211,11 +211,11 @@ func (e *LedgerEntryRow) Label() string {
 	}
 	return ""
 }
-func (e *LedgerEntryRow) AssetType() string {
+func (e *LedgerEntryRow) AssetType() AssetType {
 	if e.A == nil {
-		return ""
+		return UnspecifiedAssetType
 	}
-	return e.A.Type.String()
+	return e.A.Type
 }
 func (e *LedgerEntryRow) Currency() string {
 	return string(e.E.Currency)

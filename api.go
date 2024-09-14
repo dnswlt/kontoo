@@ -342,15 +342,30 @@ const (
 // Three-letter code, e.g. CHF, EUR, USD.
 type Currency string
 
-const (
-	CHF Currency = "CHF"
-	USD Currency = "USD"
-	EUR Currency = "EUR"
+var (
+	// Regexp for ISO 3-letter currency codes.
+	currencyRegexp = regexp.MustCompile("^[A-Z]{3}$")
+	// Lists known currencies.
+	// Used in ledger validation: other currencies will not be accepted.
+	validCurrencies = map[Currency]bool{
+		"EUR": true, // Euro
+		"USD": true, // US Dollar
+		"CHF": true, // Swiss Franc
+		"GBP": true, // British Pound Sterling
+		"NOK": true, // Norwegian Krone
+		"SEK": true, // Swedish Krona
+		"DKK": true, // Danish Krone
+		"JPY": true, // Japanese Yen
+		"CAD": true, // Canadian Dollar
+		"AUD": true, // Australian Dollar
+		"CNY": true, // Chinese Yuan
+	}
 )
 
-var (
-	currencyRegexp = regexp.MustCompile("^[A-Z]{3}$")
-)
+// Reports whether c is a valid and known currency.
+func validCurrency(c Currency) bool {
+	return validCurrencies[c]
+}
 
 func (d Date) String() string {
 	return d.Format("2006-01-02")

@@ -1,19 +1,18 @@
-<table>
+<table class="zebra">
     <thead>
         <tr>
             <th class="hidden action-column"></th>
             <th class="ralign">#</th>
             <th>Value Date</th>
-            <th>Created</th>
             <th>Entry Type</th>
             <th>Asset ID</th>
             <th>Asset Name</th>
             <th>Asset Class</th>
-            <th>Currency</th>
-            <th>Value</th>
-            <th>Cost</th>
-            <th>Quantity</th>
-            <th>Price</th>
+            <th>Ccy</th>
+            <th class="ralign">Value</th>
+            <th class="ralign">Cost</th>
+            <th class="ralign">Qty</th>
+            <th class="ralign">Price</th>
             <th>Comment</th>
         </tr>
     </thead>
@@ -25,14 +24,13 @@
                     <i class="emoji emoji-wastebasket"></i>
                 </button>
             </td>
-            <td class="ralign">{{ .SequenceNum }}</td>
+            <td class="ralign" title="Created: {{ ymdhm .Created }}">{{ .SequenceNum }}</td>
             <td class="nowrap">{{ .ValueDate }}</td>
-            <td class="nowrap">{{ ymdhm .Created }}</td>
             <td>{{ .EntryType }}</td>
             {{if .HasAsset}}
             <td>{{ .AssetID }}</td>
             <td>{{ .AssetName }}</td>
-            <td>{{ .AssetType }}</td>
+            <td>{{ assetType .AssetType }}</td>
             {{else}}
             <td></td>
             <td>{{ .Label }}</td>
