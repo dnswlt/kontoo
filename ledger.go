@@ -71,12 +71,18 @@ func (s *Store) BaseCurrency() Currency {
 }
 
 func (s *Store) ValueDateRange() (min, max Date) {
-	for _, e := range s.ledger.Entries {
-		if e.ValueDate.After(max.Time) {
-			max = e.ValueDate
+	// We make use of the fact that all ledger entries (except exchange rates)
+	// are stored chronologically sorted.
+	for _, es := range s.entries {
+		l := len(es)
+		if l == 0 {
+			continue
 		}
-		if min.IsZero() || e.ValueDate.Before(min.Time) {
-			min = e.ValueDate
+		if es[l-1].ValueDate.After(max.Time) {
+			max = es[l-1].ValueDate
+		}
+		if min.IsZero() || es[0].ValueDate.Before(min.Time) {
+			min = es[0].ValueDate
 		}
 	}
 	return
@@ -435,7 +441,7 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 		return fmt.Errorf("%v is not a valid entry type for an asset of type %v", e.Type, a.Type)
 	}
 	if e.Currency != a.Currency {
-		return fmt.Errorf("wrong currency %s for asset %s (want: %s)", e.Currency, a.ID(), a.Currency)
+		return fmt.Errorf("wrong currency %q for asset %s (want: %q)", e.Currency, a.ID(), a.Currency)
 	}
 	// General validation
 	if e.QuoteCurrency != "" {

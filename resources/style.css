@@ -3,6 +3,7 @@
     --gray-passive: #ddd;
     --gray-text: #6f6f6f;
     --red-foreground: #a52a2a;
+    --red-number: rgb(219, 18, 34);
     --red-background: #ffe6e6;
     --green-foreground: #008000;
     --green-background: #e6ffe6;
@@ -17,10 +18,12 @@
     --dark-foreground: white;
     --dark-background-active: #575757;
     --dark-border: black;
+
+    --light-table-zebra: #f0f0f0;
 }
 
 body {
-    font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
+    font-family: "Open Sans",-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
     font-size: 11pt;
 }
 
@@ -40,7 +43,7 @@ th {
 }
 
 table.zebra tr:nth-child(even) {
-    background-color: #f0f0f0;
+    background-color: var(--light-table-zebra);
 }
 
 .nowrap {
@@ -57,6 +60,10 @@ tr.subtotal {
 
 tr.total td {
     font-weight: bold;
+}
+
+.negative-amount {
+    color: var(--red-number);
 }
 
 /* Vertical bar separator */

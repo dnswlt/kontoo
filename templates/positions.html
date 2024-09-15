@@ -33,7 +33,7 @@
                 <th>Category</th>
                 <th>Type</th>
                 <th>Currency</th>
-                <th>Market value</th>
+                <th>Mkt value</th>
                 <th><!-- Warnings --></th>
             </tr>
         </thead>
@@ -50,7 +50,8 @@
                             data-action="show-ledger">Show ledger</div>
                         <div class="contextmenu-option" data-id='{{ .AssetID }}' data-action="toggle-chart">Show/hide in
                             chart</div>
-                        <div class="contextmenu-option" data-url='{{setpvar $nav.editAsset "assetID" .AssetID}}' data-action="edit-asset">Edit asset</div>
+                        <div class="contextmenu-option" data-url='{{setpvar $nav.editAsset "assetID" .AssetID}}'
+                            data-action="edit-asset">Edit asset</div>
                     </div>
                 </td>
                 <td>{{ .AssetID }}</td>
@@ -58,8 +59,10 @@
                 <td>{{ assetType .AssetType }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign tooltip">
-                    {{ money .Value }}
+                    <span class="{{if gt 0 .Value}}negative-amount{{end}}">{{money .Value}}</span>
+                    {{if .Notes}}
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
+                    {{end}}
                 </td>
                 <td class="tooltip">
                     {{if gt (days .DataAge) 35}}
@@ -76,7 +79,10 @@
                 <td>{{.Category}}</td>
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
-                <td class="ralign">{{ money .ValueBaseCurrency }}</td>
+                <td class="ralign">
+                    <span class="{{if gt 0 .ValueBaseCurrency}}negative-amount{{end}}">{{money
+                        .ValueBaseCurrency}}</span>
+                </td>
             </tr>
             {{end}}
             {{end}}
@@ -86,7 +92,10 @@
                 <td></td>
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
-                <td class="ralign">{{ money .TotalValueBaseCurrency }}</td>
+                <td class="ralign">
+                    <span class="{{if gt 0 .TotalValueBaseCurrency}}negative-amount{{end}}">{{money
+                        .TotalValueBaseCurrency}}</span>
+                </td>
             </tr>
         </tbody>
     </table>

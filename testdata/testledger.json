@@ -52,7 +52,8 @@
             "ValueDate": "2024-01-01",
             "Type": "AccountBalance",
             "AssetID": "DE123",
-            "Value": "1000"
+            "Value": "1000",
+            "Currency": "EUR"
         },
         {
             "Created": "2024-01-02T00:00:00Z",
@@ -61,7 +62,8 @@
             "Type": "AssetPurchase",
             "AssetID": "NESN",
             "Quantity": "100",
-            "Price": "98"
+            "Price": "98",
+            "Currency": "CHF"
         },
         {
             "Created": "2024-01-02T00:00:00Z",
@@ -70,7 +72,8 @@
             "Type": "AssetPurchase",
             "AssetID": "US912810FP85",
             "Quantity": "10000",
-            "Price": "1.110700"
+            "Price": "1.110700",
+            "Currency": "USD"
         }
     ]
 }

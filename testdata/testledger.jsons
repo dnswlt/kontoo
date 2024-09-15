@@ -49,7 +49,8 @@
     "ValueDate": "2024-01-01",
     "Type": "AccountBalance",
     "AssetID": "DE123",
-    "Value": "1000"
+    "Value": "1000",
+    "Currency": "EUR"
   }
 }
 {
@@ -60,6 +61,7 @@
     "Type": "AssetPurchase",
     "AssetID": "NESN",
     "Quantity": "100",
-    "Price": "98"
+    "Price": "98",
+    "Currency": "CHF"
   }
 }

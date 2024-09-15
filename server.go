@@ -281,6 +281,17 @@ type PositionTableRow struct {
 	YearsToMaturity         float64
 }
 
+func (r *PositionTableRow) ProfitLoss() Micros {
+	return r.Value - r.PurchasePrice
+}
+
+func (r *PositionTableRow) ProfitLossRatio() Micros {
+	if r.PurchasePrice == 0 {
+		return 0
+	}
+	return FloatAsMicros(r.Value.Float()/r.PurchasePrice.Float() - 1)
+}
+
 // Convenience function for sorting *Date. Nils come last.
 func compareDatePtr(l, r *Date) int {
 	if l == nil {
@@ -655,11 +666,26 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	rows := equityPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
+	var totalValue, totalEarnings, totalPurchasePrice Micros
+	for _, r := range rows {
+		if r.ExchangeRate == 0 {
+			totalValue, totalEarnings, totalPurchasePrice = 0, 0, 0
+			break
+		}
+		totalValue += r.Value.Frac(UnitValue, r.ExchangeRate)
+		totalEarnings += r.Value - r.PurchasePrice
+		totalPurchasePrice += r.PurchasePrice
+	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
 		"ActiveChips": map[string]bool{
 			"equity": true,
 			"today":  date.Equal(today()),
+		},
+		"Totals": map[string]Micros{
+			"Value":         totalValue,
+			"PurchasePrice": totalPurchasePrice,
+			"ProfitLoss":    totalEarnings,
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
@@ -1219,6 +1245,6 @@ func (s *Server) Serve() error {
 		Handler: mux,
 	}
 
-	fmt.Printf("Server listening on %s\n", s.addr)
+	fmt.Printf("Server available at http://%s/\n", s.addr)
 	return srv.ListenAndServe()
 }
