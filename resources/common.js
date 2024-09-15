@@ -1,5 +1,13 @@
 // Shared functions used by one or more HTML templates and snippets.
 
+export function hideCallout(elementId = "status-callout") {
+    const div = document.getElementById(elementId);
+    if (!div) {
+        console.log(`No callout element with ID ${elementId}`);
+        return;
+    }
+    div.classList.add("hidden");
+}
 export function callout(text, className = "callout-ok", elementId = "status-callout") {
     const div = document.getElementById(elementId);
     if (!div) {

@@ -65,27 +65,31 @@ func ParseQuery(rawQuery string) (*Query, error) {
 			return nil, fmt.Errorf("no term specified for field %q", ft)
 		}
 		// Special case: dates
-		if f == "year" {
-			y, err := strconv.Atoi(t)
-			if err != nil {
-				return nil, fmt.Errorf("invalid year: %q", t)
+		if f == "year" || f == "from" || f == "until" {
+			if ft[sep] == '~' {
+				return nil, fmt.Errorf("cannot use regexp for time range filter %q", f)
 			}
-			q.fromDate = DateVal(y, 1, 1)
-			q.untilDate = DateVal(y, 12, 31)
-			continue
-		} else if f == "from" {
-			from, err := time.Parse("2006-01-02", t)
-			if err != nil {
-				return nil, fmt.Errorf("invalid from: %q", t)
+			switch f {
+			case "year":
+				y, err := strconv.Atoi(t)
+				if err != nil {
+					return nil, fmt.Errorf("invalid year: %q", t)
+				}
+				q.fromDate = DateVal(y, 1, 1)
+				q.untilDate = DateVal(y, 12, 31)
+			case "from":
+				from, err := time.Parse("2006-01-02", t)
+				if err != nil {
+					return nil, fmt.Errorf("invalid from: %q", t)
+				}
+				q.fromDate = Date{from}
+			case "until":
+				until, err := time.Parse("2006-01-02", t)
+				if err != nil {
+					return nil, fmt.Errorf("invalid until: %q", t)
+				}
+				q.untilDate = Date{until}
 			}
-			q.fromDate = Date{from}
-			continue
-		} else if f == "until" {
-			until, err := time.Parse("2006-01-02", t)
-			if err != nil {
-				return nil, fmt.Errorf("invalid until: %q", t)
-			}
-			q.untilDate = Date{until}
 			continue
 		}
 		r := fieldTerm{
@@ -123,6 +127,7 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 	if q.Empty() {
 		return true
 	}
+	// Terms matching any of the "standard" fields.
 	for _, t := range q.terms {
 		if matchLower(e.Label(), t) || matchLower(e.Comment(), t) {
 			continue
@@ -132,6 +137,7 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 		}
 		return false
 	}
+	// Terms matching specific fields.
 	for i := range q.fieldTerms {
 		t := &q.fieldTerms[i]
 		expectMatch := !t.negated
@@ -146,7 +152,7 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 		case "type":
 			fval = e.EntryType()
 		case "class":
-			fval = e.AssetType().String()
+			fval = e.AssetType().DisplayName()
 		case "num":
 			fval = strconv.FormatInt(e.SequenceNum(), 10)
 		}
@@ -164,5 +170,13 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 			}
 		}
 	}
+	// Time range
+	if !q.fromDate.IsZero() && q.fromDate.After(e.ValueDate().Time) {
+		return false
+	}
+	if !q.untilDate.IsZero() && q.untilDate.Before(e.ValueDate().Time) {
+		return false
+	}
+
 	return true
 }
