@@ -38,7 +38,7 @@
             {{end}}
             <td class="ralign">{{ .Currency }}</td>
             <td class="ralign">
-                <span class="{{if gt 0 .Value}}negative-amount{{end}}">{{if nonzero .Value}}{{ money .Value }}{{end}}</span>
+                <span class="{{if negative .Value}}negative-amount{{end}}">{{if nonzero .Value}}{{ money .Value }}{{end}}</span>
             </td>
             <td class="ralign">{{if nonzero .Cost}}{{ money .Cost }}{{end}}</td>
             <td class="ralign">{{if nonzero .Quantity}}{{ quantity .Quantity }}{{end}}</td>

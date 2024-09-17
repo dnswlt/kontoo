@@ -376,9 +376,6 @@ func (d Date) Compare(other Date) int {
 }
 
 func (d Date) Between(start, end Date) bool {
-	if start.After(end.Time) {
-		return false
-	}
 	return !start.After(d.Time) && !end.Before(d.Time)
 }
 

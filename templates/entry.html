@@ -9,7 +9,7 @@
     {{template "nav.html" .}}
     <h1>Add entry</h1>
     <div id="status-callout" class="callout hidden"></div>
-    <form class="columnar" id="entry-form" method="post" action="/kontoo/entries/add">
+    <form class="columnar" id="entry-form" method="post" action="/kontoo/entries/add" autocomplete="off">
         <div id="ValueDateField" class="field">
             <div class="field-label">
                 <label for="ValueDate">Value date</label>
@@ -26,7 +26,7 @@
                 <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.AssetID}}">
                 <datalist id="AssetList">
                     {{range .Assets}}
-                    <option data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">{{.Name}}</option>
+                    <option id="{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">{{.Name}}</option>
                     {{end}}
                 </datalist>
             </div>

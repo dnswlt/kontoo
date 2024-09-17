@@ -268,8 +268,9 @@ type PositionTableRow struct {
 	// above a threshold.
 	DataAge time.Duration
 
-	Quantity Micros
-	Price    Micros
+	Quantity  Micros
+	Price     Micros
+	PriceDate Date
 
 	PurchasePrice           Micros
 	NominalValue            Micros
@@ -368,6 +369,7 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			Value:         p.MarketValue(),
 			Quantity:      p.QuantityMicros,
 			Price:         p.PriceMicros,
+			PriceDate:     p.PriceDate,
 			PurchasePrice: p.PurchasePrice(),
 		}
 		res = append(res, row)
@@ -473,8 +475,12 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		ctx["Date"] = date
 		ctxQ.Set("date", date)
 	}
+	// Default filter for ledger view: no prices and exchange rates.
+	ctxQ.Set("q", `!type~price|rate`)
+	ledgerURL := newURL("/kontoo/ledger", ctxQ)
+	ctxQ.Del("q")
 	ctx["Nav"] = map[string]string{
-		"ledger":    newURL("/kontoo/ledger", ctxQ).String(),
+		"ledger":    ledgerURL.String(),
 		"positions": newURL("/kontoo/positions", ctxQ).String(),
 		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
 		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
@@ -855,7 +861,7 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	end := toDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	end := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
 	start, err := parsePeriod(end, req.Period)
 	if err != nil {
 		http.Error(w, "invalid period: "+err.Error(), http.StatusBadRequest)

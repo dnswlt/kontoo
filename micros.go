@@ -61,6 +61,7 @@ func (a Micros) Frac(numer, denom Micros) Micros {
 	return Micros(bigA.Int64())
 }
 
+// SplitFrac splits m into its integer and fractional parts.
 func (m Micros) SplitFrac() (int64, int) {
 	return int64(m / 1_000_000), int(m % 1_000_000)
 }

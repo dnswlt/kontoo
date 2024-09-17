@@ -56,10 +56,10 @@
                 </td>
                 <td>{{ .AssetID }}</td>
                 <td>{{ assetCategory .AssetType }}</td>
-                <td>{{ assetType .AssetType }}</td>
+                <td>{{ assetType .AssetType }}</td> 
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign tooltip">
-                    <span class="{{if gt 0 .Value}}negative-amount{{end}}">{{money .Value}}</span>
+                    <span class="{{if negative .Value}}negative-amount{{end}}">{{money .Value}}</span>
                     {{if .Notes}}
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
                     {{end}}
@@ -80,7 +80,7 @@
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
                 <td class="ralign">
-                    <span class="{{if gt 0 .ValueBaseCurrency}}negative-amount{{end}}">{{money
+                    <span class="{{if negative .ValueBaseCurrency}}negative-amount{{end}}">{{money
                         .ValueBaseCurrency}}</span>
                 </td>
             </tr>
@@ -93,7 +93,7 @@
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
                 <td class="ralign">
-                    <span class="{{if gt 0 .TotalValueBaseCurrency}}negative-amount{{end}}">{{money
+                    <span class="{{if negative .TotalValueBaseCurrency}}negative-amount{{end}}">{{money
                         .TotalValueBaseCurrency}}</span>
                 </td>
             </tr>

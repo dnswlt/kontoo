@@ -21,8 +21,10 @@
                 <th class="ralign">Mkt value</th>
                 <th class="ralign" title="Purchase price including costs">Buy price</th>
                 <th class="ralign" title="Profits & losses">P&amp;L</th>
+                <th class="ralign" title="Profits & losses (%)">P&amp;L%</th>
                 <th class="ralign">Qty</th>
                 <th class="ralign">Price</th>
+                <th class="ralign">Price Date</th>
             </tr>
         </thead>
         <tbody>
@@ -43,11 +45,15 @@
                 <td class="ralign">{{ money .Value }}</td>
                 <td class="ralign">{{if nonzero .PurchasePrice}}{{ money .PurchasePrice }}{{end}}</td>
                 <td class="ralign">
-                    <span class="{{if gt 0 .ProfitLoss}}negative-amount{{end}}">{{ money .ProfitLoss }}</span>
+                    <span class="{{if negative .ProfitLoss}}negative-amount{{end}}">{{ money .ProfitLoss }}</span>
+                </td>
+                <td class="ralign">
+                    <span class="{{if negative .ProfitLossRatio}}negative-amount{{end}}">{{ percentAcc .ProfitLossRatio
+                        }}</span>
                 </td>
                 <td class="ralign">{{ quantity .Quantity }}</td>
                 <td class="ralign">{{ price .Price }}</td>
-                </td>
+                <td>{{ yyyymmdd .PriceDate }}</td>
             </tr>
             {{end}}
             <tr class="total">
@@ -58,6 +64,8 @@
                 <td class="ralign">{{ money .Totals.Value }}</td>
                 <td class="ralign">{{ money .Totals.PurchasePrice }}</td>
                 <td class="ralign">{{ money .Totals.ProfitLoss }}</td>
+                <td></td>
+                <td></td>
                 <td></td>
                 <td></td>
             </tr>

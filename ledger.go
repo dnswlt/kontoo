@@ -22,9 +22,9 @@ func newDate(year int, month time.Month, day int) *Date {
 	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
 }
 func today() Date {
-	return toDate(time.Now())
+	return ToDate(time.Now())
 }
-func toDate(t time.Time) Date {
+func ToDate(t time.Time) Date {
 	y, m, d := t.Date()
 	return DateVal(y, m, d)
 }
@@ -283,9 +283,17 @@ func (a *Asset) ID() string {
 }
 
 func (a *Asset) matchRef(ref string) bool {
-	return a.IBAN == ref || a.ISIN == ref || a.WKN == ref ||
+	if a.IBAN == ref || a.ISIN == ref || a.WKN == ref ||
 		a.AccountNumber == ref || a.TickerSymbol == ref ||
-		a.ShortName == ref || a.Name == ref
+		a.ShortName == ref || a.Name == ref {
+		return true
+	}
+	for _, s := range a.QuoteServiceSymbols {
+		if s == ref {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Store) nextSequenceNum() int64 {
@@ -449,9 +457,6 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	}
 	if e.PriceMicros < 0 {
 		return fmt.Errorf("PriceMicros must not be negative")
-	}
-	if allZero(e.ValueMicros, e.QuantityMicros, e.PriceMicros) && e.Type != AssetMaturity {
-		return fmt.Errorf("entry must have at least one non-zero value")
 	}
 	// Type-specific validation
 	switch e.Type {
@@ -662,6 +667,7 @@ type AssetPosition struct {
 	ValueMicros    Micros
 	QuantityMicros Micros
 	PriceMicros    Micros
+	PriceDate      Date
 	// Items are the constituent parts of the accumulated asset position.
 	// The are stored in chronological order (latest comes last) and can
 	// be used to determine profits and losses (P&L) and to update the
@@ -752,12 +758,17 @@ func (p *AssetPosition) Currency() Currency {
 	return p.Asset.Currency
 }
 
+func (p *AssetPosition) SetPrice(price Micros, date Date) {
+	p.PriceMicros = price
+	p.PriceDate = date
+}
+
 func (p *AssetPosition) Update(e *LedgerEntry) {
 	p.LastUpdated = e.ValueDate
 	switch e.Type {
 	case AssetPurchase:
 		p.QuantityMicros += e.QuantityMicros
-		p.PriceMicros = e.PriceMicros
+		p.SetPrice(e.PriceMicros, e.ValueDate)
 		p.Items = append(p.Items, AssetPositionItem{
 			ValueDate:      e.ValueDate,
 			QuantityMicros: e.QuantityMicros,
@@ -766,7 +777,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		})
 	case AssetSale:
 		p.QuantityMicros += e.QuantityMicros
-		p.PriceMicros = e.PriceMicros
+		p.SetPrice(e.PriceMicros, e.ValueDate)
 		// Remove items
 		qty := e.QuantityMicros
 		for len(p.Items) > 0 {
@@ -786,10 +797,10 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 	case AssetMaturity:
 		p.ValueMicros = 0
 		p.QuantityMicros = 0
-		p.PriceMicros = 0
+		p.SetPrice(e.PriceMicros, e.ValueDate)
 		p.Items = nil
 	case AssetPrice:
-		p.PriceMicros = e.PriceMicros
+		p.SetPrice(e.PriceMicros, e.ValueDate)
 	case AccountCredit:
 		p.ValueMicros += e.ValueMicros
 		// In a "normal" account, we don't keep track of individual credit/debit
@@ -828,9 +839,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 		// those with transaction tracking. Credit/Debit entries must be used
 		// to keep track of all inpayments/outflows.
 	case AssetHolding:
-		if e.PriceMicros != 0 {
-			p.PriceMicros = e.PriceMicros
-		}
+		p.SetPrice(e.PriceMicros, e.ValueDate)
 		if e.QuantityMicros != p.QuantityMicros {
 			// Only update position if the quantity has changed,
 			// otherwise consider it an informational ledger entry.
@@ -896,6 +905,25 @@ func totalEarningsAtMaturity(p *AssetPosition) Micros {
 		}
 	}
 	return interest + gains
+}
+
+func newton(y, x0 float64, ffp func(float64) (float64, float64)) (float64, error) {
+	const maxIter = 10
+	const precision = 1e-7
+	x := x0
+	for k := 0; k < maxIter; k++ {
+		y1, u1 := ffp(x)
+		if math.Abs(y-y1) <= precision {
+			return x, nil
+		}
+		if u1 == 0 {
+			return 0, fmt.Errorf("newton: zero derivative at %f", x)
+		}
+		x1 := x - (y1-y)/u1
+		// fmt.Printf("x_%d = %.3f x_%d = %.3f\n", k, x, k+1, x1)
+		x = x1
+	}
+	return 0, fmt.Errorf("newton: failed to converge after %d iterations", maxIter)
 }
 
 // bisect finds a zero of f(x)-y. f is assumed to be monotonically increasing.
@@ -965,16 +993,27 @@ func internalRateOfReturn(p *AssetPosition) Micros {
 		xs[i] = item.PurchasePrice().Float()
 		xsSum += xs[i]
 	}
-	irr, err := bisect(xsSum+tem, 0, 0.1, func(r float64) float64 {
+	returnsFunc := func(r float64) (float64, float64) {
 		// Calculate returns y using r as the (accruing) interest rate.
-		var y float64
+		var y, yd float64
 		for i := 0; i < len(ts); i++ {
 			y += xs[i] * math.Pow(1+r, ts[i])
+			yd += ts[i] * xs[i] * math.Pow(1+r, ts[i]-1)
 		}
-		return y
-	})
+		return y, yd
+	}
+	irr, err := newton(xsSum+tem, 0.05, returnsFunc)
 	if err != nil {
-		return 0
+		// Newton did not converge, try bisection.
+		fmt.Println("INFO Newton did not converge")
+		irr, err = bisect(xsSum+tem, 0, 0.1, func(r float64) float64 {
+			y, _ := returnsFunc(r)
+			return y
+		})
+		if err != nil {
+			// No method found a solution, give up
+			return 0
+		}
 	}
 	return FloatAsMicros(irr)
 }

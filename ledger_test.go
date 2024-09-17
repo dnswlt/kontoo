@@ -719,6 +719,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 1),
 				QuantityMicros: 10 * u,
 				PriceMicros:    2 * u,
+				PriceDate:      DateVal(2024, 1, 1),
 				Items: []AssetPositionItem{
 					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 				},
@@ -738,6 +739,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 2),
 				QuantityMicros: 30 * u,
 				PriceMicros:    3 * u,
+				PriceDate:      DateVal(2024, 1, 2),
 				Items: []AssetPositionItem{
 					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
@@ -759,6 +761,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 3),
 				QuantityMicros: 10 * u,
 				PriceMicros:    3 * u,
+				PriceDate:      DateVal(2024, 1, 3),
 				Items: []AssetPositionItem{
 					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
 				},
@@ -779,6 +782,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 4),
 				QuantityMicros: 0 * u,
 				PriceMicros:    3 * u,
+				PriceDate:      DateVal(2024, 1, 4),
 				Items:          nil,
 			},
 		},
@@ -819,6 +823,7 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 1),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    1 * u,
+				PriceDate:      DateVal(2024, 1, 1),
 				Items: []AssetPositionItem{
 					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
 				},
@@ -839,6 +844,7 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 				LastUpdated:    DateVal(2024, 1, 2),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    2 * u,
+				PriceDate:      DateVal(2024, 1, 2),
 				Items: []AssetPositionItem{
 					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
 				},
@@ -971,6 +977,7 @@ func TestBisect(t *testing.T) {
 		{y: 100, low: 0, high: 20, f: func(x float64) float64 { return x }, x: 100},
 		{y: 100, low: 0, high: 20, f: func(x float64) float64 { return x * x * x }, x: math.Pow(100, 1/3.0)},
 		{y: math.Sqrt(2), low: 1, high: 3, f: func(x float64) float64 { return math.Sqrt(x) }, x: 2},
+		{y: 10, low: 0, high: 10, f: func(x float64) float64 { return math.Exp(x / 2) }, x: math.Log(100)},
 		{y: 100, low: -1e10, high: -1e10 + 0.001, f: func(x float64) float64 { return x }, x: 100, wantErr: "converge"},
 		{y: 100, low: -1e10, high: -1e10 - 0.001, f: func(x float64) float64 { return x }, x: 100, wantErr: "less than high"},
 	}
@@ -987,6 +994,38 @@ func TestBisect(t *testing.T) {
 		}
 		if err != nil {
 			t.Fatal("bisect failed:", err)
+		}
+		if math.Abs(x-tc.x) > 1e-6 {
+			t.Errorf("Wrong result: want %.6f, got %.6f", tc.x, x)
+		}
+	}
+}
+
+func TestNewton(t *testing.T) {
+	tests := []struct {
+		y       float64
+		x0      float64
+		f       func(x float64) (float64, float64)
+		x       float64
+		wantErr string
+	}{
+		{y: 100, x0: 0, f: func(x float64) (float64, float64) { return x, 1 }, x: 100},
+		{y: 0, x0: 1, f: func(x float64) (float64, float64) { return x*x - 10, 2 * x }, x: math.Sqrt(10)},
+		{y: 10, x0: 1, f: func(x float64) (float64, float64) { return math.Exp(x / 2), math.Exp(x/2) / 2 }, x: math.Log(100)},
+	}
+	for _, tc := range tests {
+		x, err := newton(tc.y, tc.x0, tc.f)
+		if tc.wantErr != "" {
+			if err == nil {
+				t.Fatalf("Wanted error, got result %.6f", x)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("Wanted error containing %q, got: %v", tc.wantErr, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal("newton failed:", err)
 		}
 		if math.Abs(x-tc.x) > 1e-6 {
 			t.Errorf("Wrong result: want %.6f, got %.6f", tc.x, x)
@@ -1062,7 +1101,7 @@ func TestInternalRateOfReturnVaryingIntervals(t *testing.T) {
 	}
 }
 
-func TestInternalRateOfReturn1(t *testing.T) {
+func TestInternalRateOfReturnSingle(t *testing.T) {
 	asset := &Asset{
 		ISIN:            "DE12",
 		Type:            GovernmentBond,

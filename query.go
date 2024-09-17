@@ -65,11 +65,24 @@ func ParseQuery(rawQuery string) (*Query, error) {
 			return nil, fmt.Errorf("no term specified for field %q", ft)
 		}
 		// Special case: dates
-		if f == "year" || f == "from" || f == "until" {
+		if f == "date" || f == "year" || f == "from" || f == "until" {
 			if ft[sep] == '~' {
 				return nil, fmt.Errorf("cannot use regexp for time range filter %q", f)
 			}
 			switch f {
+			case "date":
+				if ymd, err := time.Parse("2006-01-02", t); err == nil {
+					q.fromDate = Date{ymd}
+					q.untilDate = Date{ymd}
+				} else if ym, err := time.Parse("2006-01", t); err == nil {
+					q.fromDate = Date{ym}
+					q.untilDate = Date{ym.AddDate(0, 1, -1)}
+				} else if y, err := strconv.Atoi(t); err == nil {
+					q.fromDate = DateVal(y, 1, 1)
+					q.untilDate = DateVal(y, 12, 31)
+				} else {
+					return nil, fmt.Errorf("invalid date: %q", t)
+				}
 			case "year":
 				y, err := strconv.Atoi(t)
 				if err != nil {
@@ -116,11 +129,19 @@ func matchLower(s, t string) bool {
 }
 
 func matchAsset(t string, a *Asset) bool {
-	return matchLower(a.AccountNumber, t) ||
+	if matchLower(a.AccountNumber, t) ||
 		matchLower(a.IBAN, t) || matchLower(a.ISIN, t) ||
 		matchLower(a.Name, t) || matchLower(a.ShortName, t) ||
 		matchLower(a.TickerSymbol, t) || matchLower(a.WKN, t) ||
-		matchLower(a.CustomID, t) || matchLower(a.Comment, t)
+		matchLower(a.CustomID, t) || matchLower(a.Comment, t) {
+		return true
+	}
+	for _, s := range a.QuoteServiceSymbols {
+		if matchLower(s, t) {
+			return true
+		}
+	}
+	return false
 }
 
 func (q *Query) Match(e *LedgerEntryRow) bool {

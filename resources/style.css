@@ -23,7 +23,7 @@
 }
 
 body {
-    font-family: "Open Sans",-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans",Helvetica,Arial,sans-serif;
+    font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
     font-size: 11pt;
 }
 
@@ -207,8 +207,8 @@ input[type="submit"] {
     border-radius: 5px;
     font-size: inherit;
     cursor: pointer;
-    transition: background-color 0.3s ease, transform 0.2s ease;
     /* Smooth background and transform transitions */
+    transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
 input[type="submit"]:hover {
@@ -222,9 +222,46 @@ div.button-field {
     justify-content: flex-end;
 }
 
-.filter {
+div.minibar {
+    display: flex;
+    align-items: stretch;
+    margin-bottom: 6px;
+}
+
+.minibar-group:first-child {
+    padding-right: 9px;
+}
+
+.minibar-group:not(:first-child) {
+    border-left: solid 2px var(--light-border);
+    padding: 0 9px;
+}
+
+.minibar input[type="text"] {
+    border: 1px solid var(--light-border);
+    border-radius: 5px;
+    padding: 6px 10px;
+    font-size: inherit;
+}
+
+/* A button used in a "mini bar", e.g. in the small bar of inputs on the ledger page. */
+.minibar button {
+    padding: 6px 10px;
+    background-color: var(--gray-passive);
+    border: none;
+    border-radius: 5px;
+    font-size: inherit;
+    cursor: pointer;
+    /* Smooth background and transform transitions */
+    transition: background-color 0.3s ease, transform 0.2s ease;
+}
+
+.minibar button:hover {
+    background-color: var(--gray-active);
+}
+
+input.filter {
     width: 16em;
-    margin-bottom: 1ex;
 }
 
 /* Callouts */

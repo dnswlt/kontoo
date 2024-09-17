@@ -109,4 +109,12 @@ export function init() {
             location.reload();
         }
     });
+    // Focus the search bar if "/" is hit.
+    document.addEventListener('keydown', function(event) {
+        console.log(event.target.tagName);
+        if (event.key === '/' && event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
+            event.preventDefault();
+            document.getElementById("filter").focus();
+        }
+    });
 }

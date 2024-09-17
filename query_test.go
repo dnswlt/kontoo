@@ -107,6 +107,31 @@ func TestParseQueryDates(t *testing.T) {
 			wantFrom:  DateVal(1999, 1, 1),
 			wantUntil: DateVal(1999, 12, 31),
 		},
+		{
+			q:         "date:2000",
+			wantFrom:  DateVal(2000, 1, 1),
+			wantUntil: DateVal(2000, 12, 31),
+		},
+		{
+			q:         "date:2020-02",
+			wantFrom:  DateVal(2020, 2, 1),
+			wantUntil: DateVal(2020, 2, 29),
+		},
+		{
+			q:         "date:2020-01",
+			wantFrom:  DateVal(2020, 1, 1),
+			wantUntil: DateVal(2020, 1, 31),
+		},
+		{
+			q:         "date:2019-12",
+			wantFrom:  DateVal(2019, 12, 1),
+			wantUntil: DateVal(2019, 12, 31),
+		},
+		{
+			q:         "date:2024-03-31",
+			wantFrom:  DateVal(2024, 3, 31),
+			wantUntil: DateVal(2024, 3, 31),
+		},
 	}
 	for _, tc := range tests {
 		q, err := ParseQuery(tc.q)

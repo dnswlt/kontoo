@@ -133,6 +133,9 @@ func commonFuncs() template.FuncMap {
 		"nonzero": func(m Micros) bool {
 			return m != 0
 		},
+		"negative": func(m Micros) bool {
+			return m < 0
+		},
 		"money": func(m Micros) string {
 			return m.Format("()'.2")
 		},
@@ -140,7 +143,14 @@ func commonFuncs() template.FuncMap {
 			return m.Format("'.3")
 		},
 		"quantity": func(m Micros) string {
+			if _, f := m.SplitFrac(); f != 0 {
+				return m.Format("'.2")
+			}
 			return m.Format("'.0")
+		},
+		// Percent in accounting contexts (with brackets for negative values).
+		"percentAcc": func(m Micros) string {
+			return m.Format("()'.2%")
 		},
 		"percent": func(m Micros) string {
 			return m.Format(".2%")
