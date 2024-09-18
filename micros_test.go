@@ -81,6 +81,28 @@ func TestMicrosMulOverflow(t *testing.T) {
 	m.Mul(n)
 }
 
+func TestMicrosDiv(t *testing.T) {
+	tests := []struct {
+		a    Micros
+		b    Micros
+		want Micros
+	}{
+		{1 * UnitValue, 2 * UnitValue, 500 * Millis},
+		{-1 * UnitValue, 2 * UnitValue, -500 * Millis},
+		{1 * UnitValue, -2 * UnitValue, -500 * Millis},
+		{-1 * UnitValue, -2 * UnitValue, 500 * Millis},
+		{1, UnitValue, 1},
+		{1000 * UnitValue, 1 * Millis, 1_000_000 * UnitValue},
+		{4 * Millis, 2 * Millis, 2 * UnitValue},
+	}
+	for _, tc := range tests {
+		got := tc.a.Div(tc.b)
+		if got != tc.want {
+			t.Errorf("%v.Div(%v): got %v, want %v", tc.a, tc.b, got, tc.want)
+		}
+	}
+}
+
 func TestMicrosFrac(t *testing.T) {
 	tests := []struct {
 		a     Micros

@@ -27,6 +27,7 @@
                 <th class="ralign" title="Total earnings at maturity">TEM</th>
                 <th class="ralign" title="Internal rate of return">IRR</th>
                 <th class="ralign" title="Time to maturity (in years)">TTM</th>
+                <th></th>
             </tr>
         </thead>
         <tbody>
@@ -52,7 +53,13 @@
                 <td class="nowrap">{{ .MaturityDate }}</td>
                 <td class="ralign">{{ money .TotalEarningsAtMaturity }}</td>
                 <td class="ralign">{{if nonzero .InternalRateOfReturn}}{{ percent .InternalRateOfReturn }}{{end}}</td>
-                <td class="ralign {{if lt .YearsToMaturity 0.0}}warning{{end}}">{{ printf "%.1f" .YearsToMaturity }}
+                <td class="ralign {{if lt .YearsToMaturity 0.0}}negative-amount{{end}}">{{ printf "%.1f" .YearsToMaturity }}
+                </td>
+                <td class="tooltip">
+                    {{if lt .YearsToMaturity 0.0}}
+                    <i class="emoji emoji-warning"></i>
+                    <span class="tooltiptext">This asset has matured. You should add an AssetMaturity entry.</span>
+                    {{end}}
                 </td>
             </tr>
             {{end}}
@@ -68,6 +75,7 @@
                 <td></td>
                 <td></td>
                 <td class="ralign">{{ money .Totals.EarningsAtMaturity }}</td>
+                <td></td>
                 <td></td>
                 <td></td>
             </tr>

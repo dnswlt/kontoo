@@ -119,7 +119,7 @@ func ProcessImport(args []string) error {
 			Type:           kontoo.AssetPurchase,
 			QuantityMicros: qty,
 			ValueMicros:    val,
-			PriceMicros:    val.Frac(kontoo.UnitValue, qty),
+			PriceMicros:    val.Div(qty),
 			CostMicros:     cost,
 			Comment:        "Imported from xlsx logbook.",
 		}

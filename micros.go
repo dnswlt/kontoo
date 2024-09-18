@@ -36,7 +36,19 @@ func (a Micros) Mul(b Micros) Micros {
 	return Micros(bigA.Int64())
 }
 
-// Calculates the fraction numer/denom of this Micros value.
+// Calculates a divided by b, truncated towards zero.
+func (a Micros) Div(b Micros) Micros {
+	if b == 0 {
+		panic("Div: zero divisor")
+	}
+	// We can't be much faster than Frac's fast path here,
+	// so we just re-use the code.
+	return a.Frac(UnitValue, b)
+}
+
+// Calculates a*numer/denom, truncated towards zero.
+// The idea is that this function is defined for more
+// inputs than a.Mul(numer).Div(denom) would be.
 func (a Micros) Frac(numer, denom Micros) Micros {
 	if denom == 0 {
 		panic("Frac: zero denominator")

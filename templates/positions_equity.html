@@ -64,7 +64,9 @@
                 <td class="ralign">{{ money .Totals.Value }}</td>
                 <td class="ralign">{{ money .Totals.PurchasePrice }}</td>
                 <td class="ralign">{{ money .Totals.ProfitLoss }}</td>
-                <td></td>
+                <td class="ralign">
+                    <span class="{{if negative .Totals.ProfitLossRatio}}negative-amount{{end}}">{{ percentAcc
+                        .Totals.ProfitLossRatio}}</span>
                 <td></td>
                 <td></td>
                 <td></td>

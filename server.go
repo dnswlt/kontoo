@@ -425,7 +425,7 @@ func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
 		if r.ExchangeRate == 0 {
 			return 0 // Cannot calculate sum in base currency
 		}
-		sum += r.Value.Frac(UnitValue, r.ExchangeRate)
+		sum += r.Value.Div(r.ExchangeRate)
 	}
 	return sum
 }
@@ -650,8 +650,8 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 			totalValue, totalEarnings = 0, 0
 			break
 		}
-		totalValue += r.Value.Frac(UnitValue, r.ExchangeRate)
-		totalEarnings += r.TotalEarningsAtMaturity.Frac(UnitValue, r.ExchangeRate)
+		totalValue += r.Value.Div(r.ExchangeRate)
+		totalEarnings += r.TotalEarningsAtMaturity.Div(r.ExchangeRate)
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
@@ -678,9 +678,9 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			totalValue, totalEarnings, totalPurchasePrice = 0, 0, 0
 			break
 		}
-		totalValue += r.Value.Frac(UnitValue, r.ExchangeRate)
-		totalEarnings += r.Value - r.PurchasePrice
-		totalPurchasePrice += r.PurchasePrice
+		totalValue += r.Value.Div(r.ExchangeRate)
+		totalPurchasePrice += r.PurchasePrice.Div(r.ExchangeRate)
+		totalEarnings += (r.Value - r.PurchasePrice).Div(r.ExchangeRate)
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
@@ -689,9 +689,10 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"today":  date.Equal(today()),
 		},
 		"Totals": map[string]Micros{
-			"Value":         totalValue,
-			"PurchasePrice": totalPurchasePrice,
-			"ProfitLoss":    totalEarnings,
+			"Value":           totalValue,
+			"PurchasePrice":   totalPurchasePrice,
+			"ProfitLoss":      totalEarnings,
+			"ProfitLossRatio": totalEarnings.Div(totalPurchasePrice),
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
