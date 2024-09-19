@@ -1303,11 +1303,14 @@ func TestValidIBAN(t *testing.T) {
 		want bool
 	}{
 		{"CH4804835167777581000", true},
+		{"AE640260001015182581201", true},
+		{"CH180024024037606600Q", true},        // Letter in the account number
 		{"CH48 0483 5167 7775 8100 0", true},   // Allow whitespace
 		{" CH48 0483 5167 7775 8100 0", false}, // Don't allow leading whitespace
 		{"CH48 0483 5167 7775 8100 0 ", false}, // Don't allow trailing whitespace
 		{"CH4704835167777581000", false},       // checksum is off by one
 		{"ch4804835167777581000", false},       // Don't allow lower case ISO code
+		{"ÄÖ4804835167777581000", false},       // No umlauts
 		{"CH480-4835-1677-7758-1000", false},   // No hyphens
 		{"CH48", false},                        // Too short
 		{"CH", false},                          // Too short
