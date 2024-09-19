@@ -478,7 +478,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		ctxQ.Set("date", date)
 	}
 	// Default filter for ledger view: no prices and exchange rates.
-	ctxQ.Set("q", `!type~price|rate`)
+	ctxQ.Set("q", `$main`)
 	ledgerURL := newURL("/kontoo/ledger", ctxQ)
 	ctxQ.Del("q")
 	ctx["Nav"] = map[string]string{

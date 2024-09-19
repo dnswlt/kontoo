@@ -31,6 +31,14 @@ func (q *Query) Empty() bool {
 	return q.raw == ""
 }
 
+var (
+	// Pre-defined query terms that can be referenced through
+	// variable names (e.g., $main).
+	queryVariables = map[string]string{
+		"main": "!type~price|rate",
+	}
+)
+
 // ParseQuery parses rawQuery as a query expression.
 // A query expression consists of whitespace-separated query terms.
 // A query term can be one of:
@@ -54,6 +62,13 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		untilDate: DateVal(9999, 12, 31),
 	}
 	for _, ft := range fts {
+		if ft[0] == '$' {
+			if repl, ok := queryVariables[ft[1:]]; ok {
+				ft = repl
+			} else {
+				return nil, fmt.Errorf("undefined variable: %q", ft)
+			}
+		}
 		sep := strings.IndexAny(ft, ":~")
 		if sep == -1 {
 			q.terms = append(q.terms, ft)
