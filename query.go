@@ -3,6 +3,7 @@ package kontoo
 import (
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +22,9 @@ type Query struct {
 	fieldTerms []fieldTerm
 	fromDate   Date
 	untilDate  Date
+	descending bool // whether to return results in ascending (default) or descending order
+	// Maximum number of entries to return per "group" (typically: asset)
+	maxPerGroup int
 }
 
 func (q *Query) Empty() bool {
@@ -64,8 +68,25 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		if len(t) == 0 {
 			return nil, fmt.Errorf("no term specified for field %q", ft)
 		}
-		// Special case: dates
-		if f == "date" || f == "year" || f == "from" || f == "until" {
+		if f == "order" {
+			// Ordering
+			switch t {
+			case "asc":
+				q.descending = false
+			case "desc":
+				q.descending = true
+			default:
+				return nil, fmt.Errorf(`invalid ordering %q (must be "asc" or "desc")`, t)
+			}
+		} else if f == "max" {
+			// Limits
+			n, err := strconv.Atoi(t)
+			if err != nil || n <= 0 {
+				return nil, fmt.Errorf("invalid argument for max: %q", t)
+			}
+			q.maxPerGroup = n
+		} else if f == "date" || f == "year" || f == "from" || f == "until" {
+			// Dates
 			if ft[sep] == '~' {
 				return nil, fmt.Errorf("cannot use regexp for time range filter %q", f)
 			}
@@ -103,22 +124,23 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				}
 				q.untilDate = Date{until}
 			}
-			continue
-		}
-		r := fieldTerm{
-			field:   f,
-			negated: neg,
-		}
-		if ft[sep] == '~' {
-			var err error
-			r.re, err = regexp.Compile(t)
-			if err != nil {
-				return nil, fmt.Errorf("invalid regexp for field %q: %v", f, err)
-			}
 		} else {
-			r.term = t
+			// Search term for a specific entry field.
+			r := fieldTerm{
+				field:   f,
+				negated: neg,
+			}
+			if ft[sep] == '~' {
+				var err error
+				r.re, err = regexp.Compile(t)
+				if err != nil {
+					return nil, fmt.Errorf("invalid regexp for field %q: %v", f, err)
+				}
+			} else {
+				r.term = t
+			}
+			q.fieldTerms = append(q.fieldTerms, r)
 		}
-		q.fieldTerms = append(q.fieldTerms, r)
 	}
 	return q, nil
 }
@@ -171,7 +193,7 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 		case "name":
 			fval = e.Label()
 		case "type":
-			fval = e.EntryType()
+			fval = e.EntryType().String()
 		case "class":
 			fval = e.AssetType().DisplayName()
 		case "num":
@@ -200,4 +222,51 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 	}
 
 	return true
+}
+
+// Sort ledger rows by (ValueDate, SequenceNum), ascending or descending.
+func (q *Query) Sort(rows []*LedgerEntryRow) {
+	ascCmp := func(a, b *LedgerEntryRow) int {
+		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
+		if c != 0 {
+			return c
+		}
+		return int(a.E.SequenceNum - b.E.SequenceNum)
+	}
+	cmp := ascCmp
+	if q.descending {
+		cmp = func(a, b *LedgerEntryRow) int {
+			return -ascCmp(a, b)
+		}
+	}
+	slices.SortFunc(rows, cmp)
+}
+
+func groupID(r *LedgerEntryRow) string {
+	if r.HasAsset() {
+		return r.AssetID()
+	}
+	if r.EntryType() == ExchangeRate {
+		return string(r.E.Currency) + "/" + string(r.E.QuoteCurrency)
+	}
+	return ""
+}
+
+// Returns only the first N entries from rows for each "group" (asset or exchange rate).
+func (q *Query) LimitGroups(rows []*LedgerEntryRow) []*LedgerEntryRow {
+	if q.maxPerGroup == 0 {
+		// No limit set
+		return rows
+	}
+	var res []*LedgerEntryRow
+	counts := map[string]int{}
+	for _, row := range rows {
+		gID := groupID(row)
+		if counts[gID] >= q.maxPerGroup {
+			continue
+		}
+		counts[gID]++
+		res = append(res, row)
+	}
+	return res
 }

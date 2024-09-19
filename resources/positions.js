@@ -1,4 +1,4 @@
-import { registerDropdown, registerContextMenu } from "./common";
+import { registerDropdown, registerContextMenu, base64ToString, stringToBase64 } from "./common";
 import Chart from 'chart.js/auto'
 import 'chartjs-adapter-date-fns'
 import { enGB } from 'date-fns/locale'
@@ -16,28 +16,6 @@ function contextMenuSelected(item) {
         return toggleChartDisplay(item.dataset.id);
     }
     console.error(`Unhandled action in context menu: ${action}`);
-}
-
-function base64ToString(base64) {
-    base64 = base64.replaceAll("-", "+").replaceAll("_", "/");
-    const e = base64.length % 4;
-    if (e > 0) {
-        // Add back padding.
-        base64 = base64 + "=".repeat(4 - e);
-    }
-    const binString = atob(base64);
-    const data = Uint8Array.from(binString, (m) => m.codePointAt(0));
-    return new TextDecoder().decode(data);
-}
-
-function stringToBase64(s) {
-    const data = new TextEncoder().encode(s);
-    const binString = Array.from(data, (byte) =>
-        String.fromCodePoint(byte),
-    ).join("");
-    let base64 = btoa(binString);
-    // Make it URL safe
-    return base64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
 function updateUIState(update) {

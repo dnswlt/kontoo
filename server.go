@@ -189,8 +189,8 @@ func (e *LedgerEntryRow) Created() time.Time {
 	return e.E.Created
 }
 
-func (e *LedgerEntryRow) EntryType() string {
-	return e.E.Type.String()
+func (e *LedgerEntryRow) EntryType() EntryType {
+	return e.E.Type
 
 }
 func (e *LedgerEntryRow) HasAsset() bool {
@@ -248,6 +248,8 @@ func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
 		}
 		res = append(res, r)
 	}
+	query.Sort(res)
+	res = query.LimitGroups(res)
 	return res
 }
 
@@ -493,14 +495,6 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 
 func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query, snippet bool) error {
 	rows := LedgerEntryRows(s.Store(), query)
-	// Sort ledger rows by (ValueDate, Created) for output table.
-	slices.SortFunc(rows, func(a, b *LedgerEntryRow) int {
-		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
-		if c != 0 {
-			return c
-		}
-		return a.E.Created.Compare(b.E.Created)
-	})
 	tmpl := "ledger.html"
 	if snippet {
 		tmpl = "snip_ledger_table.html"
