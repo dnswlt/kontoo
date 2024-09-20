@@ -16,16 +16,6 @@ var (
 	ibanDE999 = "DE29999"
 )
 
-func TestPrintValidIBAN(t *testing.T) {
-	t.Skip("Enable only for finding valid IBANs")
-	for i := 0; i < 100; i++ {
-		iban := fmt.Sprintf("DE%02d100", i)
-		if validIBAN(iban) {
-			fmt.Println(iban)
-		}
-	}
-}
-
 func TestStoreAdd(t *testing.T) {
 	tests := []struct {
 		E *LedgerEntry

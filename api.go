@@ -247,6 +247,8 @@ var allInterestPaymentSchedules = [...]InterestPaymentSchedule{
 }
 
 type Asset struct {
+	Created         time.Time
+	Modified        time.Time
 	Type            AssetType
 	Name            string
 	ShortName       string                  `json:",omitempty"`

@@ -624,6 +624,9 @@ func (s *Store) AddAsset(a *Asset) error {
 	if _, ok := s.assets[id]; ok {
 		return fmt.Errorf("duplicate asset ID %q", id)
 	}
+	now := time.Now()
+	a.Created = now
+	a.Modified = now
 	s.assets[id] = a
 	s.ledger.Assets = append(s.ledger.Assets, a)
 	return nil
@@ -650,7 +653,11 @@ func (s *Store) UpdateAsset(assetID string, a *Asset) error {
 	if hasEntries && old.Currency != a.Currency {
 		return fmt.Errorf("cannot modify currency: asset has ledger entries")
 	}
+	// Update modified time, but keep old created time.
+	created := old.Created
 	*old = *a
+	old.Created = created
+	old.Modified = time.Now()
 	return nil
 }
 
