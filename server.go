@@ -7,12 +7,14 @@ import (
 	"html/template"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,6 +94,23 @@ type PositionTimelineResponse struct {
 	Status    StatusCode          `json:"status"`
 	Error     string              `json:"error,omitempty"`
 	Timelines []*PositionTimeline `json:"timelines,omitempty"`
+}
+type PositionsMaturitiesRequest struct {
+	EndTimestamp int64 `json:"endTimestamp"`
+}
+type MaturitiesChartValues struct {
+	Label       string  `json:"label"`
+	ValueMicros []int64 `json:"valueMicros"`
+}
+type MaturitiesChartData struct {
+	Currency     string                   `json:"currency"`
+	BucketLabels []string                 `json:"bucketLabels"`
+	Values       []*MaturitiesChartValues `json:"values"`
+}
+type PositionsMaturitiesResponse struct {
+	Status     StatusCode           `json:"status"`
+	Error      string               `json:"error,omitempty"`
+	Maturities *MaturitiesChartData `json:"maturities,omitempty"`
 }
 
 type StatusCode string
@@ -893,6 +912,57 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Request) {
+	var req PositionsMaturitiesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	date := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	rows := maturingPositionTableRows(s.Store(), date)
+
+	// Calculate total value for each year-bucket defined by these bounds.
+	bounds := []int{0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30, 50, 100}
+	buckets := make([]int64, len(bounds))
+	for _, row := range rows {
+		if row.YearsToMaturity < 0 {
+			continue
+		}
+		b := int(math.Floor(row.YearsToMaturity))
+		j := sort.Search(len(bounds), func(i int) bool {
+			return bounds[i] > b
+		})
+		buckets[j-1] += int64(row.Value)
+	}
+	// Drop empty trailing buckets.
+	maxIdx := len(buckets) - 1
+	for maxIdx >= 0 && buckets[maxIdx] == 0 {
+		maxIdx--
+	}
+	buckets = buckets[:maxIdx+1]
+	bucketLabels := make([]string, len(buckets))
+	for i := range bucketLabels {
+		if i < len(bounds)-1 {
+			bucketLabels[i] = fmt.Sprintf("%d..%d", bounds[i], bounds[i+1])
+		} else {
+			bucketLabels[i] = fmt.Sprintf(">= %d", bounds[i])
+		}
+	}
+	s.jsonResponse(w, PositionsMaturitiesResponse{
+		Status: StatusOK,
+		Maturities: &MaturitiesChartData{
+			Currency:     string(s.Store().BaseCurrency()),
+			BucketLabels: bucketLabels,
+			Values: []*MaturitiesChartValues{
+				{
+					Label:       "All maturing assets",
+					ValueMicros: buckets,
+				},
+			},
+		},
+	})
+}
+
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	date, ok := ensureDateParam(w, r)
 	if !ok {
@@ -1227,6 +1297,7 @@ func (s *Server) createMux() *http.ServeMux {
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
+	mux.HandleFunc("POST /kontoo/positions/maturities", jsonHandler(s.handlePositionsMaturities))
 	mux.HandleFunc("POST /kontoo/entries/add", jsonHandler(s.handleEntriesAdd))
 	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))

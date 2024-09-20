@@ -3,14 +3,28 @@ package kontoo
 import (
 	"encoding/json"
 	"fmt"
-	"math"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
+
+// Some valid IBANs for testing.
+var (
+	ibanDE100 = "DE52100"
+	ibanDE999 = "DE29999"
+)
+
+func TestPrintValidIBAN(t *testing.T) {
+	t.Skip("Enable only for finding valid IBANs")
+	for i := 0; i < 100; i++ {
+		iban := fmt.Sprintf("DE%02d100", i)
+		if validIBAN(iban) {
+			fmt.Println(iban)
+		}
+	}
+}
 
 func TestStoreAdd(t *testing.T) {
 	tests := []struct {
@@ -19,7 +33,7 @@ func TestStoreAdd(t *testing.T) {
 		{
 			E: &LedgerEntry{
 				Type:        AccountBalance,
-				AssetRef:    "DE12",
+				AssetRef:    ibanDE100,
 				ValueDate:   DateVal(2023, 1, 1),
 				ValueMicros: 1_000_000,
 			},
@@ -45,7 +59,7 @@ func TestStoreAdd(t *testing.T) {
 		{
 			E: &LedgerEntry{
 				Type:        InterestPayment,
-				AssetRef:    "DE12",
+				AssetRef:    ibanDE100,
 				ValueDate:   DateVal(2023, 1, 3),
 				ValueMicros: 150 * Millis,
 			},
@@ -55,13 +69,16 @@ func TestStoreAdd(t *testing.T) {
 		Assets: []*Asset{
 			{
 				Type:           FixedDepositAccount,
-				IBAN:           "DE123123123",
-				ShortName:      "DE12",
+				IBAN:           ibanDE100,
+				Name:           "Festgeld",
 				InterestMicros: 35_000,
+				Currency:       "EUR",
 			},
 			{
 				Type:         Stock,
+				Name:         "Nestle",
 				TickerSymbol: "NESN",
+				Currency:     "CHF",
 			},
 		},
 	}
@@ -98,19 +115,19 @@ func TestStoreDelete(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
 			Type:        AccountCredit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 1),
 			ValueMicros: 100 * UnitValue,
 		},
 		{
 			Type:        AccountDebit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 2),
 			ValueMicros: -50 * UnitValue,
 		},
 		{
 			Type:        AccountCredit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 3),
 			ValueMicros: 50 * UnitValue,
 		},
@@ -145,10 +162,10 @@ func TestStoreDelete(t *testing.T) {
 		if len(s.ledger.Entries) != tc.wantLen {
 			t.Errorf("Wrong ledger length: want %d, got %d", tc.wantLen, len(s.ledger.Entries))
 		}
-		if len(s.entries["DE12"]) != tc.wantLen {
-			t.Errorf("Wrong entries index length: want %d, got %d", tc.wantLen, len(s.entries["DE12"]))
+		if len(s.entries[ibanDE100]) != tc.wantLen {
+			t.Errorf("Wrong entries index length: want %d, got %d", tc.wantLen, len(s.entries[ibanDE100]))
 		}
-		p := s.AssetPositionAt("DE12", DateVal(2023, 1, 3))
+		p := s.AssetPositionAt(ibanDE100, DateVal(2023, 1, 3))
 		if p == nil {
 			t.Fatal("No position returned in round", i)
 		}
@@ -223,13 +240,13 @@ func TestStoreAddAsset(t *testing.T) {
 		{
 			A: &Asset{
 				Type:     SavingsAccount,
-				IBAN:     "DE999",
+				IBAN:     ibanDE999,
 				Name:     "Sparkonto",
 				Currency: "CHF",
 			},
 		},
 	}
-	s, err := NewStore(&Ledger{}, "")
+	s, err := NewStore(&Ledger{}, "/test")
 	if err != nil {
 		t.Fatalf("Failed to create Store: %v", err)
 	}
@@ -432,8 +449,10 @@ func TestPositionsAtSavingsAccount(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{
 			{
-				Type: SavingsAccount,
-				IBAN: "DE12",
+				Name:     "Test",
+				Type:     SavingsAccount,
+				IBAN:     ibanDE100,
+				Currency: "EUR",
 			},
 		},
 	}
@@ -444,31 +463,31 @@ func TestPositionsAtSavingsAccount(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
 			Type:        AccountBalance,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 31),
 			ValueMicros: 1000 * UnitValue,
 		},
 		{
 			Type:        InterestPayment,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 2, 15),
 			ValueMicros: 10 * UnitValue,
 		},
 		{
 			Type:        AccountBalance,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 2, 28),
 			ValueMicros: 2000 * UnitValue,
 		},
 		{
 			Type:        AccountCredit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 3, 15),
 			ValueMicros: 3000 * UnitValue,
 		},
 		{
 			Type:        AccountDebit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 3, 31),
 			ValueMicros: -4000 * UnitValue,
 		},
@@ -505,10 +524,12 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{
 			{
+				Name:         "Festgeld",
 				Type:         FixedDepositAccount,
-				IBAN:         "DE12",
+				IBAN:         ibanDE100,
 				IssueDate:    newDate(2023, 1, 1),
 				MaturityDate: newDate(2024, 1, 1),
+				Currency:     "EUR",
 			},
 		},
 	}
@@ -519,31 +540,31 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
 			Type:        AccountCredit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 1),
 			ValueMicros: 1000 * UnitValue,
 		},
 		{
 			Type:        InterestPayment,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 6, 1),
 			ValueMicros: 10 * UnitValue,
 		},
 		{
 			Type:        AccountBalance,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 6, 1),
 			ValueMicros: 1010 * UnitValue,
 		},
 		{
 			Type:        AccountDebit,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 9, 1),
 			ValueMicros: -100 * UnitValue,
 		},
 		{
 			Type:        AssetMaturity,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2024, 1, 1),
 			ValueMicros: 920 * UnitValue,
 		},
@@ -576,7 +597,7 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 		{date: DateVal(2024, 1, 1), value: 0},
 	}
 	for _, tc := range tests {
-		p := s.AssetPositionAt("DE12", tc.date)
+		p := s.AssetPositionAt(ibanDE100, tc.date)
 		if p == nil {
 			t.Fatalf("No position obtained at %v", tc.date)
 		}
@@ -593,12 +614,16 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{
 			{
-				Type: SavingsAccount,
-				IBAN: "DE12",
+				Name:     "Sparkonto",
+				Type:     SavingsAccount,
+				IBAN:     ibanDE100,
+				Currency: "EUR",
 			},
 			{
-				Type: GovernmentBond,
-				IBAN: "DE99",
+				Name:     "BUND",
+				Type:     GovernmentBond,
+				ISIN:     "DE99",
+				Currency: "EUR",
 			},
 		},
 	}
@@ -609,7 +634,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
 			Type:        AccountBalance,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 1, 31),
 			ValueMicros: 1000 * UnitValue,
 		},
@@ -629,7 +654,7 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 		},
 		{
 			Type:        AccountBalance,
-			AssetID:     "DE12",
+			AssetID:     ibanDE100,
 			ValueDate:   DateVal(2023, 2, 28),
 			ValueMicros: 2000 * UnitValue,
 		},
@@ -649,31 +674,31 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 			name: "first_entry",
 			date: DateVal(2023, 1, 31),
 			wantPos: map[string]Micros{
-				"DE12": 1000 * UnitValue,
+				ibanDE100: 1000 * UnitValue,
 			},
 		},
 		{
 			name: "after_buy",
 			date: DateVal(2023, 2, 14),
 			wantPos: map[string]Micros{
-				"DE12": 1000 * UnitValue,
-				"DE99": 1900 * UnitValue,
+				ibanDE100: 1000 * UnitValue,
+				"DE99":    1900 * UnitValue,
 			},
 		},
 		{
 			name: "after_buy_next_day",
 			date: DateVal(2023, 2, 15),
 			wantPos: map[string]Micros{
-				"DE12": 1000 * UnitValue,
-				"DE99": 1900 * UnitValue,
+				ibanDE100: 1000 * UnitValue,
+				"DE99":    1900 * UnitValue,
 			},
 		},
 		{
 			name: "after_sell",
 			date: DateVal(2023, 2, 20),
 			wantPos: map[string]Micros{
-				"DE12": 1000 * UnitValue,
-				"DE99": 1650 * UnitValue,
+				ibanDE100: 1000 * UnitValue,
+				"DE99":    1650 * UnitValue,
 			},
 		},
 	}
@@ -875,8 +900,10 @@ func newTestStore(entries []*LedgerEntry, t AssetType) (*Store, error) {
 	i := 0
 	for s := range symbols {
 		assets[i] = &Asset{
+			Name:     fmt.Sprintf("Test_%s", s),
 			Type:     t,
 			CustomID: s,
+			Currency: "EUR",
 		}
 		i++
 	}
@@ -963,168 +990,6 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 	wantValue := Micros(2 * UnitValue)
 	if ps[0].MarketValue() != wantValue {
 		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), wantValue)
-	}
-}
-
-func TestBisect(t *testing.T) {
-	tests := []struct {
-		y       float64
-		low     float64
-		high    float64
-		f       func(x float64) float64
-		x       float64
-		wantErr string
-	}{
-		{y: 100, low: 0, high: 20, f: func(x float64) float64 { return x }, x: 100},
-		{y: 100, low: 0, high: 20, f: func(x float64) float64 { return x * x * x }, x: math.Pow(100, 1/3.0)},
-		{y: math.Sqrt(2), low: 1, high: 3, f: func(x float64) float64 { return math.Sqrt(x) }, x: 2},
-		{y: 10, low: 0, high: 10, f: func(x float64) float64 { return math.Exp(x / 2) }, x: math.Log(100)},
-		{y: 100, low: -1e10, high: -1e10 + 0.001, f: func(x float64) float64 { return x }, x: 100, wantErr: "converge"},
-		{y: 100, low: -1e10, high: -1e10 - 0.001, f: func(x float64) float64 { return x }, x: 100, wantErr: "less than high"},
-	}
-	for _, tc := range tests {
-		x, err := bisect(tc.y, tc.low, tc.high, tc.f)
-		if tc.wantErr != "" {
-			if err == nil {
-				t.Fatalf("Wanted error, got result %.6f", x)
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("Wanted error containing %q, got: %v", tc.wantErr, err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatal("bisect failed:", err)
-		}
-		if math.Abs(x-tc.x) > 1e-6 {
-			t.Errorf("Wrong result: want %.6f, got %.6f", tc.x, x)
-		}
-	}
-}
-
-func TestNewton(t *testing.T) {
-	tests := []struct {
-		y       float64
-		x0      float64
-		f       func(x float64) (float64, float64)
-		x       float64
-		wantErr string
-	}{
-		{y: 100, x0: 0, f: func(x float64) (float64, float64) { return x, 1 }, x: 100},
-		{y: 0, x0: 1, f: func(x float64) (float64, float64) { return x*x - 10, 2 * x }, x: math.Sqrt(10)},
-		{y: 10, x0: 1, f: func(x float64) (float64, float64) { return math.Exp(x / 2), math.Exp(x/2) / 2 }, x: math.Log(100)},
-	}
-	for _, tc := range tests {
-		x, err := newton(tc.y, tc.x0, tc.f)
-		if tc.wantErr != "" {
-			if err == nil {
-				t.Fatalf("Wanted error, got result %.6f", x)
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Errorf("Wanted error containing %q, got: %v", tc.wantErr, err)
-			}
-			continue
-		}
-		if err != nil {
-			t.Fatal("newton failed:", err)
-		}
-		if math.Abs(x-tc.x) > 1e-6 {
-			t.Errorf("Wrong result: want %.6f, got %.6f", tc.x, x)
-		}
-	}
-
-}
-
-func TestInternalRateOfReturn(t *testing.T) {
-	asset := &Asset{
-		ISIN:            "DE12",
-		Type:            GovernmentBond,
-		MaturityDate:    newDate(2022, 1, 1),
-		Currency:        "EUR",
-		InterestMicros:  40 * Millis, // 4%
-		InterestPayment: AnnualPayment,
-	}
-	p := &AssetPosition{
-		Asset: asset,
-		Items: []AssetPositionItem{
-			{
-				ValueDate:      DateVal(2020, 1, 1),
-				QuantityMicros: 10000 * UnitValue,
-				PriceMicros:    950 * Millis,
-			},
-			{
-				ValueDate:      DateVal(2021, 1, 1),
-				QuantityMicros: 10000 * UnitValue,
-				PriceMicros:    975 * Millis,
-			},
-		},
-	}
-	got := internalRateOfReturn(p)
-	want := Micros(66344) // Verified using Excel's XIRR() function.
-	if got != want {
-		t.Errorf("Wrong IRR: want %v, got %v", want, got)
-	}
-}
-
-func TestInternalRateOfReturnVaryingIntervals(t *testing.T) {
-	asset := &Asset{
-		ISIN:            "DE12",
-		Type:            GovernmentBond,
-		MaturityDate:    newDate(2022, 1, 1),
-		Currency:        "EUR",
-		InterestMicros:  30 * Millis, // 3%
-		InterestPayment: AnnualPayment,
-	}
-	p := &AssetPosition{
-		Asset: asset,
-		Items: []AssetPositionItem{
-			{
-				ValueDate:      DateVal(2020, 1, 1),
-				QuantityMicros: 10000 * UnitValue,
-				PriceMicros:    950 * Millis,
-			},
-			{
-				ValueDate:      DateVal(2020, 6, 1),
-				QuantityMicros: 10000 * UnitValue,
-				PriceMicros:    975 * Millis,
-			},
-			{
-				ValueDate:      DateVal(2021, 3, 1),
-				QuantityMicros: 15000 * UnitValue,
-				PriceMicros:    925 * Millis,
-			},
-		},
-	}
-	got := internalRateOfReturn(p)
-	want := Micros(70750) // Verified using Excel's XIRR() function.
-	if got != want {
-		t.Errorf("Wrong IRR: want %v, got %v", want, got)
-	}
-}
-
-func TestInternalRateOfReturnSingle(t *testing.T) {
-	asset := &Asset{
-		ISIN:            "DE12",
-		Type:            GovernmentBond,
-		MaturityDate:    newDate(2023, 1, 1),
-		Currency:        "EUR",
-		InterestMicros:  40 * Millis, // 4%
-		InterestPayment: AnnualPayment,
-	}
-	p := &AssetPosition{
-		Asset: asset,
-		Items: []AssetPositionItem{
-			{
-				ValueDate:      DateVal(2020, 1, 1),
-				QuantityMicros: 10000 * UnitValue,
-				PriceMicros:    1000 * Millis,
-			},
-		},
-	}
-	got := internalRateOfReturn(p)
-	want := Micros(38497)
-	if got != want {
-		t.Errorf("Wrong IRR: want %v, got %v", want, got)
 	}
 }
 
@@ -1294,54 +1159,5 @@ func TestMarshalDate(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("got: %s, want: %s", got, tc.want)
 		}
-	}
-}
-
-func TestValidIBAN(t *testing.T) {
-	tests := []struct {
-		iban string
-		want bool
-	}{
-		{"CH4804835167777581000", true},
-		{"AE640260001015182581201", true},
-		{"CH180024024037606600Q", true},        // Letter in the account number
-		{"CH48 0483 5167 7775 8100 0", true},   // Allow whitespace
-		{" CH48 0483 5167 7775 8100 0", false}, // Don't allow leading whitespace
-		{"CH48 0483 5167 7775 8100 0 ", false}, // Don't allow trailing whitespace
-		{"CH4704835167777581000", false},       // checksum is off by one
-		{"ch4804835167777581000", false},       // Don't allow lower case ISO code
-		{"ÄÖ4804835167777581000", false},       // No umlauts
-		{"CH480-4835-1677-7758-1000", false},   // No hyphens
-		{"CH48", false},                        // Too short
-		{"CH", false},                          // Too short
-		{"", false},                            // Empty
-	}
-	for _, tc := range tests {
-		if got := validIBAN(tc.iban); got != tc.want {
-			t.Errorf("validIBAN(%q) == %v, want %v", tc.iban, got, tc.want)
-		}
-	}
-}
-
-func TestFindValidIBAN(t *testing.T) {
-	for i := 0; i < 100; i++ {
-		// CH18 0024 0240 3760 6600 Q
-		iban := fmt.Sprintf("CH%02d 0024 0240 3760 6600 Q", i)
-		valid := validIBAN(iban)
-		if valid != (i == 18) {
-			t.Fatalf("Unexpected validation result: %v for i=%d", valid, i)
-		}
-	}
-}
-
-func BenchmarkValidIBAN(b *testing.B) {
-	b.Skip("Disabled benchmark")
-	iban := "CH18 0024 0240 3760 6600 Q"
-	v := true
-	for n := 0; n < b.N; n++ {
-		v = v && validIBAN(iban)
-	}
-	if !v {
-		b.Fail()
 	}
 }

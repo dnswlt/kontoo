@@ -6,7 +6,7 @@
         {
             "Type": "CheckingAccount",
             "Name": "Checking account",
-            "IBAN": "DE123",
+            "IBAN": "DE13123",
             "Currency": "EUR"
         },
         {
@@ -51,7 +51,7 @@
             "SequenceNum": 1,
             "ValueDate": "2024-01-01",
             "Type": "AccountBalance",
-            "AssetID": "DE123",
+            "AssetID": "DE13123",
             "Value": "1000",
             "Currency": "EUR"
         },

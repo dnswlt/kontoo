@@ -66,14 +66,11 @@ tr.total td {
     color: var(--red-number);
 }
 
-/* Vertical bar separator */
-span.vsep {
-    border-left: 2px solid var(--light-border);
-    display: inline-block;
-    /* Set width to 0 to hide the &nbsp; content, which we need to have a propber baseline and
-    alignment with the adjacent inputs and buttons. Ugly, but works. */
-    width: 0;
+/* Horizontal separation between widgets. */
+div.topsep {
+    margin-top: 3ex;
 }
+
 
 /* Emojis */
 

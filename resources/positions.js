@@ -3,6 +3,13 @@ import Chart from 'chart.js/auto'
 import 'chartjs-adapter-date-fns'
 import { enGB } from 'date-fns/locale'
 
+
+let chart = null;
+let uiState = {
+    assetIds: [],
+    period: "1Y",  // Period to be displayed.
+};
+
 function followUrl(item) {
     window.location.href = item.dataset.url;
 }
@@ -34,7 +41,7 @@ function initUIState() {
     try {
         uiState = JSON.parse(base64ToString(stateParam));
     } catch (error) {
-        console.error("Invalid state= param:", error);
+        console.error("Invalid ui-state= param:", error);
     }
 }
 
@@ -55,12 +62,6 @@ function updateChartPeriod(period) {
         period: period
     });
 }
-
-let chart = null;
-let uiState = {
-    assetIds: [],
-    period: "1Y",  // Period to be displayed.
-};
 
 function drawTimelines(timelines) {
     if (!chart) {

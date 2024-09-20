@@ -24,6 +24,10 @@ async function initPositionsPage() {
     const positions = await import('./positions.js');
     positions.init();
 }
+async function initPositionsMaturingPage() {
+    const positions_maturing = await import('./positions_maturing.js');
+    positions_maturing.init();
+}
 async function initQuotesPage() {
     const quotes = await import('./quotes.js');
     quotes.init();
@@ -79,9 +83,11 @@ switch (document.body.id) {
         initLedgerPage();
         break;
     case "positions-page":
-    case "positions-maturing-page":
     case "positions-equity-page":
         initPositionsPage();
+        break;
+    case "positions-maturing-page":
+        initPositionsMaturingPage();
         break;
     case "entry-page":
         initEntryPage();
