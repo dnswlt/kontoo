@@ -71,7 +71,6 @@ div.topsep {
     margin-top: 3ex;
 }
 
-
 /* Emojis */
 
 i.emoji {
@@ -139,7 +138,11 @@ div.field {
     margin-bottom: 4px;
 }
 
-form.columnar {
+.horizontal-container {
+    display: flex;
+}
+
+.columnar {
     display: flex;
     flex-direction: column;
 }
@@ -283,6 +286,42 @@ input.filter {
 .callout-warn {
     border-color: var(--yellow-foreground);
     background-color: var(--yellow-background);
+}
+
+/* Asset info box */
+
+#asset-info {
+    margin-left: 1em;
+    padding: 1ex;
+    border-radius: 5px;
+    border: 1px solid var(--light-border);
+}
+
+#asset-info p {
+    margin-block: 0;
+}
+
+#asset-info .main {
+    font-weight: bold;
+}
+
+#asset-info td.label {
+    text-align: right;
+    color: var(--gray-text);
+}
+
+#asset-info .bsep {
+    margin-bottom: 1ex;
+}
+
+#asset-info tr.highlight td {
+    color: var(--yellow-foreground);
+    background-color: var(--yellow-background);
+    text-align: center;
+}
+#asset-info th {
+    font-weight: normal;
+    background-color: var(--light-table-zebra);
 }
 
 /* Visibility */

@@ -113,6 +113,16 @@ type PositionsMaturitiesResponse struct {
 	Maturities *MaturitiesChartData `json:"maturities,omitempty"`
 }
 
+type LedgerAssetInfoRequest struct {
+	AssetID string `json:"assetId"`
+	Date    *Date  `json:"date"` // Optional
+}
+type LedgerAssetInfoResponse struct {
+	Status    StatusCode `json:"status"`
+	Error     string     `json:"error,omitempty"`
+	InnerHTML string     `json:"innerHTML"`
+}
+
 type StatusCode string
 
 const (
@@ -751,6 +761,18 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, 
 	})
 }
 
+func (s *Server) renderSnipAssetInfo(w io.Writer, asset *Asset, date Date) error {
+	assetID := asset.ID()
+	entriesBefore, entriesAfter := s.Store().EntriesAround(assetID, date, 3)
+	pos := s.Store().AssetPositionAt(assetID, date)
+	return s.templates.ExecuteTemplate(w, "snip_asset_info.html", map[string]any{
+		"Asset":         asset,
+		"Position":      pos,
+		"EntriesBefore": entriesBefore,
+		"EntriesAfter":  entriesAfter,
+	})
+}
+
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	query, err := ParseQuery(q.Get("q"))
@@ -1109,6 +1131,36 @@ func (s *Server) handleEntriesAdd(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleEntriesAssetInfo(w http.ResponseWriter, r *http.Request) {
+	var req LedgerAssetInfoRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+
+	}
+	var buf bytes.Buffer
+	date := today()
+	if req.Date != nil {
+		date = *req.Date
+	}
+	asset := s.Store().assets[req.AssetID]
+	if asset == nil {
+		s.jsonResponse(w, LedgerAssetInfoResponse{
+			Status: StatusInvalidArgument,
+			Error:  fmt.Sprintf("No asset with ID %q", req.AssetID),
+		})
+		return
+	}
+	if err := s.renderSnipAssetInfo(&buf, asset, date); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	s.jsonResponse(w, LedgerAssetInfoResponse{
+		Status:    StatusOK,
+		InnerHTML: buf.String(),
+	})
+}
+
 func (s *Server) handleEntriesDelete(w http.ResponseWriter, r *http.Request) {
 	var req DeleteLedgerEntryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1300,6 +1352,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/positions/maturities", jsonHandler(s.handlePositionsMaturities))
 	mux.HandleFunc("POST /kontoo/entries/add", jsonHandler(s.handleEntriesAdd))
 	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
+	mux.HandleFunc("POST /kontoo/entries/assetinfo", jsonHandler(s.handleEntriesAssetInfo))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))

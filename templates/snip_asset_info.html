@@ -1,0 +1,118 @@
+{{/* Ledger row; defined as a template b/c it's used twice below. */}}
+{{define "_AssetInfoLedgerRow"}}
+<tr>
+    <td>{{.SequenceNum}}</td>
+    <td>{{.ValueDate}}</td>
+    <td>{{.Type}}</td>
+    <td class="ralign">
+        <span class="{{if negative .ValueMicros}}negative-amount{{end}}">{{if nonzero .ValueMicros}}{{ money
+            .ValueMicros }}{{end}}</span>
+    </td>
+    <td class="ralign">{{if nonzero .QuantityMicros}}{{ quantity .QuantityMicros }}{{end}}</td>
+    <td class="ralign">{{if nonzero .PriceMicros}}{{ price .PriceMicros }}{{end}}</td>
+</tr>
+{{end}}
+<div>
+    <p class="main bsep">{{.Asset.Name}}</p>
+    <table class="bsep">
+        <tbody>
+            <tr>
+                <td class="label">Type</td>
+                <td>{{assetType .Asset.Type}}</td>
+            </tr>
+            <tr>
+                <td class="label">Mkt value</td>
+                <td>{{money .Position.MarketValue}}</td>
+            </tr>
+            <tr>
+                <td class="label">Ccy</td>
+                <td>{{.Asset.Currency}}</td>
+            </tr>
+            {{if .Asset.IBAN}}
+            <tr>
+                <td class="label">IBAN</td>
+                <td>{{.Asset.IBAN}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.AccountNumber}}
+            <tr>
+                <td class="label">Acct. no.</td>
+                <td>{{.Asset.AccountNumber}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.ISIN}}
+            <tr>
+                <td class="label">ISIN</td>
+                <td>{{.Asset.ISIN}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.WKN}}
+            <tr>
+                <td class="label">WKN</td>
+                <td>{{.Asset.WKN}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.TickerSymbol}}
+            <tr>
+                <td class="label">Ticker sym.</td>
+                <td>{{.Asset.TickerSymbol}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.CustomID}}
+            <tr>
+                <td class="label">Cust. ID</td>
+                <td>{{.Asset.CustomID}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.IssueDate}}
+            <tr>
+                <td class="label">Issue date</td>
+                <td>{{.Asset.IssueDate}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.MaturityDate}}
+            <tr>
+                <td class="label">Maturity date</td>
+                <td>{{.Asset.MaturityDate}}</td>
+            </tr>
+            {{end}}
+            {{if nonzero .Asset.InterestMicros}}
+            <tr>
+                <td class="label">Interest</td>
+                <td>{{percent .Asset.InterestMicros}}</td>
+            </tr>
+            {{end}}
+            {{if .Asset.InterestPayment}}
+            <tr>
+                <td class="label">Interest payt.</td>
+                <td>{{.Asset.InterestPayment}}</td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+    {{if or .EntriesBefore .EntriesAfter}}
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Value date</th>
+                <th>Type</th>
+                <th class="ralign">Val</th>
+                <th class="ralign">Qty</th>
+                <th class="ralign">Prc</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .EntriesBefore}}
+            {{template "_AssetInfoLedgerRow" .}}
+            {{end}}
+            <tr class="highlight">
+                <td colspan="6">&laquo;New entry&raquo;</td>
+            </tr>
+            {{range .EntriesAfter}}
+            {{template "_AssetInfoLedgerRow" .}}
+            {{end}}
+        </tbody>
+    </table>
+    {{end}}
+</div>

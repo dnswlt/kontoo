@@ -69,6 +69,7 @@ func (s *Store) BaseCurrency() Currency {
 	return s.ledger.Header.BaseCurrency
 }
 
+// ValueDateRange returns the minimum and maximum value date of any ledger entry in the store.
 func (s *Store) ValueDateRange() (min, max Date) {
 	// We make use of the fact that all ledger entries (except exchange rates)
 	// are stored chronologically sorted.
@@ -83,6 +84,27 @@ func (s *Store) ValueDateRange() (min, max Date) {
 		if min.IsZero() || es[0].ValueDate.Before(min.Time) {
 			min = es[0].ValueDate
 		}
+	}
+	return
+}
+
+// EntriesAround returns n ledger entries before date and n entries after date for assetID.
+// If there are less than n entries before or after, guess what, only those are returned.
+func (s *Store) EntriesAround(assetID string, date Date, n int) (before, after []*LedgerEntry) {
+	es := s.entries[assetID]
+	if len(es) > 0 {
+		i := sort.Search(len(es), func(i int) bool {
+			return es[i].ValueDate.After(date.Time)
+		})
+		a, b := 0, len(es)
+		if i-n > 0 {
+			a = i - n
+		}
+		if i+n < b {
+			b = i + n
+		}
+		before = es[a:i]
+		after = es[i:b]
 	}
 	return
 }
@@ -719,6 +741,7 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	return res
 }
 
+// AssetPositionAt returns the given asset's position at date.
 func (s *Store) AssetPositionAt(assetId string, date Date) *AssetPosition {
 	asset, ok := s.assets[assetId]
 	if !ok {

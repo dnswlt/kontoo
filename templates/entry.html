@@ -9,102 +9,111 @@
     {{template "nav.html" .}}
     <h1>Add entry</h1>
     <div id="status-callout" class="callout hidden"></div>
-    <form class="columnar" id="entry-form" method="post" action="/kontoo/entries/add" autocomplete="off">
-        <div id="ValueDateField" class="field">
-            <div class="field-label">
-                <label for="ValueDate">Value date</label>
-            </div>
-            <div class="field-value">
-                <input id="ValueDate" name="ValueDate" value="{{.Date}}" class="datepicker" required>
-            </div>
-        </div>
-        <div id="AssetIDField" class="field">
-            <div class="field-label">
-                <label for="AssetID">Asset</label>
-            </div>
-            <div class="field-value">
-                <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.AssetID}}">
-                <datalist id="AssetList">
-                    {{range .Assets}}
-                    <option id="{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">{{.Name}}</option>
+    <div class="horizontal-container">
+        <div class="columnar">
+            <form class="columnar" id="entry-form" method="post" action="/kontoo/entries/add" autocomplete="off">
+                <div id="ValueDateField" class="field">
+                    <div class="field-label">
+                        <label for="ValueDate">Value date</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="ValueDate" name="ValueDate" value="{{.Date}}" class="datepicker" required>
+                    </div>
+                </div>
+                <div id="AssetIDField" class="field">
+                    <div class="field-label">
+                        <label for="AssetID">Asset</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.AssetID}}">
+                        <datalist id="AssetList">
+                            {{range .Assets}}
+                            <option id="{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">
+                                {{.Name}}</option>
+                            {{end}}
+                        </datalist>
+                    </div>
+                    <div class="field-details" id="AssetName"></div>
+                </div>
+                <div id="TypeField" class="field">
+                    <div class="field-label">
+                        <label for="Type">Type</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="Type" type="text" name="Type" list="TypeList" required>
+                        <datalist id="TypeList">
+                            {{range .EntryTypes}}
+                            <option value="{{.}}"></option>
+                            {{end}}
+                        </datalist>
+                    </div>
+                </div>
+                <div id="QuoteCurrencyField" class="field hidden">
+                    {{if .QuoteCurrencies }}
+                    {{$baseCurrency := .BaseCurrency}}
+                    <div class="field-label">
+                        <label for="QuoteCurrency">Quote currency</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="QuoteCurrency" type="text" name="QuoteCurrency" list="QuoteCurrencies">
+                        <datalist id="QuoteCurrencies">
+                            <option value=""></option>
+                            {{range .QuoteCurrencies}}
+                            <option value="{{.}}">{{$baseCurrency}}/{{.}}</option>
+                            {{end}}
+                        </datalist>
+                    </div>
+                    <div class="field-details" data-base-currency="{{.BaseCurrency}}" id="ExchangeRateLabel"></div>
                     {{end}}
-                </datalist>
-            </div>
-            <div class="field-details" id="AssetName"></div>
+                </div>
+                <div id="ValueField" class="field">
+                    <div class="field-label">
+                        <label for="Value">Value</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="Value" name="Value" type="text" class="micros">
+                    </div>
+                </div>
+                <div id="QuantityField" class="field">
+                    <div class="field-label">
+                        <label for="Quantity">Quantity / Nominal value</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="Quantity" name="Quantity" type="text" class="micros">
+                    </div>
+                </div>
+                <div id="PriceField" class="field">
+                    <div class="field-label">
+                        <label for="Price">Price</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="Price" name="Price" type="text" class="micros">
+                    </div>
+                </div>
+                <div id="CostField" class="field">
+                    <div class="field-label">
+                        <label for="Cost">Cost</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="Cost" name="Cost" type="text" class="micros">
+                    </div>
+                </div>
+                <div id="CommentField" class="field">
+                    <div class="field-label">
+                        <label for="Comment">Comment</label>
+                    </div>
+                    <div class="field-value">
+                        <textarea rows="3" id="Comment" name="Comment"></textarea>
+                    </div>
+                </div>
+                <div class="button-field">
+                    <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
+                </div>
+            </form>
         </div>
-        <div id="TypeField" class="field">
-            <div class="field-label">
-                <label for="Type">Type</label>
-            </div>
-            <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList" required>
-                <datalist id="TypeList">
-                    {{range .EntryTypes}}
-                    <option value="{{.}}"></option>
-                    {{end}}
-                </datalist>
-            </div>
+        <div id="asset-info" class="hidden">
         </div>
-        <div id="QuoteCurrencyField" class="field hidden">
-            {{if .QuoteCurrencies }}
-            {{$baseCurrency := .BaseCurrency}}
-            <div class="field-label">
-                <label for="QuoteCurrency">Currency exchange rate</label>
-            </div>
-            <div class="field-value">
-                <select id="QuoteCurrency" name="QuoteCurrency" type="text">
-                    <option value=""></option>
-                    {{range .QuoteCurrencies}}
-                    <option value="{{.}}">{{$baseCurrency}}/{{.}}</option>
-                    {{end}}
-                </select>
-            </div>
-            {{end}}
-        </div>
-        <div id="ValueField" class="field">
-            <div class="field-label">
-                <label for="Value">Value</label>
-            </div>
-            <div class="field-value">
-                <input id="Value" name="Value" type="text" class="micros">
-            </div>
-        </div>
-        <div id="QuantityField" class="field">
-            <div class="field-label">
-                <label for="Quantity">Quantity / Nominal value</label>
-            </div>
-            <div class="field-value">
-                <input id="Quantity" name="Quantity" type="text" class="micros">
-            </div>
-        </div>
-        <div id="PriceField" class="field">
-            <div class="field-label">
-                <label for="Price">Price</label>
-            </div>
-            <div class="field-value">
-                <input id="Price" name="Price" type="text" class="micros">
-            </div>
-        </div>
-        <div id="CostField" class="field">
-            <div class="field-label">
-                <label for="Cost">Cost</label>
-            </div>
-            <div class="field-value">
-                <input id="Cost" name="Cost" type="text" class="micros">
-            </div>
-        </div>
-        <div id="CommentField" class="field">
-            <div class="field-label">
-                <label for="Comment">Comment</label>
-            </div>
-            <div class="field-value">
-                <textarea rows="3" id="Comment" name="Comment"></textarea>
-            </div>
-        </div>
-        <div class="button-field">
-            <input id="submit" type="submit" name="Submit" value="Save &amp; enter next">
-        </div>
-    </form>
+    </div>
 </body>
 
 </html>

@@ -1,9 +1,9 @@
 import { callout, calloutStatus } from "./common";
 
 
-function inputEventForList(event, callback) {
+function inputAutocomplete(event, callback) {
     const input = event.target;
-    if (event.inputType.startsWith("deleteContent")) {
+    if (event.inputType && event.inputType.startsWith("deleteContent")) {
         // Don't auto-complete if Backspace or Del were hit.
         return;
     }
@@ -26,9 +26,42 @@ function inputEventForList(event, callback) {
     callback(matches[0].id);
 }
 
+async function fetchAssetInfo(assetId) {
+    if (!assetId) {
+        assetId = document.querySelector("#AssetID").value;
+        if (!assetId) {
+            return;
+        }
+    }
+    const date = document.querySelector("#ValueDate").value;
+    try {
+        const response = await fetch("/kontoo/entries/assetinfo", {
+            method: "POST",
+            body: JSON.stringify({
+                assetId: assetId,
+                date: date
+            }),
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.status !== "OK") {
+            showAssetInfo(false);
+            return;
+        }
+        showAssetInfo(true, data.innerHTML);
+    }
+    catch (error) {
+        console.error("Error fetching asset info:", error);
+    }
+}
+
 function assetIdChange(assetId) {
     if (!assetId) {
-        // Empty assetId, do nothing.
         return;
     }
     const assetList = document.getElementById("AssetList");
@@ -48,10 +81,22 @@ function assetIdChange(assetId) {
     });
     // Move focus to the next input field.
     document.querySelector("#Type").focus();
+    fetchAssetInfo(assetId);
 }
 
-function typeFieldChanged(typ) {
+function showAssetInfo(show = true, innerHTML = null) {
+    const assetInfo = document.querySelector("#asset-info");
+    if (show) {
+        assetInfo.innerHTML = innerHTML;
+        assetInfo.classList.remove("hidden");
+    } else {
+        assetInfo.classList.add("hidden")
+    }
+}
+
+function entryTypeChange(typ) {
     if (typ === "ExchangeRate") {
+        showAssetInfo(false);
         showFields(["QuoteCurrency", "Price"]);
     } else if (typ === "AccountBalance" || typ === "AccountDebit" || typ === "AccountCredit") {
         showFields(["AssetID", "Value"]);
@@ -81,47 +126,57 @@ function showFields(fieldNames) {
     }
 }
 
+async function submitForm(event) {
+    event.preventDefault(); // Prevent the default form submission
+    const formData = new FormData(this);
+    const clickedButton = event.submitter;
+    const entry = {}
+    formData.forEach((value, key) => {
+        if (value) {
+            entry[key] = value;
+        }
+    })
+    try {
+        const response = await fetch("/kontoo/entries/add", {
+            method: "POST",
+            body: JSON.stringify(entry),
+            headers: {
+                "Content-Type": "application/json"
+            }
+        });
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        if (data.status === "OK") {
+            callout(`Added ledger entry with sequence number ${data.sequenceNum}.`);
+            this.reset();
+        } else {
+            calloutStatus(data.status, data.error);
+        }
+    }
+    catch (error) {
+        console.error("Error on submit:", error);
+    }
+}
+
 export function init() {
     const entryForm = document.querySelector("#entry-form");
-    entryForm.addEventListener("submit", async function (event) {
-        event.preventDefault(); // Prevent the default form submission
-        const formData = new FormData(this);
-        const clickedButton = event.submitter;
-        const entry = {}
-        formData.forEach((value, key) => {
-            if (value) {
-                entry[key] = value;
-            }
-        })
-        try {
-            const response = await fetch("/kontoo/entries/add", {
-                method: "POST",
-                body: JSON.stringify(entry),
-                headers: {
-                    "Content-Type": "application/json"
-                }
-            });
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            if (data.status === "OK") {
-                callout(`Added ledger entry with sequence number ${data.sequenceNum}.`);
-                this.reset();
-            } else {
-                calloutStatus(data.status, data.error);
-            }
-        }
-        catch (error) {
-            console.error("Error on submit:", error);
-        }
-    });
+    entryForm.addEventListener("submit", submitForm);
     document.querySelector("#AssetID").addEventListener("input", function (event) {
-        inputEventForList(event, assetIdChange);
+        inputAutocomplete(event, assetIdChange);
     });
     document.querySelector("#Type").addEventListener("input", function (event) {
-        inputEventForList(event, typeFieldChanged);
+        inputAutocomplete(event, entryTypeChange);
+    });
+    document.querySelector("#QuoteCurrency").addEventListener("change", function (event) {
+        const ccy = event.target.value;
+        const label = document.querySelector("#ExchangeRateLabel")
+        label.textContent = label.dataset.baseCurrency + "/" + ccy;
     });
     // Adjust UI to preselected AssetID:
     assetIdChange(document.querySelector("#AssetID").value);
+    // Update asset info on date change, too:
+    document.querySelector("#ValueDate")._flatpickr.config.onValueUpdate.push(() => fetchAssetInfo());
+
 }
