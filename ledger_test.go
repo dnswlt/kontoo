@@ -665,7 +665,8 @@ func TestProfitLossInPeriod(t *testing.T) {
 	}{
 		{endDate: DateVal(1999, 1, 1), days: 365, want: 0},
 		{endDate: DateVal(2023, 12, 31), days: 365, want: 119950 * UnitValue},
-		{endDate: DateVal(2024, 6, 30), days: 180, want: 157450 * UnitValue},
+		// (425-370) * 500 + 1000 * (450-370) == 107500 (minus 50 cost)
+		{endDate: DateVal(2024, 6, 30), days: 180, want: 107450 * UnitValue},
 	}
 	for _, tc := range tests {
 		got, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)

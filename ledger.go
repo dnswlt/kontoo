@@ -762,22 +762,34 @@ func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (Micr
 		e := entries[i]
 		switch e.Type {
 		case AssetSale:
-			// A sale realizes P&L: Realized P&L = Sale Price - Cost of sale - Purchase Price
+			// A sale realizes P&L: Realized P&L = Sale Price - Cost of sale - Price at beginning of period
 			// Calculate the purchase price of the quantity sold.
-			var purchasePrice Micros
+			var purchaseValue Micros
 			qty := -e.QuantityMicros // QuantityMicros is a negative value for a sale
 			for _, item := range p.Items {
 				if item.QuantityMicros < qty {
 					// Fully incorporate the item's quantity and continue.
-					purchasePrice += item.PurchasePrice()
+					if item.ValueDate.After(startDate.Time) {
+						// Item was purchased after startDate: use price at purchase date.
+						purchaseValue += item.QuantityMicros.Mul(item.PriceMicros)
+					} else {
+						// Use price at start date: that's how the item was valuated
+						// at the beginning of the period.
+						purchaseValue += item.QuantityMicros.Mul(startPrice)
+					}
 					qty -= item.QuantityMicros
 				} else {
 					// Pro-rate the item's quantity and end the iteration.
-					purchasePrice += item.PurchasePrice().Frac(qty, item.QuantityMicros)
+					if item.ValueDate.Before(startDate.Time) {
+						purchaseValue += qty.Mul(startPrice)
+					} else {
+						// Item was purchased after startDate: use price at purchase date.
+						purchaseValue += qty.Mul(item.PriceMicros)
+					}
 					break
 				}
 			}
-			realizedPL += (-e.QuantityMicros).Mul(e.PriceMicros) - e.CostMicros - purchasePrice
+			realizedPL += (-e.QuantityMicros).Mul(e.PriceMicros) - e.CostMicros - purchaseValue
 		case AssetHolding:
 			if p.QuantityMicros != e.QuantityMicros {
 				return 0, fmt.Errorf("cannot calculate P&L: new quantity is asserted with AssetHolding entry")
@@ -794,13 +806,12 @@ func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (Micr
 	for _, item := range p.Items {
 		if item.ValueDate.After(startDate.Time) {
 			// Item was purchased after startDate, use its own purchase price.
-			// We include cost in the baselineValue here: to make a profit,
+			// Include cost in the baselineValue: to make a profit,
 			// the price must go above the price at purchase time plus incurred cost.
 			baselineValue += item.PurchasePrice()
 		} else {
 			// Item was owned at startDate already, use price at startDate.
-			// This time, do not include the cost, it was accounted for in a previous
-			// period already.
+			// Do not include the cost, it was accounted for in a previous period.
 			baselineValue += item.QuantityMicros.Mul(startPrice)
 		}
 	}
