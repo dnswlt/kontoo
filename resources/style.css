@@ -403,6 +403,7 @@ input.filter {
     opacity: 0;
     transition: opacity 0.3s;
     font-size: 10pt;
+    font-weight: normal;
 }
 
 .tooltip:hover .tooltiptext {

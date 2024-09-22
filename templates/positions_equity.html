@@ -22,6 +22,7 @@
                 <th class="ralign" title="Purchase price including costs">Buy price</th>
                 <th class="ralign" title="Profits & losses">P&amp;L</th>
                 <th class="ralign" title="Profits & losses (%)">P&amp;L%</th>
+                <th class="ralign" title="Profits & losses (1 year)">P&amp;L 1Y</th>
                 <th class="ralign">Qty</th>
                 <th class="ralign">Price</th>
                 <th class="ralign">Price Date</th>
@@ -51,6 +52,9 @@
                     <span class="{{if negative .ProfitLossRatio}}negative-amount{{end}}">{{ percentAcc .ProfitLossRatio
                         }}</span>
                 </td>
+                <td class="ralign">
+                    <span class="{{if negative .ProfitLoss1Y}}negative-amount{{end}}">{{ money .ProfitLoss1Y }}</span>
+                </td>
                 <td class="ralign">{{ quantity .Quantity }}</td>
                 <td class="ralign">{{ price .Price }}</td>
                 <td>{{ yyyymmdd .PriceDate }}</td>
@@ -67,6 +71,7 @@
                 <td class="ralign">
                     <span class="{{if negative .Totals.ProfitLossRatio}}negative-amount{{end}}">{{ percentAcc
                         .Totals.ProfitLossRatio}}</span>
+                <td></td>
                 <td></td>
                 <td></td>
                 <td></td>

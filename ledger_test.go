@@ -600,6 +600,84 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 	}
 }
 
+func TestProfitLossInPeriod(t *testing.T) {
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Name:         "Microsoft Corporation",
+				Type:         Stock,
+				TickerSymbol: "MSFT",
+				Currency:     "USD",
+			},
+		},
+	}
+	s, err := NewStore(l, "/test")
+	if err != nil {
+		t.Fatal("Could not create store", err)
+	}
+	entries := []*LedgerEntry{
+		{
+			Type:           AssetPurchase,
+			AssetID:        "MSFT",
+			ValueDate:      DateVal(2022, 6, 1),
+			QuantityMicros: 1000 * UnitValue,
+			PriceMicros:    270 * UnitValue,
+		},
+		{
+			Type:           AssetPurchase,
+			AssetID:        "MSFT",
+			ValueDate:      DateVal(2023, 6, 1),
+			QuantityMicros: 500 * UnitValue,
+			PriceMicros:    330 * UnitValue,
+			CostMicros:     50 * UnitValue,
+		},
+		{
+			Type:        AssetPrice,
+			AssetID:     "MSFT",
+			ValueDate:   DateVal(2023, 12, 31),
+			PriceMicros: 370 * UnitValue,
+		},
+		{
+			Type:           AssetSale,
+			AssetID:        "MSFT",
+			ValueDate:      DateVal(2024, 3, 1),
+			QuantityMicros: -500 * UnitValue,
+			PriceMicros:    425 * UnitValue,
+			CostMicros:     50 * UnitValue,
+		},
+		{
+			Type:        AssetPrice,
+			AssetID:     "MSFT",
+			ValueDate:   DateVal(2024, 6, 30),
+			PriceMicros: 450 * UnitValue,
+		},
+	}
+	for _, e := range entries {
+		err = s.Add(e)
+		if err != nil {
+			t.Fatal("Cannot add to ledger:", err)
+		}
+	}
+	tests := []struct {
+		endDate Date
+		days    int
+		want    Micros
+	}{
+		{endDate: DateVal(1999, 1, 1), days: 365, want: 0},
+		{endDate: DateVal(2023, 12, 31), days: 365, want: 119950 * UnitValue},
+		{endDate: DateVal(2024, 6, 30), days: 180, want: 157450 * UnitValue},
+	}
+	for _, tc := range tests {
+		got, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
+		if err != nil {
+			t.Fatal("ProfitLossInPeriod error:", err)
+		}
+		if got != tc.want {
+			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want %v, got %v`, tc.endDate, tc.days, tc.want, got)
+		}
+	}
+}
+
 func TestPositionsAtMultipleAssets(t *testing.T) {
 	l := &Ledger{
 		Assets: []*Asset{

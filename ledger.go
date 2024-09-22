@@ -741,6 +741,72 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	return res
 }
 
+func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (Micros, error) {
+	if days <= 0 {
+		return 0, fmt.Errorf("invalid value days=%d", days)
+	}
+	startDate := Date{endDate.AddDate(0, 0, -days)}
+	p := s.AssetPositionAt(assetId, startDate)
+	if p == nil {
+		return 0, fmt.Errorf("no position found for asset %q", assetId)
+	}
+	// Store the price at the beginning of the period. That is the price we calculate
+	// unrealized P&L against for all quantities still owned at the end of the period.
+	startPrice := p.PriceMicros
+	entries := s.entries[assetId]
+	i := sort.Search(len(entries), func(i int) bool {
+		return entries[i].ValueDate.After(startDate.Time)
+	})
+	var realizedPL Micros
+	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
+		e := entries[i]
+		switch e.Type {
+		case AssetSale:
+			// A sale realizes P&L: Realized P&L = Sale Price - Cost of sale - Purchase Price
+			// Calculate the purchase price of the quantity sold.
+			var purchasePrice Micros
+			qty := -e.QuantityMicros // QuantityMicros is a negative value for a sale
+			for _, item := range p.Items {
+				if item.QuantityMicros < qty {
+					// Fully incorporate the item's quantity and continue.
+					purchasePrice += item.PurchasePrice()
+					qty -= item.QuantityMicros
+				} else {
+					// Pro-rate the item's quantity and end the iteration.
+					purchasePrice += item.PurchasePrice().Frac(qty, item.QuantityMicros)
+					break
+				}
+			}
+			realizedPL += (-e.QuantityMicros).Mul(e.PriceMicros) - e.CostMicros - purchasePrice
+		case AssetHolding:
+			if p.QuantityMicros != e.QuantityMicros {
+				return 0, fmt.Errorf("cannot calculate P&L: new quantity is asserted with AssetHolding entry")
+			}
+			// Otherwise, ignore entry
+		case AssetPurchase, AssetPrice, DividendPayment, InterestPayment:
+			// Ignore; we can use the final AssetPositionItems to calculate unrealized P&L
+		default:
+			return 0, fmt.Errorf("unexpected ledger entry of type %v", e.Type)
+		}
+		p.Update(e)
+	}
+	var baselineValue Micros
+	for _, item := range p.Items {
+		if item.ValueDate.After(startDate.Time) {
+			// Item was purchased after startDate, use its own purchase price.
+			// We include cost in the baselineValue here: to make a profit,
+			// the price must go above the price at purchase time plus incurred cost.
+			baselineValue += item.PurchasePrice()
+		} else {
+			// Item was owned at startDate already, use price at startDate.
+			// This time, do not include the cost, it was accounted for in a previous
+			// period already.
+			baselineValue += item.QuantityMicros.Mul(startPrice)
+		}
+	}
+	return p.MarketValue() - baselineValue + realizedPL, nil
+}
+
 // AssetPositionAt returns the given asset's position at date.
 func (s *Store) AssetPositionAt(assetId string, date Date) *AssetPosition {
 	asset, ok := s.assets[assetId]

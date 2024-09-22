@@ -75,7 +75,10 @@
                 <td></td>
                 <td></td>
                 <td class="ralign">{{ money .Totals.EarningsAtMaturity }}</td>
-                <td></td>
+                <td class="ralign tooltip">
+                    {{ percent .Totals.InternalRateOfReturn }}
+                    <span class="tooltiptext">Market value weighted average IRR</span>
+                </td>
                 <td></td>
                 <td></td>
             </tr>

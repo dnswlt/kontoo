@@ -299,11 +299,15 @@ type PositionTableRow struct {
 	// above a threshold.
 	DataAge time.Duration
 
-	Quantity  Micros
-	Price     Micros
-	PriceDate Date
+	PurchasePrice Micros
 
-	PurchasePrice           Micros
+	// Only populated for equities:
+	Quantity     Micros
+	Price        Micros
+	PriceDate    Date
+	ProfitLoss1Y Micros
+
+	// Only populated for maturing assets:
 	NominalValue            Micros
 	InterestRate            Micros
 	IssueDate               *Date
@@ -390,6 +394,11 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 		if a.Type.Category() != Equity {
 			continue
 		}
+		profitLoss1Y, err := s.ProfitLossInPeriod(a.ID(), date, 365)
+		if err != nil {
+			// TODO: remove once we're happy with the results.
+			log.Print("Cannot calculate profit&loss over 1y period:", err)
+		}
 		rate, _, _ := s.ExchangeRateAt(a.Currency, date)
 		row := &PositionTableRow{
 			AssetID:       a.ID(),
@@ -401,6 +410,7 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			Quantity:      p.QuantityMicros,
 			Price:         p.PriceMicros,
 			PriceDate:     p.PriceDate,
+			ProfitLoss1Y:  profitLoss1Y,
 			PurchasePrice: p.PurchasePrice(),
 		}
 		res = append(res, row)
@@ -667,14 +677,19 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	rows := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
-	var totalValue, totalEarnings Micros
+	var totalValue, totalEarnings, totalIRR Micros
 	for _, r := range rows {
 		if r.ExchangeRate == 0 {
 			totalValue, totalEarnings = 0, 0
 			break
 		}
-		totalValue += r.Value.Div(r.ExchangeRate)
+		valueBC := r.Value.Div(r.ExchangeRate)
+		totalValue += valueBC
 		totalEarnings += r.TotalEarningsAtMaturity.Div(r.ExchangeRate)
+		totalIRR += r.InternalRateOfReturn.Mul(valueBC)
+	}
+	if totalValue > 0 {
+		totalIRR = totalIRR.Div(totalValue)
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
@@ -683,8 +698,9 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 			"today":    date.Equal(today()),
 		},
 		"Totals": map[string]Micros{
-			"Value":              totalValue,
-			"EarningsAtMaturity": totalEarnings,
+			"Value":                totalValue,
+			"EarningsAtMaturity":   totalEarnings,
+			"InternalRateOfReturn": totalIRR,
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
@@ -1000,7 +1016,7 @@ func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePositionsMaturing(w http.ResponseWriter, r *http.Request) {
 	date, ok := ensureDateParam(w, r)
 	if !ok {
 		return
@@ -1015,7 +1031,7 @@ func (s *Server) handleMaturingPositions(w http.ResponseWriter, r *http.Request)
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleEquityPositions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePositionsEquity(w http.ResponseWriter, r *http.Request) {
 	date, ok := ensureDateParam(w, r)
 	if !ok {
 		return
@@ -1340,8 +1356,8 @@ func (s *Server) createMux() *http.ServeMux {
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
-	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handleMaturingPositions))
-	mux.HandleFunc("GET /kontoo/positions/equity", s.reloadHandler(s.handleEquityPositions))
+	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handlePositionsMaturing))
+	mux.HandleFunc("GET /kontoo/positions/equity", s.reloadHandler(s.handlePositionsEquity))
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/assets/edit/{assetID}", s.reloadHandler(s.handleAssetsEdit))
