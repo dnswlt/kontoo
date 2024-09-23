@@ -306,6 +306,10 @@ func (a *Asset) ID() string {
 	return ""
 }
 
+func (a *Asset) Category() AssetCategory {
+	return a.Type.category()
+}
+
 func (a *Asset) matchRef(ref string) bool {
 	if a.IBAN == ref || a.ISIN == ref || a.WKN == ref ||
 		a.AccountNumber == ref || a.TickerSymbol == ref ||
@@ -606,7 +610,7 @@ func (s *Store) validateAsset(a *Asset) error {
 	if strings.TrimSpace(a.Name) == "" {
 		return fmt.Errorf("Asset name must not be empty")
 	}
-	cat := a.Type.Category()
+	cat := a.Category()
 	if (a.InterestMicros != 0 || a.InterestPayment != "") && (cat == Equity || cat == Commodities) {
 		return fmt.Errorf("interest must not be specified for asset category %s", cat)
 	}
@@ -614,7 +618,7 @@ func (s *Store) validateAsset(a *Asset) error {
 		if a.MaturityDate.IsZero() {
 			return fmt.Errorf("MaturityDate must be nil or non-zero")
 		}
-		if a.Type.Category() != FixedIncome {
+		if a.Category() != FixedIncome {
 			return fmt.Errorf("MaturityDate must only be specified for fixed-income assets")
 		}
 	}
@@ -622,7 +626,7 @@ func (s *Store) validateAsset(a *Asset) error {
 		if a.IssueDate.IsZero() {
 			return fmt.Errorf("IssueDate must be nil or non-zero")
 		}
-		if a.Type.Category() != FixedIncome {
+		if a.Category() != FixedIncome {
 			return fmt.Errorf("IssueDate must only be specified for fixed-income assets")
 		}
 	}
@@ -668,9 +672,9 @@ func (s *Store) UpdateAsset(assetID string, a *Asset) error {
 	}
 	// Check that immutable fields do not change:
 	hasEntries := len(s.entries[id]) > 0
-	if hasEntries && old.Type.Category() != a.Type.Category() {
+	if hasEntries && old.Category() != a.Category() {
 		return fmt.Errorf("cannot modify asset category (%s => %s): asset has ledger entries",
-			old.Type.Category(), a.Type.Category())
+			old.Category(), a.Category())
 	}
 	if hasEntries && old.Currency != a.Currency {
 		return fmt.Errorf("cannot modify currency: asset has ledger entries")
@@ -741,14 +745,17 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	return res
 }
 
-func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (Micros, error) {
+func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (profitLoss, referenceValue Micros, err error) {
 	if days <= 0 {
-		return 0, fmt.Errorf("invalid value days=%d", days)
+		return 0, 0, fmt.Errorf("days(%d) must be positive", days)
 	}
 	startDate := Date{endDate.AddDate(0, 0, -days)}
 	p := s.AssetPositionAt(assetId, startDate)
 	if p == nil {
-		return 0, fmt.Errorf("no position found for asset %q", assetId)
+		return 0, 0, fmt.Errorf("no position found for asset %q", assetId)
+	}
+	if cat := p.Asset.Category(); cat != Equity {
+		return 0, 0, fmt.Errorf("profit/loss in period is only available for asset category Equity, not %v", cat)
 	}
 	// Store the price at the beginning of the period. That is the price we calculate
 	// unrealized P&L against for all quantities still owned at the end of the period.
@@ -764,58 +771,62 @@ func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (Micr
 		case AssetSale:
 			// A sale realizes P&L: Realized P&L = Sale Price - Cost of sale - Price at beginning of period
 			// Calculate the purchase price of the quantity sold.
-			var purchaseValue Micros
+			var purchasePrice Micros
 			qty := -e.QuantityMicros // QuantityMicros is a negative value for a sale
 			for _, item := range p.Items {
 				if item.QuantityMicros < qty {
 					// Fully incorporate the item's quantity and continue.
 					if item.ValueDate.After(startDate.Time) {
 						// Item was purchased after startDate: use price at purchase date.
-						purchaseValue += item.QuantityMicros.Mul(item.PriceMicros)
+						purchasePrice += item.QuantityMicros.Mul(item.PriceMicros)
 					} else {
 						// Use price at start date: that's how the item was valuated
 						// at the beginning of the period.
-						purchaseValue += item.QuantityMicros.Mul(startPrice)
+						purchasePrice += item.QuantityMicros.Mul(startPrice)
 					}
 					qty -= item.QuantityMicros
 				} else {
 					// Pro-rate the item's quantity and end the iteration.
 					if item.ValueDate.Before(startDate.Time) {
-						purchaseValue += qty.Mul(startPrice)
+						purchasePrice += qty.Mul(startPrice)
 					} else {
-						// Item was purchased after startDate: use price at purchase date.
-						purchaseValue += qty.Mul(item.PriceMicros)
+						// Item was purchased after startDate: use price at purchase date and include cost.
+						purchasePrice += qty.Mul(item.PriceMicros) + item.CostMicros
 					}
 					break
 				}
 			}
-			realizedPL += (-e.QuantityMicros).Mul(e.PriceMicros) - e.CostMicros - purchaseValue
+			referenceValue += purchasePrice
+			realizedPL += (-e.QuantityMicros).Mul(e.PriceMicros) - e.CostMicros - purchasePrice
 		case AssetHolding:
 			if p.QuantityMicros != e.QuantityMicros {
-				return 0, fmt.Errorf("cannot calculate P&L: new quantity is asserted with AssetHolding entry")
+				return 0, 0, fmt.Errorf("cannot calculate P&L: new quantity is asserted with AssetHolding entry")
 			}
 			// Otherwise, ignore entry
-		case AssetPurchase, AssetPrice, DividendPayment, InterestPayment:
+		case AssetPurchase, AssetPrice:
 			// Ignore; we can use the final AssetPositionItems to calculate unrealized P&L
+		case DividendPayment, InterestPayment:
+			// TOOD: include dividends in P&L
 		default:
-			return 0, fmt.Errorf("unexpected ledger entry of type %v", e.Type)
+			return 0, 0, fmt.Errorf("unexpected ledger entry of type %v", e.Type)
 		}
 		p.Update(e)
 	}
-	var baselineValue Micros
+	var initialValue Micros
 	for _, item := range p.Items {
 		if item.ValueDate.After(startDate.Time) {
 			// Item was purchased after startDate, use its own purchase price.
 			// Include cost in the baselineValue: to make a profit,
 			// the price must go above the price at purchase time plus incurred cost.
-			baselineValue += item.PurchasePrice()
+			initialValue += item.PurchasePrice()
 		} else {
 			// Item was owned at startDate already, use price at startDate.
 			// Do not include the cost, it was accounted for in a previous period.
-			baselineValue += item.QuantityMicros.Mul(startPrice)
+			initialValue += item.QuantityMicros.Mul(startPrice)
 		}
 	}
-	return p.MarketValue() - baselineValue + realizedPL, nil
+	referenceValue += initialValue
+	return p.MarketValue() - initialValue + realizedPL, referenceValue, nil
 }
 
 // AssetPositionAt returns the given asset's position at date.

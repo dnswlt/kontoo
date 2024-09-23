@@ -19,10 +19,21 @@
                 <th>Type</th>
                 <th class="ralign">Ccy</th>
                 <th class="ralign">Mkt value</th>
-                <th class="ralign" title="Purchase price including costs">Buy price</th>
-                <th class="ralign" title="Profits & losses">P&amp;L</th>
-                <th class="ralign" title="Profits & losses (%)">P&amp;L%</th>
-                <th class="ralign" title="Profits & losses (1 year)">P&amp;L 1Y</th>
+                <th class="ralign tooltip">Buy price
+                    <span class="tooltiptext">Purchase price including costs</span>
+                </th>
+                <th class="ralign tooltip">P&amp;L
+                    <span class="tooltiptext">Profits & losses</span>
+                </th>
+                <th class="ralign tooltip">P&amp;L%
+                    <span class="tooltiptext">Profits & losses (%)</span>
+                </th>
+                <th class="ralign tooltip">PL1Y
+                    <span class="tooltiptext">Profits & losses (1 year)</span>
+                </th>
+                <th class="ralign tooltip">PL1Y%
+                    <span class="tooltiptext">Profits & losses (1 year, %)</span>
+                </th>
                 <th class="ralign">Qty</th>
                 <th class="ralign">Price</th>
                 <th class="ralign">Price Date</th>
@@ -55,6 +66,10 @@
                 <td class="ralign">
                     <span class="{{if negative .ProfitLoss1Y}}negative-amount{{end}}">{{ money .ProfitLoss1Y }}</span>
                 </td>
+                <td class="ralign">
+                    <span class="{{if negative .ProfitLoss1YRatio}}negative-amount{{end}}">{{ percentAcc
+                        .ProfitLoss1YRatio }}</span>
+                </td>
                 <td class="ralign">{{ quantity .Quantity }}</td>
                 <td class="ralign">{{ price .Price }}</td>
                 <td>{{ yyyymmdd .PriceDate }}</td>
@@ -67,10 +82,23 @@
                 <td class="ralign">{{ $baseCurrency }}</td>
                 <td class="ralign">{{ money .Totals.Value }}</td>
                 <td class="ralign">{{ money .Totals.PurchasePrice }}</td>
-                <td class="ralign">{{ money .Totals.ProfitLoss }}</td>
+                <td class="ralign">
+                    <span class="{{if negative .Totals.ProfitLossRatio}}negative-amount{{end}}">{{ money
+                        .Totals.ProfitLoss }}</span>
+                </td>
                 <td class="ralign">
                     <span class="{{if negative .Totals.ProfitLossRatio}}negative-amount{{end}}">{{ percentAcc
                         .Totals.ProfitLossRatio}}</span>
+                </td>
+                <td class="ralign">
+                    <span class="{{if negative .Totals.ProfitLoss1Y}}negative-amount{{end}}">{{ money
+                        .Totals.ProfitLoss1Y}}</span>
+                </td>
+                <td class="ralign tooltip">
+                    <span class="{{if negative .Totals.ProfitLoss1YRatio}}negative-amount{{end}}">{{ percentAcc
+                        .Totals.ProfitLoss1YRatio}}</span>
+                    <span class="tooltiptext">Profit/loss (1 year) relative to 1Y basis price</span>
+                </td>
                 <td></td>
                 <td></td>
                 <td></td>

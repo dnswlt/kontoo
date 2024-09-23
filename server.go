@@ -302,10 +302,11 @@ type PositionTableRow struct {
 	PurchasePrice Micros
 
 	// Only populated for equities:
-	Quantity     Micros
-	Price        Micros
-	PriceDate    Date
-	ProfitLoss1Y Micros
+	Quantity          Micros
+	Price             Micros
+	PriceDate         Date
+	ProfitLoss1Y      Micros
+	ProfitLoss1YBasis Micros // the basis value relative to which the 1Y P&L ratio is calculated.
 
 	// Only populated for maturing assets:
 	NominalValue            Micros
@@ -326,6 +327,17 @@ func (r *PositionTableRow) ProfitLossRatio() Micros {
 		return 0
 	}
 	return FloatAsMicros(r.Value.Float()/r.PurchasePrice.Float() - 1)
+}
+
+func (r *PositionTableRow) ProfitLoss1YRatio() Micros {
+	if r.ProfitLoss1YBasis == 0 {
+		return 0
+	}
+	return r.ProfitLoss1Y.Div(r.ProfitLoss1YBasis)
+}
+
+func (r *PositionTableRow) AssetCategory() AssetCategory {
+	return r.AssetType.category()
 }
 
 // Convenience function for sorting *Date. Nils come last.
@@ -391,27 +403,28 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	var res []*PositionTableRow
 	for _, p := range positions {
 		a := p.Asset
-		if a.Type.Category() != Equity {
+		if a.Category() != Equity {
 			continue
 		}
-		profitLoss1Y, err := s.ProfitLossInPeriod(a.ID(), date, 365)
+		profitLoss1Y, profitLoss1YBasis, err := s.ProfitLossInPeriod(a.ID(), date, 365)
 		if err != nil {
 			// TODO: remove once we're happy with the results.
 			log.Print("Cannot calculate profit&loss over 1y period:", err)
 		}
 		rate, _, _ := s.ExchangeRateAt(a.Currency, date)
 		row := &PositionTableRow{
-			AssetID:       a.ID(),
-			AssetName:     a.Name,
-			AssetType:     a.Type,
-			Currency:      a.Currency,
-			ExchangeRate:  rate,
-			Value:         p.MarketValue(),
-			Quantity:      p.QuantityMicros,
-			Price:         p.PriceMicros,
-			PriceDate:     p.PriceDate,
-			ProfitLoss1Y:  profitLoss1Y,
-			PurchasePrice: p.PurchasePrice(),
+			AssetID:           a.ID(),
+			AssetName:         a.Name,
+			AssetType:         a.Type,
+			Currency:          a.Currency,
+			ExchangeRate:      rate,
+			Value:             p.MarketValue(),
+			Quantity:          p.QuantityMicros,
+			Price:             p.PriceMicros,
+			PriceDate:         p.PriceDate,
+			ProfitLoss1Y:      profitLoss1Y,
+			ProfitLoss1YBasis: profitLoss1YBasis,
+			PurchasePrice:     p.PurchasePrice(),
 		}
 		res = append(res, row)
 	}
@@ -421,7 +434,7 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 func positionTableRows(s *Store, date Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
-		c := int(a.Asset.Type.Category()) - int(b.Asset.Type.Category())
+		c := int(a.Asset.Category()) - int(b.Asset.Category())
 		if c != 0 {
 			return c
 		}
@@ -476,20 +489,20 @@ func positionTableRowGroups(rows []*PositionTableRow) []*PositionTableRowGroup {
 	if len(rows) == 0 {
 		return res
 	}
-	currentCategory := rows[0].AssetType.Category()
+	currentCategory := rows[0].AssetCategory()
 	res = append(res, &PositionTableRowGroup{
 		Category: currentCategory,
 		Rows:     []*PositionTableRow{rows[0]},
 	})
 	for _, row := range rows[1:] {
-		if row.AssetType.Category() == currentCategory {
+		if row.AssetCategory() == currentCategory {
 			res[len(res)-1].Rows = append(res[len(res)-1].Rows, row)
 		} else {
 			res = append(res, &PositionTableRowGroup{
-				Category: row.AssetType.Category(),
+				Category: row.AssetCategory(),
 				Rows:     []*PositionTableRow{row},
 			})
-			currentCategory = row.AssetType.Category()
+			currentCategory = row.AssetCategory()
 		}
 	}
 	return res
@@ -711,15 +724,22 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
 	rows := equityPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
-	var totalValue, totalEarnings, totalPurchasePrice Micros
+	var totalValue, totalProfitLoss, totalPurchasePrice, totalPL1Y Micros
+	var totalPL1YBasis Micros
 	for _, r := range rows {
 		if r.ExchangeRate == 0 {
-			totalValue, totalEarnings, totalPurchasePrice = 0, 0, 0
+			totalValue, totalProfitLoss, totalPurchasePrice, totalPL1Y = 0, 0, 0, 0
 			break
 		}
 		totalValue += r.Value.Div(r.ExchangeRate)
 		totalPurchasePrice += r.PurchasePrice.Div(r.ExchangeRate)
-		totalEarnings += (r.Value - r.PurchasePrice).Div(r.ExchangeRate)
+		totalProfitLoss += (r.Value - r.PurchasePrice).Div(r.ExchangeRate)
+		totalPL1Y += r.ProfitLoss1Y.Div(r.ExchangeRate)
+		totalPL1YBasis += r.ProfitLoss1YBasis.Div(r.ExchangeRate)
+	}
+	var totalProfitLoss1YRatio Micros
+	if totalPL1YBasis != 0 {
+		totalProfitLoss1YRatio = totalPL1Y.Div(totalPL1YBasis)
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
@@ -728,10 +748,12 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"today":  date.Equal(today()),
 		},
 		"Totals": map[string]Micros{
-			"Value":           totalValue,
-			"PurchasePrice":   totalPurchasePrice,
-			"ProfitLoss":      totalEarnings,
-			"ProfitLossRatio": totalEarnings.Div(totalPurchasePrice),
+			"Value":             totalValue,
+			"PurchasePrice":     totalPurchasePrice,
+			"ProfitLoss":        totalProfitLoss,
+			"ProfitLossRatio":   totalProfitLoss.Div(totalPurchasePrice),
+			"ProfitLoss1Y":      totalPL1Y,
+			"ProfitLoss1YRatio": totalProfitLoss1YRatio,
 		},
 		"MonthOptions": monthOptions(*r.URL, date, maxDate),
 		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),

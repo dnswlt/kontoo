@@ -622,6 +622,7 @@ func TestProfitLossInPeriod(t *testing.T) {
 			ValueDate:      DateVal(2022, 6, 1),
 			QuantityMicros: 1000 * UnitValue,
 			PriceMicros:    270 * UnitValue,
+			CostMicros:     50 * UnitValue,
 		},
 		{
 			Type:           AssetPurchase,
@@ -661,20 +662,93 @@ func TestProfitLossInPeriod(t *testing.T) {
 	tests := []struct {
 		endDate Date
 		days    int
-		want    Micros
+		wantPL  Micros
+		wantRef Micros
 	}{
-		{endDate: DateVal(1999, 1, 1), days: 365, want: 0},
-		{endDate: DateVal(2023, 12, 31), days: 365, want: 119950 * UnitValue},
-		// (425-370) * 500 + 1000 * (450-370) == 107500 (minus 50 cost)
-		{endDate: DateVal(2024, 6, 30), days: 180, want: 107450 * UnitValue},
+		{endDate: DateVal(1999, 1, 1), days: 365, wantPL: 0, wantRef: 0},
+		// P&L: (370-270) * 1000 + (370-330) * 500 == 120000 (minus 50 cost)
+		// Ref: 1000*270 + 500*330 + 50 == 435050
+		{endDate: DateVal(2023, 12, 31), days: 365, wantPL: 119950 * UnitValue, wantRef: 435050 * UnitValue},
+		// P&L: (425-370) * 500 + 1000 * (450-370) == 107500 (minus 50 cost)
+		// Ref: 1500*370 == 555000
+		{endDate: DateVal(2024, 6, 30), days: 180, wantPL: 107450 * UnitValue, wantRef: 555000 * UnitValue},
 	}
 	for _, tc := range tests {
-		got, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
+		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
 		if err != nil {
 			t.Fatal("ProfitLossInPeriod error:", err)
 		}
-		if got != tc.want {
-			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want %v, got %v`, tc.endDate, tc.days, tc.want, got)
+		if pl != tc.wantPL {
+			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want profit/loss %v, got %v`, tc.endDate, tc.days, tc.wantPL, pl)
+		}
+		if ref != tc.wantRef {
+			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want ref val %v, got %v`, tc.endDate, tc.days, tc.wantRef, ref)
+		}
+	}
+}
+
+func TestProfitLossInPeriodBuySellSameYear(t *testing.T) {
+	l := &Ledger{
+		Assets: []*Asset{
+			{
+				Name:         "Microsoft Corporation",
+				Type:         Stock,
+				TickerSymbol: "MSFT",
+				Currency:     "USD",
+			},
+		},
+	}
+	s, err := NewStore(l, "/test")
+	if err != nil {
+		t.Fatal("Could not create store", err)
+	}
+	entries := []*LedgerEntry{
+		{
+			// Buy 1000 in the middle of 2025...
+			Type:           AssetPurchase,
+			AssetID:        "MSFT",
+			ValueDate:      DateVal(2025, 3, 31),
+			QuantityMicros: 1000 * UnitValue,
+			PriceMicros:    450 * UnitValue,
+			CostMicros:     50 * UnitValue,
+		},
+		{
+			// ... and sell them in the same year.
+			Type:           AssetSale,
+			AssetID:        "MSFT",
+			ValueDate:      DateVal(2025, 6, 31),
+			QuantityMicros: -1000 * UnitValue,
+			PriceMicros:    500 * UnitValue,
+			CostMicros:     50 * UnitValue,
+		},
+	}
+	for _, e := range entries {
+		err = s.Add(e)
+		if err != nil {
+			t.Fatal("Cannot add to ledger:", err)
+		}
+	}
+	tests := []struct {
+		endDate Date
+		days    int
+		wantPL  Micros
+		wantRef Micros
+	}{
+		// Started the year with 0, bought 1000 and sold them:
+		// P&L: 1000*(500-450) - 50 == 49950
+		// Ref: 1000*450 + 50 == 450050
+		{endDate: DateVal(2025, 12, 31), days: 365, wantPL: 49900 * UnitValue, wantRef: 450050 * UnitValue},
+	}
+	for _, tc := range tests {
+		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
+		if err != nil {
+			t.Fatal("ProfitLossInPeriod error:", err)
+		}
+		if pl != tc.wantPL {
+			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want profit/loss %v, got %v`, tc.endDate, tc.days, tc.wantPL, pl)
+		}
+		if ref != tc.wantRef {
+			t.Errorf(`ProfitLossInPeriod("MSFT", %q, %v): want ref val %v, got %v`, tc.endDate, tc.days, tc.wantRef, ref)
 		}
 	}
 }

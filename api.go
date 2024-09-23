@@ -220,7 +220,7 @@ func (t AssetType) ValidEntryTypes() []EntryType {
 	return assetTypeInfos[t].validEntryTypes
 }
 
-func (t AssetType) Category() AssetCategory {
+func (t AssetType) category() AssetCategory {
 	return assetTypeInfos[t].category
 }
 

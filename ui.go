@@ -171,7 +171,7 @@ func commonFuncs() template.FuncMap {
 			return t.DisplayName()
 		},
 		"assetCategory": func(t AssetType) string {
-			return t.Category().String()
+			return t.category().String()
 		},
 		"days": func(d time.Duration) int {
 			return int(math.Round(d.Seconds() / 60 / 60 / 24))
