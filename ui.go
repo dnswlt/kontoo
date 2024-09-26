@@ -58,18 +58,15 @@ func monthOptions(url url.URL, date Date, maxDate Date) DropdownOptions {
 	if date.Year() > maxDate.Year() {
 		return res // No options if no data
 	}
-	maxMonth := 12
-	if maxDate.Year() == date.Year() {
-		maxMonth = int(maxDate.Month())
-	}
-	for i := 0; i < maxMonth; i++ {
-		d := DateVal(date.Year(), time.Month(i+1), 1).AddDate(0, 1, -1)
+	for i := 1; i <= 12; i++ {
+		// Get last day of the month i+1
+		d := DateVal(date.Year(), time.Month(i), 1).AddDate(0, 1, -1)
 		q := url.Query()
 		q.Set("date", d.Format("2006-01-02"))
 		url.RawQuery = q.Encode()
 		res.Options = append(res.Options, NamedOption{
-			Name:  months[i],
-			Value: i + 1,
+			Name:  months[i-1],
+			Value: i,
 			Data: map[string]any{
 				"URL": url.String(),
 			},

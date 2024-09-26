@@ -27,6 +27,10 @@ async function deleteLedgerEntry(sequenceNum) {
     }
 }
 
+async function editLedgerEntry(sequenceNum) {
+    console.log(`WIP: Would like to edit entry ${sequenceNum}`);
+}
+
 async function reloadLedger() {
     try {
         const resp = await fetch("/kontoo/ledger/reload", {
@@ -45,6 +49,9 @@ async function reloadLedger() {
 function registerTableEventListeners() {
     document.querySelectorAll("button.delete").forEach(button => {
         button.addEventListener("click", () => deleteLedgerEntry(parseInt(button.dataset.seq)));
+    });
+    document.querySelectorAll("button.edit").forEach(button => {
+        button.addEventListener("click", () => editLedgerEntry(parseInt(button.dataset.seq)));
     });
 }
 
@@ -111,7 +118,6 @@ export function init() {
     });
     // Focus the search bar if "/" is hit.
     document.addEventListener('keydown', function(event) {
-        console.log(event.target.tagName);
         if (event.key === '/' && event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
             event.preventDefault();
             document.getElementById("filter").focus();

@@ -132,14 +132,23 @@ async function submitForm(event) {
     const clickedButton = event.submitter;
     const entry = {}
     formData.forEach((value, key) => {
-        if (value) {
+        if (!value) {
+            return;
+        }
+        if (key === "SequenceNum") {
+            entry[key] = parseInt(value);
+        } else {
             entry[key] = value;
         }
     })
     try {
-        const response = await fetch("/kontoo/entries/add", {
+        const update = formData.has("SequenceNum");
+        const response = await fetch(this.action, {
             method: "POST",
-            body: JSON.stringify(entry),
+            body: JSON.stringify({
+                updateExisting: update,
+                entry: entry
+            }),
             headers: {
                 "Content-Type": "application/json"
             }
@@ -149,8 +158,9 @@ async function submitForm(event) {
         }
         const data = await response.json();
         if (data.status === "OK") {
-            callout(`Added ledger entry with sequence number ${data.sequenceNum}.`);
-            this.reset();
+            const tm = new Date().toLocaleTimeString('en-GB');
+            callout(`${tm} - ${update ? "Updated" : "Added"} ledger entry with sequence number ${data.sequenceNum}.`);
+            // this.reset();
         } else {
             calloutStatus(data.status, data.error);
         }

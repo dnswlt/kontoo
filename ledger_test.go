@@ -101,6 +101,40 @@ func TestStoreAdd(t *testing.T) {
 	}
 }
 
+func TestStoreUpdate(t *testing.T) {
+	s, err := newTestStore([]*LedgerEntry{
+		{
+			ValueDate:      DateVal(2024, 1, 1),
+			AssetID:        "BMW",
+			Type:           AssetPurchase,
+			QuantityMicros: 1 * UnitValue,
+			PriceMicros:    100 * UnitValue,
+		},
+	}, Stock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := &LedgerEntry{
+		SequenceNum:    s.ledger.Entries[0].SequenceNum,
+		ValueDate:      DateVal(2023, 1, 1),
+		AssetID:        "BMW",
+		Type:           AssetSale,
+		QuantityMicros: -2 * UnitValue,
+		PriceMicros:    200 * UnitValue,
+		Currency:       "EUR",
+	}
+	if err := s.Update(u); err != nil {
+		t.Fatal("Update error:", err)
+	}
+	e := s.entries["BMW"][0]
+	if diff := cmp.Diff(u, e); diff != "" {
+		t.Errorf("Updated entry diff (-want, +got): %s", diff)
+	}
+	if e.Created.IsZero() {
+		t.Error("Updated entry has zero Created field")
+	}
+}
+
 func TestStoreDelete(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
@@ -133,10 +167,10 @@ func TestStoreDelete(t *testing.T) {
 		wantErr   bool
 	}{
 		{seq: 100, wantErr: true},
-		{seq: 1, wantLen: 2, wantValue: 150 * UnitValue},
-		{seq: 0, wantLen: 1, wantValue: 50 * UnitValue},
-		{seq: 2, wantLen: 0, wantValue: 0 * UnitValue},
-		{seq: 2, wantErr: true},
+		{seq: 2, wantLen: 2, wantValue: 150 * UnitValue},
+		{seq: 1, wantLen: 1, wantValue: 50 * UnitValue},
+		{seq: 3, wantLen: 0, wantValue: 0 * UnitValue},
+		{seq: 3, wantErr: true},
 	}
 	for i, tc := range tests {
 		err = s.Delete(tc.seq)
@@ -192,9 +226,9 @@ func TestStoreDeleteExchangeRate(t *testing.T) {
 		wantErr bool
 	}{
 		{seq: 100, wantErr: true},
-		{seq: 0, wantLen: 1},
-		{seq: 1, wantLen: 0},
-		{seq: 2, wantErr: true},
+		{seq: 1, wantLen: 1},
+		{seq: 2, wantLen: 0},
+		{seq: 3, wantErr: true},
 	}
 	for i, tc := range tests {
 		err = s.Delete(tc.seq)
@@ -1176,8 +1210,9 @@ func TestSaveLoadStore(t *testing.T) {
 	ref := &Ledger{
 		Entries: []*LedgerEntry{
 			{
-				Type:          ExchangeRate,
 				Created:       time.Date(2023, 1, 1, 17, 0, 0, 0, time.UTC),
+				SequenceNum:   1,
+				Type:          ExchangeRate,
 				ValueDate:     DateVal(2024, 1, 1),
 				QuoteCurrency: "CHF",
 				PriceMicros:   1 * UnitValue,
@@ -1254,6 +1289,7 @@ func TestMarshalLedger(t *testing.T) {
 		Entries: []*LedgerEntry{
 			{
 				Created:        time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
+				SequenceNum:    1,
 				ValueDate:      DateVal(2024, 12, 31),
 				Type:           AssetPurchase,
 				QuantityMicros: 1 * UnitValue,
@@ -1271,7 +1307,7 @@ func TestMarshalLedger(t *testing.T) {
   "Entries": [
     {
       "Created": "2023-12-31T00:00:00Z",
-      "SequenceNum": 0,
+      "SequenceNum": 1,
       "ValueDate": "2024-12-31",
       "Type": "AssetPurchase",
       "Currency": "EUR",

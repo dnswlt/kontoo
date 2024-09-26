@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +23,12 @@ import (
 )
 
 // JSON API for server requests and responses.
-type AddLedgerEntryResponse struct {
+type UpsertLedgerEntryRequest struct {
+	// Optional. If set, it is an update request, otherwise an add.
+	UpdateExisting bool         `json:"updateExisting"`
+	Entry          *LedgerEntry `json:"entry"`
+}
+type UpsertLedgerEntryResponse struct {
 	Status      StatusCode `json:"status"`
 	Error       string     `json:"error,omitempty"`
 	SequenceNum int64      `json:"sequenceNum"`
@@ -558,7 +564,7 @@ func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query
 	return s.templates.ExecuteTemplate(w, tmpl, ctx)
 }
 
-func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date) error {
+func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *LedgerEntry, date Date) error {
 	assets := make([]*Asset, len(s.Store().ledger.Assets))
 	copy(assets, s.Store().ledger.Assets)
 	slices.SortFunc(assets, func(a, b *Asset) int {
@@ -576,6 +582,17 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date)
 		}
 	}
 	slices.Sort(quoteCurrencies)
+	if entry == nil {
+		entry = &LedgerEntry{
+			ValueDate: date, // Prepopulate the value date with the context date.
+		}
+		// Populate input field values from query params
+		q := r.URL.Query()
+		entry.AssetID = q.Get("AssetID")
+		if t, err := ParseEntryTypeString(q.Get("Type")); err == nil {
+			entry.Type = t
+		}
+	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"Today":           time.Now().Format("2006-01-02"),
 		"Date":            date,
@@ -583,14 +600,8 @@ func (s *Server) renderAddEntryTemplate(w io.Writer, r *http.Request, date Date)
 		"BaseCurrency":    s.Store().BaseCurrency(),
 		"QuoteCurrencies": quoteCurrencies,
 		"EntryTypes":      EntryTypeValues()[1:],
+		"Entry":           entry,
 	})
-	// Populate input field values from query params
-	q := r.URL.Query()
-	for _, p := range []string{"AssetID", "Type"} {
-		if v := q.Get(p); v != "" {
-			ctx[p] = v
-		}
-	}
 	return s.templates.ExecuteTemplate(w, "entry.html", ctx)
 }
 
@@ -843,7 +854,27 @@ func (s *Server) handleEntriesNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := s.renderAddEntryTemplate(&buf, r, date); err != nil {
+	if err := s.renderEntryTemplate(&buf, r, nil, date); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleEntriesEdit(w http.ResponseWriter, r *http.Request) {
+	sequenceNum, err := strconv.ParseInt(r.PathValue("sequenceNum"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid sequenceNum", http.StatusBadRequest)
+		return
+	}
+	e := s.Store().FindEntryBySequenceNum(sequenceNum)
+	if e == nil {
+		http.Error(w, fmt.Sprintf("no entry with sequenceNum %d", sequenceNum), http.StatusNotFound)
+		return
+	}
+	var buf bytes.Buffer
+	if err := s.renderEntryTemplate(&buf, r, e, today()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -864,7 +895,7 @@ func (s *Server) handleAssetsNew(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAssetsEdit(w http.ResponseWriter, r *http.Request) {
 	assetID := r.PathValue("assetID")
 	if assetID == "" {
-		http.Error(w, "missing assetID", http.StatusNotFound)
+		http.Error(w, "missing assetID", http.StatusBadRequest)
 		return
 	}
 	asset, ok := s.Store().assets[assetID]
@@ -1146,26 +1177,42 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleEntriesAdd(w http.ResponseWriter, r *http.Request) {
-	var e LedgerEntry
-	if err := json.NewDecoder(r.Body).Decode(&e); err != nil {
+func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
+	var req UpsertLedgerEntryRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	if err := s.Store().Add(&e); err != nil {
-		s.jsonResponse(w, AddLedgerEntryResponse{
-			Status: StatusInvalidArgument,
-			Error:  err.Error(),
-		})
+	if req.Entry == nil {
+		http.Error(w, "missing entry in request", http.StatusBadRequest)
 		return
+	}
+	if req.UpdateExisting {
+		// Update
+		if err := s.Store().Update(req.Entry); err != nil {
+			s.jsonResponse(w, UpsertLedgerEntryResponse{
+				Status: StatusInvalidArgument,
+				Error:  err.Error(),
+			})
+			return
+		}
+	} else {
+		// Insert
+		if err := s.Store().Add(req.Entry); err != nil {
+			s.jsonResponse(w, UpsertLedgerEntryResponse{
+				Status: StatusInvalidArgument,
+				Error:  err.Error(),
+			})
+			return
+		}
 	}
 	if err := s.Store().Save(); err != nil {
 		http.Error(w, fmt.Sprintf("Error saving ledger: %v", err), http.StatusInternalServerError)
 		return
 	}
-	s.jsonResponse(w, AddLedgerEntryResponse{
+	s.jsonResponse(w, UpsertLedgerEntryResponse{
 		Status:      StatusOK,
-		SequenceNum: e.SequenceNum,
+		SequenceNum: req.Entry.SequenceNum,
 	})
 }
 
@@ -1381,6 +1428,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handlePositionsMaturing))
 	mux.HandleFunc("GET /kontoo/positions/equity", s.reloadHandler(s.handlePositionsEquity))
 	mux.HandleFunc("GET /kontoo/entries/new", s.reloadHandler(s.handleEntriesNew))
+	mux.HandleFunc("GET /kontoo/entries/edit/{sequenceNum}", s.reloadHandler(s.handleEntriesEdit))
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/assets/edit/{assetID}", s.reloadHandler(s.handleAssetsEdit))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
@@ -1388,7 +1436,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/positions/maturities", jsonHandler(s.handlePositionsMaturities))
-	mux.HandleFunc("POST /kontoo/entries/add", jsonHandler(s.handleEntriesAdd))
+	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
 	mux.HandleFunc("POST /kontoo/entries/assetinfo", jsonHandler(s.handleEntriesAssetInfo))
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))

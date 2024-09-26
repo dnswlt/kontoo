@@ -88,6 +88,17 @@ func (s *Store) ValueDateRange() (min, max Date) {
 	return
 }
 
+func (s *Store) FindEntryBySequenceNum(sequenceNum int64) *LedgerEntry {
+	es := s.ledger.Entries
+	i := sort.Search(len(es), func(i int) bool {
+		return es[i].SequenceNum >= sequenceNum
+	})
+	if i < len(es) && es[i].SequenceNum == sequenceNum {
+		return es[i]
+	}
+	return nil
+}
+
 // EntriesAround returns n ledger entries before date and n entries after date for assetID.
 // If there are less than n entries before or after, guess what, only those are returned.
 func (s *Store) EntriesAround(assetID string, date Date, n int) (before, after []*LedgerEntry) {
@@ -156,12 +167,12 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		s.assets[asset.ID()] = asset
 	}
 	// Validate ledger entries and add to asset-keyed index.
-	seqNums := make(map[int64]bool)
+	var prevSeqNum int64
 	for _, e := range ledger.Entries {
-		if seqNums[e.SequenceNum] {
-			return nil, fmt.Errorf("invalid ledger: duplicate sequence number: %d", e.SequenceNum)
+		if e.SequenceNum <= prevSeqNum {
+			return nil, fmt.Errorf("invalid ledger: invalid or non-monotonic sequence number: %d", e.SequenceNum)
 		}
-		seqNums[e.SequenceNum] = true
+		prevSeqNum = e.SequenceNum
 		if e.AssetID == "" && e.Type.NeedsAssetID() {
 			return nil, fmt.Errorf("invalid ledger: entry #%d has no AssetID", e.SequenceNum)
 		}
@@ -326,7 +337,7 @@ func (a *Asset) matchRef(ref string) bool {
 
 func (s *Store) nextSequenceNum() int64 {
 	if len(s.ledger.Entries) == 0 {
-		return 0
+		return 1
 	}
 	return s.ledger.Entries[len(s.ledger.Entries)-1].SequenceNum + 1
 }
@@ -561,6 +572,28 @@ func (s *Store) Add(e *LedgerEntry) error {
 		return fmt.Errorf("entry validation failed: %w", err)
 	}
 	s.insert(e)
+	return nil
+}
+
+// Updates replaces the ledger entry sequenceNum with the given entry e.
+// In contrast to Add, Update expects e to be entirely valid; it will only
+// lookup assets by ID, the currency must be set, etc.
+func (s *Store) Update(e *LedgerEntry) error {
+	if e.SequenceNum == 0 {
+		return fmt.Errorf("cannot update entry with 0 SequenceNum")
+	}
+	old := s.FindEntryBySequenceNum(e.SequenceNum)
+	if old == nil {
+		return fmt.Errorf("no entry with SequenceNum %d", e.SequenceNum)
+	}
+	if err := s.validateEntry(e); err != nil {
+		return fmt.Errorf("entry validation failed: %w", err)
+	}
+	// Overwrite existing entry's data with new entry, but update Created
+	if e.Created.IsZero() {
+		e.Created = time.Now()
+	}
+	*old = *e
 	return nil
 }
 

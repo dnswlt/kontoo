@@ -39,7 +39,7 @@
     "Entries": [
         {
             "Created": "2024-01-02T00:00:00Z",
-            "SequenceNum": 0,
+            "SequenceNum": 1,
             "ValueDate": "2024-01-02",
             "Type": "ExchangeRate",
             "Currency": "EUR",
@@ -48,7 +48,7 @@
         },
         {
             "Created": "2024-01-01T00:00:00Z",
-            "SequenceNum": 1,
+            "SequenceNum": 2,
             "ValueDate": "2024-01-01",
             "Type": "AccountBalance",
             "AssetID": "DE13123",
@@ -57,7 +57,7 @@
         },
         {
             "Created": "2024-01-02T00:00:00Z",
-            "SequenceNum": 2,
+            "SequenceNum": 3,
             "ValueDate": "2024-01-02",
             "Type": "AssetPurchase",
             "AssetID": "NESN",
@@ -67,7 +67,7 @@
         },
         {
             "Created": "2024-01-02T00:00:00Z",
-            "SequenceNum": 3,
+            "SequenceNum": 4,
             "ValueDate": "2024-01-03",
             "Type": "AssetPurchase",
             "AssetID": "US912810FP85",

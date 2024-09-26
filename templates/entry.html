@@ -7,17 +7,22 @@
 
 <body id="entry-page">
     {{template "nav.html" .}}
-    <h1>Add entry</h1>
+    {{ $update := ne .Entry.SequenceNum 0 }}
+    <h1>{{if $update}}Update entry{{else}}Add entry{{end}}</h1>
     <div id="status-callout" class="callout hidden"></div>
     <div class="horizontal-container">
         <div class="columnar">
-            <form class="columnar" id="entry-form" method="post" action="/kontoo/entries/add" autocomplete="off">
+            <form class="columnar" id="entry-form" method="post" action="/kontoo/entries" autocomplete="off">
+                {{if $update }}
+                <input type="hidden" name="SequenceNum" value="{{.Entry.SequenceNum}}">
+                <input type="hidden" name="Currency" value="{{.Entry.Currency}}">
+                {{end}}
                 <div id="ValueDateField" class="field">
                     <div class="field-label">
                         <label for="ValueDate">Value date</label>
                     </div>
                     <div class="field-value">
-                        <input id="ValueDate" name="ValueDate" value="{{.Date}}" class="datepicker" required>
+                        <input id="ValueDate" name="ValueDate" value="{{.Entry.ValueDate}}" class="datepicker" required>
                     </div>
                 </div>
                 <div id="AssetIDField" class="field">
@@ -25,7 +30,7 @@
                         <label for="AssetID">Asset</label>
                     </div>
                     <div class="field-value">
-                        <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.AssetID}}">
+                        <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.Entry.AssetID}}">
                         <datalist id="AssetList">
                             {{range .Assets}}
                             <option id="{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">
@@ -40,7 +45,8 @@
                         <label for="Type">Type</label>
                     </div>
                     <div class="field-value">
-                        <input id="Type" type="text" name="Type" list="TypeList" required>
+                        <input id="Type" type="text" name="Type" list="TypeList"
+                            value="{{if .Entry.Type}}{{.Entry.Type}}{{end}}" required>
                         <datalist id="TypeList">
                             {{range .EntryTypes}}
                             <option value="{{.}}"></option>
@@ -55,7 +61,8 @@
                         <label for="QuoteCurrency">Quote currency</label>
                     </div>
                     <div class="field-value">
-                        <input id="QuoteCurrency" type="text" name="QuoteCurrency" list="QuoteCurrencies">
+                        <input id="QuoteCurrency" type="text" name="QuoteCurrency" list="QuoteCurrencies"
+                            value="{{.Entry.QuoteCurrency}}">
                         <datalist id="QuoteCurrencies">
                             <option value=""></option>
                             {{range .QuoteCurrencies}}
@@ -71,7 +78,8 @@
                         <label for="Value">Value</label>
                     </div>
                     <div class="field-value">
-                        <input id="Value" name="Value" type="text" class="micros">
+                        <input id="Value" name="Value" type="text" class="micros"
+                            value="{{if .Entry.ValueMicros}}{{.Entry.ValueMicros}}{{end}}">
                     </div>
                 </div>
                 <div id="QuantityField" class="field">
@@ -79,7 +87,8 @@
                         <label for="Quantity">Quantity / Nominal value</label>
                     </div>
                     <div class="field-value">
-                        <input id="Quantity" name="Quantity" type="text" class="micros">
+                        <input id="Quantity" name="Quantity" type="text" class="micros"
+                            value="{{if .Entry.QuantityMicros}}{{.Entry.QuantityMicros}}{{end}}">
                     </div>
                 </div>
                 <div id="PriceField" class="field">
@@ -87,7 +96,8 @@
                         <label for="Price">Price</label>
                     </div>
                     <div class="field-value">
-                        <input id="Price" name="Price" type="text" class="micros">
+                        <input id="Price" name="Price" type="text" class="micros"
+                            value="{{if .Entry.PriceMicros}}{{.Entry.PriceMicros}}{{end}}">
                     </div>
                 </div>
                 <div id="CostField" class="field">
@@ -95,7 +105,8 @@
                         <label for="Cost">Cost</label>
                     </div>
                     <div class="field-value">
-                        <input id="Cost" name="Cost" type="text" class="micros">
+                        <input id="Cost" name="Cost" type="text" class="micros"
+                            value="{{if .Entry.CostMicros}}{{.Entry.CostMicros}}{{end}}">
                     </div>
                 </div>
                 <div id="CommentField" class="field">
@@ -103,7 +114,7 @@
                         <label for="Comment">Comment</label>
                     </div>
                     <div class="field-value">
-                        <textarea rows="3" id="Comment" name="Comment"></textarea>
+                        <textarea rows="3" id="Comment" name="Comment">{{.Entry.Comment}}</textarea>
                     </div>
                 </div>
                 <div class="button-field">

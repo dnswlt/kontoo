@@ -23,6 +23,7 @@
                 <button type="button" class="emoji-button delete" data-seq="{{.SequenceNum}}">
                     <i class="emoji emoji-wastebasket"></i>
                 </button>
+                <a href="/kontoo/entries/edit/{{.SequenceNum}}"><i class="emoji emoji-page-facing-up"></i></a>
             </td>
             <td class="ralign" title="Created: {{ ymdhm .Created }}">{{ .SequenceNum }}</td>
             <td class="nowrap">{{ .ValueDate }}</td>

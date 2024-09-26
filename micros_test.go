@@ -260,3 +260,12 @@ func TestFloatAsMicros(t *testing.T) {
 	}
 
 }
+
+func BenchmarkMicrosString(b *testing.B) {
+	m := Micros(123123_120_001)
+	for i := 0; i < b.N; i++ {
+		if m.String2() != "123123.120001" {
+			b.Fatal("no string")
+		}
+	}
+}

@@ -74,6 +74,8 @@ func (a Micros) Frac(numer, denom Micros) Micros {
 }
 
 // SplitFrac splits m into its integer and fractional parts.
+// If m is negative, both parts will have a negative sign,
+// unless one of them is zero.
 func (m Micros) SplitFrac() (int64, int) {
 	return int64(m / 1_000_000), int(m % 1_000_000)
 }
@@ -181,26 +183,85 @@ func (m Micros) Format(format string) string {
 	return sb.String()
 }
 
+func (m Micros) String() string {
+	if m == math.MinInt64 {
+		return `"-9223372036854.775808"`
+	}
+	sign := ""
+	if m < 0 {
+		sign = "-"
+		m = -m
+	}
+	i, f := m.SplitFrac()
+	if f == 0 {
+		return sign + strconv.FormatInt(i, 10)
+	}
+	if f%10_000 == 0 {
+		return fmt.Sprintf("%s%d.%02d", sign, i, f/10_000)
+	}
+	return fmt.Sprintf("%s%d.%06d", sign, i, f)
+}
+
+// Faster, but uglier.
+func (m Micros) String2() string {
+	if m == math.MinInt64 {
+		return "-9223372036854.775808"
+	}
+	neg := false
+	if m < 0 {
+		neg = true
+		m = -m
+	}
+	i, f := m.SplitFrac()
+	if f == 0 {
+		if neg {
+			i = -i
+		}
+		return strconv.FormatInt(i, 10)
+	}
+
+	// Create a buffer to build the string manually
+	var buf [32]byte
+	pos := len(buf)
+
+	// Fractional part
+	if f%10_000 == 0 {
+		// Two decimal places
+		f /= 10_000
+		for j := 0; j < 2; j++ {
+			pos--
+			buf[pos] = byte(f%10) + '0'
+			f /= 10
+		}
+		pos--
+		buf[pos] = '.'
+	} else {
+		// Six decimal places
+		for j := 0; j < 6; j++ {
+			pos--
+			buf[pos] = byte(f%10) + '0'
+			f /= 10
+		}
+		pos--
+		buf[pos] = '.'
+	}
+	// Integer part
+	for i > 0 {
+		pos--
+		buf[pos] = byte(i%10) + '0'
+		i /= 10
+	}
+	// Prepend sign if needed
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+
+	return string(buf[pos:])
+}
+
 func (m Micros) MarshalJSON() ([]byte, error) {
-	s := func() string {
-		if m == math.MinInt64 {
-			return `"-9223372036854.775808"`
-		}
-		sign := ""
-		if m < 0 {
-			sign = "-"
-			m = -m
-		}
-		i, f := m.SplitFrac()
-		if f == 0 {
-			return fmt.Sprintf(`"%s%d"`, sign, i)
-		}
-		if f%10_000 == 0 {
-			return fmt.Sprintf(`"%s%d.%02d"`, sign, i, f/10_000)
-		}
-		return fmt.Sprintf(`"%s%d.%06d"`, sign, i, f)
-	}()
-	return []byte(s), nil
+	return []byte("\"" + m.String() + "\""), nil
 }
 
 func (m *Micros) UnmarshalJSON(data []byte) error {

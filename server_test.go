@@ -119,7 +119,7 @@ func TestHandleAddEntriesPostWrongContentType(t *testing.T) {
 	srv := setupTestServer(t)
 	defer srv.Close()
 	body := strings.NewReader(`{}`)
-	resp, err := http.Post(srv.URL+"/kontoo/entries/add", "text/plain", body)
+	resp, err := http.Post(srv.URL+"/kontoo/entries", "text/plain", body)
 	if err != nil {
 		t.Fatal("Post failed:", err)
 	}
@@ -151,7 +151,7 @@ func TestHandleGetAllPaths(t *testing.T) {
 		{"/kontoo/csv/upload", http.StatusOK},
 		// Exclude /kontoo/quotes, as that would trigger Y! finance requests.
 		{"/kontoo/positions/timeline", http.StatusMethodNotAllowed},
-		{"/kontoo/entries/add", http.StatusMethodNotAllowed},
+		{"/kontoo/entries", http.StatusMethodNotAllowed},
 		{"/kontoo/entries/delete", http.StatusMethodNotAllowed},
 		{"/kontoo/assets", http.StatusMethodNotAllowed},
 		{"/kontoo/csv", http.StatusMethodNotAllowed},
@@ -178,13 +178,15 @@ func TestHandlePostJson(t *testing.T) {
 		data any
 	}{
 		{
-			path: "/kontoo/entries/add",
-			data: &LedgerEntry{
-				Type:           AssetPurchase,
-				AssetID:        "NESN",
-				ValueDate:      DateVal(2024, 9, 1),
-				QuantityMicros: 1 * UnitValue,
-				PriceMicros:    95 * UnitValue,
+			path: "/kontoo/entries",
+			data: &UpsertLedgerEntryRequest{
+				Entry: &LedgerEntry{
+					Type:           AssetPurchase,
+					AssetID:        "NESN",
+					ValueDate:      DateVal(2024, 9, 1),
+					QuantityMicros: 1 * UnitValue,
+					PriceMicros:    95 * UnitValue,
+				},
 			},
 		},
 		{
