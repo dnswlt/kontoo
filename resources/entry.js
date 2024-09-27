@@ -13,17 +13,26 @@ function inputAutocomplete(event, callback) {
     }
     const datalistId = input.getAttribute('list');
     const options = document.querySelectorAll(`#${datalistId} option`);
-    const assetIds = Array.from(options).map(opt => ({
-        id: opt.value,
-        searchText: (opt.value + " " + opt.textContent).toLowerCase()
-    }));
-    const matches = assetIds.filter(a => a.searchText.includes(token));
-    if (matches.length != 1) {
-        // No unique match
-        return;
+    let id = null;
+    for (const opt of options) {
+        const searchText = (opt.value + " " + opt.textContent).toLowerCase();
+        if (opt.value === input.value) {
+            id = opt.value;
+            break;
+        }
+        if (searchText.includes(token)) {
+            if (id) {
+                // no unique match
+                return;
+            }
+            id = opt.value;
+        }
     }
-    input.value = matches[0].id;
-    callback(matches[0].id);
+    if (!id) {
+        return; // No match
+    }
+    input.value = id;
+    callback(id);
 }
 
 async function fetchAssetInfo(assetId) {
