@@ -170,6 +170,7 @@ async function submitForm(event) {
             const tm = new Date().toLocaleTimeString('en-GB');
             callout(`${tm} - ${update ? "Updated" : "Added"} ledger entry with sequence number ${data.sequenceNum}.`);
             // this.reset();
+            fetchAssetInfo();
         } else {
             calloutStatus(data.status, data.error);
         }

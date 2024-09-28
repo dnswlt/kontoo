@@ -17,12 +17,13 @@ type fieldTerm struct {
 }
 
 type Query struct {
-	raw        string
-	terms      []string
-	fieldTerms []fieldTerm
-	fromDate   Date
-	untilDate  Date
-	descending bool // whether to return results in ascending (default) or descending order
+	raw          string
+	terms        []string
+	fieldTerms   []fieldTerm
+	sequenceNums []int64 // 2-pairs of inclusive ranges of valid sequence numbers. empty means "all numbers".
+	fromDate     Date
+	untilDate    Date
+	descending   bool // whether to return results in ascending (default) or descending order
 	// Maximum number of entries to return per "group" (typically: asset)
 	maxPerGroup int
 }
@@ -51,9 +52,13 @@ var (
 // Well-known field names are: {id, type, name}
 //
 // Date-related filters are special:
+// date:2024 or date:2024-03 or date:2024-03-07
 // year:2024
 // from:2024-03-07
 // until:2024-12-31  (inclusive)
+//
+// SequenceNum for ledger entries is also special:
+// num:3 or num:10-100 or num:10-20,80-90,100  (all inclusive)
 func ParseQuery(rawQuery string) (*Query, error) {
 	rawQuery = strings.TrimSpace(rawQuery)
 	fts := strings.Fields(strings.ToLower(rawQuery))
@@ -71,9 +76,11 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		}
 		sep := strings.IndexAny(ft, ":~")
 		if sep == -1 {
+			// No field given => generic search term across standard fields
 			q.terms = append(q.terms, ft)
 			continue
 		}
+		// Field term
 		start, neg := 0, false
 		if ft[0] == '!' {
 			start, neg = 1, true
@@ -85,6 +92,9 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		}
 		if f == "order" {
 			// Ordering
+			if ft[sep] != ':' {
+				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
+			}
 			switch t {
 			case "asc":
 				q.descending = false
@@ -94,16 +104,44 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				return nil, fmt.Errorf(`invalid ordering %q (must be "asc" or "desc")`, t)
 			}
 		} else if f == "max" {
+			if ft[sep] != ':' {
+				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
+			}
 			// Limits
 			n, err := strconv.Atoi(t)
 			if err != nil || n <= 0 {
 				return nil, fmt.Errorf("invalid argument for max: %q", t)
 			}
 			q.maxPerGroup = n
+		} else if f == "num" {
+			if ft[sep] != ':' {
+				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
+			}
+			rs := strings.Split(t, ",")
+			for _, r := range rs {
+				if i := strings.Index(r, "-"); i >= 0 {
+					n1, err := strconv.ParseInt(r[:i], 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("invalid range for num: %q", r)
+					}
+					n2, err := strconv.ParseInt(r[i+1:], 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("invalid range for num: %q", r)
+					}
+					q.sequenceNums = append(q.sequenceNums, n1, n2)
+				} else {
+					// No "-" => single number
+					n, err := strconv.ParseInt(r, 10, 64)
+					if err != nil {
+						return nil, fmt.Errorf("invalid number for num: %q", r)
+					}
+					q.sequenceNums = append(q.sequenceNums, n, n)
+				}
+			}
 		} else if f == "date" || f == "year" || f == "from" || f == "until" {
 			// Dates
-			if ft[sep] == '~' {
-				return nil, fmt.Errorf("cannot use regexp for time range filter %q", f)
+			if ft[sep] != ':' {
+				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
 			}
 			switch f {
 			case "date":
@@ -211,8 +249,6 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 			fval = e.EntryType().String()
 		case "class":
 			fval = e.AssetType().DisplayName()
-		case "num":
-			fval = strconv.FormatInt(e.SequenceNum(), 10)
 		}
 		if fval == "" {
 			//  Match fails for unsupported (and empty) fields
@@ -235,7 +271,19 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 	if !q.untilDate.IsZero() && q.untilDate.Before(e.ValueDate().Time) {
 		return false
 	}
-
+	// Sequence number
+	if len(q.sequenceNums) > 0 {
+		found := false
+		for i := 1; i < len(q.sequenceNums); i += 2 {
+			if q.sequenceNums[i-1] <= e.SequenceNum() && q.sequenceNums[i] >= e.SequenceNum() {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
 	return true
 }
 

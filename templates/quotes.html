@@ -26,7 +26,7 @@
         <tbody>
             {{range .Entries}}
             <tr>
-                <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .Date}}" data-price="{{.ClosingPrice}}"
+                <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .Date}}" data-price="{{micros .ClosingPrice}}"
                         class="selector" type="checkbox" name="quote" checked></td>
                 <td>{{.AssetID}}</td>
                 <td>{{.AssetName}}</td>
@@ -60,7 +60,7 @@
             {{range .ExchangeRates}}
             <tr>
                 <td><input data-quotecurrency="{{.QuoteCurrency}}" data-basecurrency="{{.BaseCurrency}}" data-date="{{yyyymmdd .Timestamp}}"
-                        data-price="{{.ClosingPrice}}" class="selector" type="checkbox" name="exchangerate" checked>
+                        data-price="{{micros .ClosingPrice}}" class="selector" type="checkbox" name="exchangerate" checked>
                 </td>
                 <td>{{.BaseCurrency}}</td>
                 <td>{{.QuoteCurrency}}</td>

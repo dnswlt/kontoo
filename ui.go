@@ -133,6 +133,9 @@ func commonFuncs() template.FuncMap {
 		"negative": func(m Micros) bool {
 			return m < 0
 		},
+		"micros": func(m Micros) int64 {
+			return int64(m)
+		},
 		"money": func(m Micros) string {
 			return m.Format("()'.2")
 		},

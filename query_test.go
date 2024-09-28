@@ -147,6 +147,102 @@ func TestParseQueryDates(t *testing.T) {
 	}
 }
 
+func TestParseQuerySequenceNum(t *testing.T) {
+	tests := []struct {
+		q       string
+		want    []int64
+		wantErr bool
+	}{
+		{q: "num:1", want: []int64{1, 1}},
+		{q: "num:1,5,9", want: []int64{1, 1, 5, 5, 9, 9}},
+		{q: "num:10-100", want: []int64{10, 100}},
+		{q: "num:10-100,999", want: []int64{10, 100, 999, 999}},
+		{q: "num:10-100-900", wantErr: true},
+		{q: "num~10", wantErr: true},
+		{q: "num:10.0", wantErr: true},
+		{q: "num:", wantErr: true},
+	}
+	for _, tc := range tests {
+		q, err := ParseQuery(tc.q)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%q: wanted err, got none", tc.q)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("Cannot parse query %q: %v", tc.q, err)
+		}
+		if !cmp.Equal(tc.want, q.sequenceNums) {
+			t.Errorf("want sequenceNums %v, got %v", tc.want, q.sequenceNums)
+		}
+	}
+}
+
+func TestQueryMatch(t *testing.T) {
+	r100 := &LedgerEntryRow{
+		E: &LedgerEntry{
+			SequenceNum: 100,
+		},
+	}
+	rFoo := &LedgerEntryRow{
+		E: &LedgerEntry{},
+		A: &Asset{
+			Name:    "Foo the asset",
+			Comment: "bar any regret",
+			ISIN:    "DE123",
+		},
+	}
+	rDate := &LedgerEntryRow{
+		E: &LedgerEntry{
+			ValueDate: DateVal(2024, 1, 1),
+		},
+	}
+	rType := &LedgerEntryRow{
+		E: &LedgerEntry{
+			Type: AssetPurchase,
+		},
+		A: &Asset{
+			Type: Stock,
+		},
+	}
+	tests := []struct {
+		q    string
+		e    *LedgerEntryRow
+		want bool
+	}{
+		{q: "num:1", e: r100, want: false},
+		{q: "num:100", e: r100, want: true},
+		{q: "num:1-50,60-100", e: r100, want: true},
+		{q: "num:1-99,101-110", e: r100, want: false},
+
+		{q: "foo", e: rFoo, want: true},
+		{q: "name:foo", e: rFoo, want: true},
+		{q: "foo bar DE12", e: rFoo, want: true},
+		{q: "foo bar DE124", e: rFoo, want: false},
+
+		{q: "date:2024-01-01", e: rDate, want: true},
+		{q: "date:2024-01", e: rDate, want: true},
+		{q: "date:2024", e: rDate, want: true},
+		{q: "date:2024-01-02", e: rDate, want: false},
+		{q: "from:2023-12-01 until:2024-01-31", e: rDate, want: true},
+
+		{q: "type:purch", e: rType, want: true},
+		{q: "class:stock", e: rType, want: true},
+		{q: "class:bond", e: rType, want: false},
+		{q: "class:equi", e: rType, want: false},
+	}
+	for _, tc := range tests {
+		q, err := ParseQuery(tc.q)
+		if err != nil {
+			t.Fatalf("Cannot parse query %q: %v", tc.q, err)
+		}
+		if got := q.Match(tc.e); got != tc.want {
+			t.Errorf("wrong match result for %q: want %v, got %v", tc.q, tc.want, got)
+		}
+	}
+}
+
 func TestStringFields(t *testing.T) {
 	fs := strings.Fields("   affee  banjo  ")
 	if len(fs) != 2 {

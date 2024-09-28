@@ -365,7 +365,7 @@ var (
 )
 
 // Reports whether c is a valid and known currency.
-func validCurrency(c Currency) bool {
+func ValidCurrency(c Currency) bool {
 	return validCurrencies[c]
 }
 

@@ -57,6 +57,15 @@ func (d Date) Equal(e Date) bool {
 	return d.Time.Equal(e.Time)
 }
 
+// NewLedger returns an empty ledger that uses the given base currency.
+func NewLedger(baseCurrency Currency) *Ledger {
+	return &Ledger{
+		Header: &LedgerHeader{
+			BaseCurrency: baseCurrency,
+		},
+	}
+}
+
 type Store struct {
 	ledger        *Ledger
 	path          string                      // Path to the ledger JSON.
@@ -217,7 +226,7 @@ func LoadStore(path string) (*Store, error) {
 	var l Ledger
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open %s: %w", path, err)
+		return nil, fmt.Errorf("failed to open ledger file: %w", err)
 	}
 	defer f.Close()
 
@@ -452,10 +461,10 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
-	if e.Currency != "" && !validCurrency(e.Currency) {
+	if e.Currency != "" && !ValidCurrency(e.Currency) {
 		return fmt.Errorf("invalid currency: %q", e.Currency)
 	}
-	if e.QuoteCurrency != "" && !validCurrency(e.QuoteCurrency) {
+	if e.QuoteCurrency != "" && !ValidCurrency(e.QuoteCurrency) {
 		return fmt.Errorf("invalid quote currency: %q", e.QuoteCurrency)
 	}
 	if e.Type == ExchangeRate {
@@ -666,7 +675,7 @@ func (s *Store) validateAsset(a *Asset) error {
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
-	if !validCurrency(a.Currency) {
+	if !ValidCurrency(a.Currency) {
 		return fmt.Errorf("unknown or invalid currency %q: must use ISO code (3 uppercase letters)", a.Currency)
 	}
 	if a.IBAN != "" && !validIBAN(a.IBAN) {

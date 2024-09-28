@@ -15,7 +15,7 @@
         {{$checkAll := true}}
         {{range .Entries}}
         <tr>
-            <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{.PriceMicros}}"
+            <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{micros .PriceMicros}}"
                     class="selector" type="checkbox" name="quote" {{if .Preselect}}checked{{end}}></td>
             <td>{{yyyymmdd .ValueDate}}</td>
             <td>{{.AssetID}}</td>
