@@ -1,4 +1,4 @@
-import { registerQuotesSubmit } from "./common";
+import { callout, calloutError, calloutStatus, registerQuotesSubmit } from "./common";
 
 export function init() {
     const dropArea = document.getElementById("upload-drop-area");
@@ -31,25 +31,23 @@ export function init() {
             });
             if (!resp.ok) {
                 const text = await resp.text();
-                console.error("Upload failed: ", resp.status, text);
+                throw new Error(`Upload failed with status ${resp.status}: ${text}`);
             }
             const data = await resp.json();
             handleUploadReponse(data);
         }
         catch (error) {
-            console.error("Error during upload:", error);
+            calloutError(`Error during upload: ${error}`);
         }
     }
 
     function handleUploadReponse(data) {
-        if (!data.innerHTML) {
-            console.log("Upload response contained no innerHTML");
-            return;
+        if (data.innerHTML) {
+            const div = document.getElementById("results-section");
+            div.classList.remove("hidden");
+            div.innerHTML = data.innerHTML;
+            registerQuotesSubmit();
         }
-        const div = document.getElementById("results-section");
-        div.classList.remove("hidden");
-        div.innerHTML = data.innerHTML;
-        registerQuotesSubmit();
         if (data.status === "OK") {
             callout(`Successfully read ${data.numEntries} rows.`);
         } else {

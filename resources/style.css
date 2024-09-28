@@ -200,7 +200,7 @@ input[type="text"].invalid {
     background-color: var(--red-background);
 }
 
-input[type="submit"] {
+.click-button {
     padding: 12px 20px;
     background-color: var(--gray-passive);
     border: none;
@@ -211,7 +211,7 @@ input[type="submit"] {
     transition: background-color 0.3s ease, transform 0.2s ease;
 }
 
-input[type="submit"]:hover {
+.click-button:hover {
     background-color: var(--gray-active);
 }
 

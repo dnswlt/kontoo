@@ -189,11 +189,15 @@ export function init() {
     document.querySelector("#Type").addEventListener("input", function (event) {
         inputAutocomplete(event, entryTypeChange);
     });
-    document.querySelector("#QuoteCurrency").addEventListener("change", function (event) {
-        const ccy = event.target.value;
-        const label = document.querySelector("#ExchangeRateLabel")
-        label.textContent = label.dataset.baseCurrency + "/" + ccy;
-    });
+    const quoteCurrency = document.querySelector("#QuoteCurrency")
+    if (quoteCurrency) {
+        // Might be missing, if ledger only has entries for base currency.
+        quoteCurrency.addEventListener("change", function (event) {
+            const ccy = event.target.value;
+            const label = document.querySelector("#ExchangeRateLabel")
+            label.textContent = label.dataset.baseCurrency + "/" + ccy;
+        });
+    }
     // Adjust UI to preselected AssetID:
     assetIdChange(document.querySelector("#AssetID").value);
     // Update asset info on date change, too:
