@@ -13,6 +13,9 @@
             <th class="ralign">Cost</th>
             <th class="ralign">Qty</th>
             <th class="ralign">Price</th>
+            <th class="ralign tooltip">TVal<span class="tooltiptext">Total accumulated value</span></th>
+            <th class="ralign tooltip">TQty<span class="tooltiptext">Total accumulated quantity</span></th>
+            <th class="ralign tooltip">TCost<span class="tooltiptext">Total accumulated cost</span></th>
             <th>Comment</th>
         </tr>
     </thead>
@@ -44,6 +47,9 @@
             <td class="ralign">{{if nonzero .Cost}}{{ money .Cost }}{{end}}</td>
             <td class="ralign">{{if nonzero .Quantity}}{{ quantity .Quantity }}{{end}}</td>
             <td class="ralign">{{if nonzero .Price}}{{ price .Price }}{{end}}</td>
+            <td class="ralign">{{money .MarketValue }}</td>
+            <td class="ralign">{{if nonzero .TotalQuantity}}{{ quantity .TotalQuantity }}{{end}}</td>
+            <td class="ralign">{{if nonzero .TotalCost}}{{ money .TotalCost }}{{end}}</td>
             <td>{{ .Comment }}</td>
         </tr>
         {{end}}

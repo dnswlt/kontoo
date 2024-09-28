@@ -209,85 +209,6 @@ func (s *Server) reloadTemplates() error {
 	return nil
 }
 
-type LedgerEntryRow struct {
-	E *LedgerEntry
-	A *Asset
-}
-
-func (e *LedgerEntryRow) SequenceNum() int64 {
-	return e.E.SequenceNum
-}
-func (e *LedgerEntryRow) ValueDate() Date {
-	return e.E.ValueDate
-}
-func (e *LedgerEntryRow) Created() time.Time {
-	return e.E.Created
-}
-
-func (e *LedgerEntryRow) EntryType() EntryType {
-	return e.E.Type
-
-}
-func (e *LedgerEntryRow) HasAsset() bool {
-	return e.A != nil
-}
-func (e *LedgerEntryRow) AssetID() string {
-	return e.A.ID()
-}
-func (e *LedgerEntryRow) AssetName() string {
-	return e.A.Name
-}
-func (e *LedgerEntryRow) Label() string {
-	if e.HasAsset() {
-		return e.AssetName()
-	}
-	if e.E.Type == ExchangeRate {
-		return string(e.E.Currency) + "/" + string(e.E.QuoteCurrency)
-	}
-	return ""
-}
-func (e *LedgerEntryRow) AssetType() AssetType {
-	if e.A == nil {
-		return UnspecifiedAssetType
-	}
-	return e.A.Type
-}
-func (e *LedgerEntryRow) Currency() string {
-	return string(e.E.Currency)
-}
-func (e *LedgerEntryRow) Value() Micros {
-	return e.E.ValueMicros
-}
-func (e *LedgerEntryRow) Cost() Micros {
-	return e.E.CostMicros
-}
-func (e *LedgerEntryRow) Quantity() Micros {
-	return e.E.QuantityMicros
-}
-func (e *LedgerEntryRow) Price() Micros {
-	return e.E.PriceMicros
-}
-func (e *LedgerEntryRow) Comment() string {
-	return e.E.Comment
-}
-
-func LedgerEntryRows(s *Store, query *Query) []*LedgerEntryRow {
-	var res []*LedgerEntryRow
-	for _, e := range s.ledger.Entries {
-		r := &LedgerEntryRow{
-			E: e,
-			A: s.assets[e.AssetID],
-		}
-		if !query.Match(r) {
-			continue
-		}
-		res = append(res, r)
-	}
-	query.Sort(res)
-	res = query.LimitGroups(res)
-	return res
-}
-
 type PositionTableRow struct {
 	AssetID   string
 	AssetName string
@@ -552,7 +473,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 }
 
 func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query, snippet bool) error {
-	rows := LedgerEntryRows(s.Store(), query)
+	rows := s.Store().LedgerEntryRows(query)
 	tmpl := "ledger.html"
 	if snippet {
 		tmpl = "snip_ledger_table.html"

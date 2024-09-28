@@ -66,6 +66,87 @@ func NewLedger(baseCurrency Currency) *Ledger {
 	}
 }
 
+type LedgerEntryRow struct {
+	E *LedgerEntry
+	A *Asset
+	// Asset position values after incorporating ledger entry E.
+	marketValue   Micros
+	totalQuantity Micros
+	totalCost     Micros
+}
+
+func (e *LedgerEntryRow) SequenceNum() int64 {
+	return e.E.SequenceNum
+}
+func (e *LedgerEntryRow) ValueDate() Date {
+	return e.E.ValueDate
+}
+func (e *LedgerEntryRow) Created() time.Time {
+	return e.E.Created
+}
+
+func (e *LedgerEntryRow) EntryType() EntryType {
+	return e.E.Type
+
+}
+func (e *LedgerEntryRow) HasAsset() bool {
+	return e.A != nil
+}
+func (e *LedgerEntryRow) AssetID() string {
+	if e.A == nil {
+		return ""
+	}
+	return e.A.ID()
+}
+func (e *LedgerEntryRow) AssetName() string {
+	if e.A == nil {
+		return ""
+	}
+	return e.A.Name
+}
+func (e *LedgerEntryRow) Label() string {
+	if e.HasAsset() {
+		return e.AssetName()
+	}
+	if e.E.Type == ExchangeRate {
+		return string(e.E.Currency) + "/" + string(e.E.QuoteCurrency)
+	}
+	return ""
+}
+func (e *LedgerEntryRow) AssetType() AssetType {
+	if e.A == nil {
+		return UnspecifiedAssetType
+	}
+	return e.A.Type
+}
+func (e *LedgerEntryRow) Currency() string {
+	return string(e.E.Currency)
+}
+func (e *LedgerEntryRow) Value() Micros {
+	return e.E.ValueMicros
+}
+func (e *LedgerEntryRow) Cost() Micros {
+	return e.E.CostMicros
+}
+func (e *LedgerEntryRow) Quantity() Micros {
+	return e.E.QuantityMicros
+}
+func (e *LedgerEntryRow) Price() Micros {
+	return e.E.PriceMicros
+}
+func (e *LedgerEntryRow) Comment() string {
+	return e.E.Comment
+}
+func (e *LedgerEntryRow) MarketValue() Micros {
+	return e.marketValue
+}
+func (e *LedgerEntryRow) TotalQuantity() Micros {
+	return e.totalQuantity
+}
+func (e *LedgerEntryRow) TotalCost() Micros {
+	return e.totalCost
+}
+
 type Store struct {
 	ledger        *Ledger
 	path          string                      // Path to the ledger JSON.
@@ -76,6 +157,55 @@ type Store struct {
 
 func (s *Store) BaseCurrency() Currency {
 	return s.ledger.Header.BaseCurrency
+}
+
+func (s *Store) allEntryRows() []*LedgerEntryRow {
+	// This currently takes <1ms for a 5y ledger. For huge ledgers we might want to cache the calculation.
+	allRows := make([]*LedgerEntryRow, 0, len(s.ledger.Entries))
+	for assetID, es := range s.entries {
+		asset := s.assets[assetID]
+		pos := &AssetPosition{
+			Asset: asset,
+		}
+		var totalCost Micros
+		for _, e := range es {
+			pos.Update(e)
+			totalCost += e.CostMicros
+			allRows = append(allRows, &LedgerEntryRow{
+				A:             asset,
+				E:             e,
+				marketValue:   pos.MarketValue(),
+				totalQuantity: pos.QuantityMicros,
+				totalCost:     totalCost,
+			})
+		}
+	}
+	for _, er := range s.exchangeRates {
+		for _, e := range er {
+			allRows = append(allRows, &LedgerEntryRow{
+				E: e,
+			})
+		}
+	}
+	if len(allRows) != len(s.ledger.Entries) {
+		log.Fatalf("All rows (%d) not equal to number of ledger entries (%d)", len(allRows), len(s.ledger.Entries))
+	}
+	return allRows
+}
+
+// LedgerEntryRows returns all ledger entries matching the given query.
+func (s *Store) LedgerEntryRows(query *Query) []*LedgerEntryRow {
+	// Calculate all positions.
+	var res []*LedgerEntryRow
+	for _, r := range s.allEntryRows() {
+		if !query.Match(r) {
+			continue
+		}
+		res = append(res, r)
+	}
+	query.Sort(res)
+	res = query.LimitGroups(res)
+	return res
 }
 
 // ValueDateRange returns the minimum and maximum value date of any ledger entry in the store.
@@ -907,12 +1037,11 @@ func (a *AssetPositionItem) PurchasePrice() Micros {
 }
 
 // Copy returns a semi-deep copy of p: It shares the pointer to the asset,
-// but all other, position-specific values are copied.
+// but all position-specific values (including Items) are copied.
 func (p *AssetPosition) Copy() *AssetPosition {
 	q := *p
-	items := make([]AssetPositionItem, len(p.Items))
-	copy(items, p.Items)
-	q.Items = items
+	q.Items = make([]AssetPositionItem, len(p.Items))
+	copy(q.Items, p.Items)
 	return &q
 }
 
