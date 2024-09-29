@@ -1,6 +1,7 @@
 package kontoo
 
 import (
+	"fmt"
 	"math"
 	"testing"
 )
@@ -245,10 +246,17 @@ func TestFloatAsMicros(t *testing.T) {
 		{1.0, 1 * UnitValue},
 		{-1.0, -1 * UnitValue},
 		{1e-6, 1},
+		{-1e-6, -1},
 		{-0.5, -500 * Millis},
+		// Very small values vanish to zero
+		{-1e-10, 0},
+		{1e-7, 0},
+		// Values are rounded, not truncated
+		{1.4999995, 1_500_000},
+		{-1.4999995, -1_500_000},
 		// Maximum values
-		{math.MaxInt64 / 1e6, 9223372036854_775807},
-		{-math.MaxInt64 / 1e6, -9223372036854_775808},
+		{math.MaxInt64 / 1_000_000, 9223372036853_999616},
+		{math.MinInt64 / 1_000_000, -9223372036853_999616},
 		// Some imprecision at high (> 53 bit spread) values
 		{287104476244.992576, 287104476244_992544}, // (0xff << 50 + 123456) / 1e6
 	}
@@ -258,7 +266,31 @@ func TestFloatAsMicros(t *testing.T) {
 			t.Errorf("FloatAsMicros(%v): want %v, got %v", tc.f, tc.want, got)
 		}
 	}
+}
 
+func TestFloatAsMicrosPanic(t *testing.T) {
+	tests := []struct {
+		f float64
+	}{
+		{math.Inf(-1)},
+		{math.Inf(1)},
+		{math.Pow(2, 44)},
+
+		{-math.Pow(2, 44)},
+		// Slightly above the limits, expressed in e notation:
+		{9.224e12},
+		{-9.224e12},
+	}
+	for i, tc := range tests {
+		t.Run(fmt.Sprintf("Test_%d", i), func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Errorf("Mul did not panic on overflow for %v", tc.f)
+				}
+			}()
+			FloatAsMicros(tc.f)
+		})
+	}
 }
 
 func BenchmarkMicrosString(b *testing.B) {

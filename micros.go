@@ -86,10 +86,11 @@ func (m Micros) Float() float64 {
 }
 
 func FloatAsMicros(f float64) Micros {
-	if math.Abs(f*1e6) > math.MaxInt64 {
+	// Note: Min/MaxInt / 1_000_000 can be represented in 44 bits.
+	if f < math.MinInt64/1_000_000 || f > math.MaxInt64/1_000_000 {
 		panic(fmt.Sprintf("cannot represent %v as Micros", f))
 	}
-	return Micros(int64(math.Round(f * 1e6)))
+	return Micros(math.Round(f * 1e6))
 }
 
 func (m Micros) Format(format string) string {
