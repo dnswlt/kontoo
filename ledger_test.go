@@ -770,7 +770,7 @@ func TestProfitLossInPeriod(t *testing.T) {
 		{endDate: DateVal(2024, 6, 30), days: 180, wantPL: 107450 * UnitValue, wantRef: 555000 * UnitValue},
 	}
 	for _, tc := range tests {
-		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
+		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate.AddDays(-tc.days), tc.endDate)
 		if err != nil {
 			t.Fatal("ProfitLossInPeriod error:", err)
 		}
@@ -836,7 +836,7 @@ func TestProfitLossInPeriodBuySellSameYear(t *testing.T) {
 		{endDate: DateVal(2025, 12, 31), days: 365, wantPL: 49900 * UnitValue, wantRef: 450050 * UnitValue},
 	}
 	for _, tc := range tests {
-		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate, tc.days)
+		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate.AddDays(-tc.days), tc.endDate)
 		if err != nil {
 			t.Fatal("ProfitLossInPeriod error:", err)
 		}

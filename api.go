@@ -381,6 +381,10 @@ func (d Date) Between(start, end Date) bool {
 	return !start.After(d.Time) && !end.Before(d.Time)
 }
 
+func (d Date) AddDays(n int) Date {
+	return Date{d.AddDate(0, 0, n)}
+}
+
 func (t EntryType) NeedsAssetID() bool {
 	return t != ExchangeRate && t != UnspecifiedEntryType
 }

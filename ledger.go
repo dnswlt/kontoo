@@ -933,11 +933,41 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 	return res
 }
 
-func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (profitLoss, referenceValue Micros, err error) {
-	if days <= 0 {
-		return 0, 0, fmt.Errorf("days(%d) must be positive", days)
+// AssetPurchases returns the difference between asset positions bought and sold in the given period.
+func (s *Store) AssetPurchases(assetId string, startDate, endDate Date) Micros {
+	entries := s.entries[assetId]
+	i := sort.Search(len(entries), func(i int) bool {
+		return !entries[i].ValueDate.Before(startDate.Time)
+	})
+	var sum Micros
+	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
+		e := entries[i]
+		switch e.Type {
+		case AssetPurchase, AssetSale:
+			sum += e.QuantityMicros.Mul(e.PriceMicros) + e.CostMicros
+		}
 	}
-	startDate := Date{endDate.AddDate(0, 0, -days)}
+	return sum
+}
+
+// ProfitLossInPeriod calculates the P&L for the given asset in the given period.
+//
+// As asset quantities might have been bought and sold during the period, there are
+// a few cases to consider:
+//
+//   - The qty was owned throughout the period: P&L is just the
+//     difference between the market value at the beginning and end of the period.
+//   - The qty was bought during the period: P&L is the difference of its
+//     purchasing price (including costs) and its market value at the end of the period.
+//   - The qty was owned at the beginning, but sold during the period:
+//     P&L is the difference between market value at the beginning of the period and
+//     sale price (minus costs).
+//   - The qty was purchased and sold during the period: P&L is the diff of
+//     purchasing price (including costs) and sale price (minus costs).
+func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate Date) (profitLoss, referenceValue Micros, err error) {
+	if startDate.After(endDate.Time) {
+		return 0, 0, fmt.Errorf("startDate %v after endDate %v", startDate, endDate)
+	}
 	p := s.AssetPositionAt(assetId, startDate)
 	if p == nil {
 		return 0, 0, fmt.Errorf("no position found for asset %q", assetId)
@@ -965,21 +995,22 @@ func (s *Store) ProfitLossInPeriod(assetId string, endDate Date, days int) (prof
 				if item.QuantityMicros < qty {
 					// Fully incorporate the item's quantity and continue.
 					if item.ValueDate.After(startDate.Time) {
-						// Item was purchased after startDate: use price at purchase date.
-						purchasePrice += item.QuantityMicros.Mul(item.PriceMicros)
+						// Item was purchased after startDate: use price at purchase date incl. cost.
+						purchasePrice += item.PurchasePrice()
 					} else {
-						// Use price at start date: that's how the item was valuated
-						// at the beginning of the period.
+						// Use price at start date.
+						// Do not include the cost, it was accounted for in a previous period.
 						purchasePrice += item.QuantityMicros.Mul(startPrice)
 					}
 					qty -= item.QuantityMicros
 				} else {
-					// Pro-rate the item's quantity and end the iteration.
-					if item.ValueDate.Before(startDate.Time) {
-						purchasePrice += qty.Mul(startPrice)
-					} else {
+					// Pro-rate the item's quantity and end the iteration (qty has been fully processed).
+					if item.ValueDate.After(startDate.Time) {
 						// Item was purchased after startDate: use price at purchase date and include cost.
 						purchasePrice += qty.Mul(item.PriceMicros) + item.CostMicros
+					} else {
+						// Use price at start date.
+						purchasePrice += qty.Mul(startPrice)
 					}
 					break
 				}

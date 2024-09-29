@@ -234,6 +234,7 @@ type PositionTableRow struct {
 	PriceDate         Date
 	ProfitLoss1Y      Micros
 	ProfitLoss1YBasis Micros // the basis value relative to which the 1Y P&L ratio is calculated.
+	Purchases1Y       Micros
 
 	// Only populated for maturing assets:
 	NominalValue            Micros
@@ -333,7 +334,8 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 		if a.Category() != Equity {
 			continue
 		}
-		profitLoss1Y, profitLoss1YBasis, err := s.ProfitLossInPeriod(a.ID(), date, 365)
+		profitLoss1Y, profitLoss1YBasis, err := s.ProfitLossInPeriod(a.ID(), date.AddDays(-364), date)
+		purchases1Y := s.AssetPurchases(a.ID(), date.AddDays(-364), date)
 		if err != nil {
 			// TODO: remove once we're happy with the results.
 			log.Print("Cannot calculate profit&loss over 1y period:", err)
@@ -352,6 +354,7 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			ProfitLoss1Y:      profitLoss1Y,
 			ProfitLoss1YBasis: profitLoss1YBasis,
 			PurchasePrice:     p.PurchasePrice(),
+			Purchases1Y:       purchases1Y,
 		}
 		res = append(res, row)
 	}
@@ -674,6 +677,10 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 		totalPL1Y += r.ProfitLoss1Y.Div(r.ExchangeRate)
 		totalPL1YBasis += r.ProfitLoss1YBasis.Div(r.ExchangeRate)
 	}
+	var totalProfitLossRatio Micros
+	if totalPurchasePrice != 0 {
+		totalProfitLossRatio = totalProfitLoss.Div(totalPurchasePrice)
+	}
 	var totalProfitLoss1YRatio Micros
 	if totalPL1YBasis != 0 {
 		totalProfitLoss1YRatio = totalPL1Y.Div(totalPL1YBasis)
@@ -688,7 +695,7 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"Value":             totalValue,
 			"PurchasePrice":     totalPurchasePrice,
 			"ProfitLoss":        totalProfitLoss,
-			"ProfitLossRatio":   totalProfitLoss.Div(totalPurchasePrice),
+			"ProfitLossRatio":   totalProfitLossRatio,
 			"ProfitLoss1Y":      totalPL1Y,
 			"ProfitLoss1YRatio": totalProfitLoss1YRatio,
 		},

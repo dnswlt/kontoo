@@ -34,6 +34,9 @@
                 <th class="ralign tooltip">PL1Y%
                     <span class="tooltiptext">Profits & losses (1 year, %)</span>
                 </th>
+                <th class="ralign tooltip">P&Delta;1Y
+                    <span class="tooltiptext">Purchases & sales (1 year)</span>
+                </th>
                 <th class="ralign">Qty</th>
                 <th class="ralign">Price</th>
                 <th class="ralign">Price Date</th>
@@ -69,6 +72,9 @@
                 <td class="ralign">
                     <span class="{{if negative .ProfitLoss1YRatio}}negative-amount{{end}}">{{ percentAcc
                         .ProfitLoss1YRatio }}</span>
+                </td>
+                <td class="ralign">
+                    <span class="{{if negative .Purchases1Y}}negative-amount{{end}}">{{ money .Purchases1Y }}</span>
                 </td>
                 <td class="ralign">{{ quantity .Quantity }}</td>
                 <td class="ralign">{{ price .Price }}</td>

@@ -68,6 +68,26 @@ func TestDateCompare(t *testing.T) {
 	}
 }
 
+func TestDateAddDays(t *testing.T) {
+	tests := []struct {
+		d    Date
+		n    int
+		want Date
+	}{
+		{DateVal(1999, 12, 31), 1, DateVal(2000, 1, 1)},
+		// Add/subtract a year
+		{DateVal(1999, 1, 1), -365, DateVal(1998, 1, 1)},
+		{DateVal(2004, 3, 31), 365, DateVal(2005, 3, 31)},
+		// Leap year 2004
+		{DateVal(2003, 3, 31), 365, DateVal(2004, 3, 30)},
+	}
+	for _, tc := range tests {
+		if got := tc.d.AddDays(tc.n); !got.Equal(tc.want) {
+			t.Errorf("Want: %v, got: %v", tc.want, got)
+		}
+	}
+}
+
 func TestAssetTypeInfos(t *testing.T) {
 	if len(assetTypeInfos) != len(AssetTypeValues()) {
 		t.Fatal("assetTypeInfos has wrong length")

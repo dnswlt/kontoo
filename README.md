@@ -7,6 +7,7 @@ Log transactions of your financial assets and generate reports.
 Make sure you have NodeJS and `npm` installed. Then run
 
 ```bash
+npm install
 npm run build
 go run ./cmd/kontoo serve -debug -ledger ./ledger.json
 ```
