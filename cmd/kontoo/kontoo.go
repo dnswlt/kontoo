@@ -76,8 +76,8 @@ func ProcessServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	port := fs.Int("port", 8084, "The port on which to listen")
 	ledgerPath := fs.String("ledger", "./ledger.json", "Path to the ledger.json file")
-	baseDir := fs.String("base-dir", ".", "Base directory from which static resources are served")
-	debugMode := fs.Bool("debug", false, "Enable debug mode")
+	baseDir := fs.String("base-dir", "", `Directory for static resources ("" to use embedded resources)`)
+	debugMode := fs.Bool("debug", false, "Enable debug mode (e.g. dynamic resource reload)")
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("flag parse error: %w", err)
 	}

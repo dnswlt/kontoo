@@ -2,10 +2,12 @@ package kontoo
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"io/fs"
 	"log"
 	"math"
 	"net/http"
@@ -139,25 +141,49 @@ const (
 
 // END JSON API
 
+// Embedded resources
+// Important: build the dist/ files with npm before building the Go binary!
+
+//go:embed dist resources templates
+var embeddedResources embed.FS
+
+func ListEmbeddedResources() (files []string, err error) {
+	err = fs.WalkDir(embeddedResources, ".", func(path string, d fs.DirEntry, err error) error {
+		if d.IsDir() {
+			return nil
+		}
+		files = append(files, path)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
 type Server struct {
-	addr       string
+	addr       string // Address at which to serve, e.g. "localhost:8084"
 	ledgerPath string
-	baseDir    string
-	templates  *template.Template
-	store      *Store
-	debugMode  bool
+	// Directory from which static resources are read.
+	// Use embedded resources if empty.
+	baseDir   string
+	templates *template.Template
+	store     *Store
+	debugMode bool
 	// Stock quote service
 	yFinance *YFinance
 }
 
 func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
-	expectedFiles := []string{
-		"resources/style.css",
-		"templates/ledger.html",
-	}
-	for _, f := range expectedFiles {
-		if _, err := os.Stat(path.Join(baseDir, f)); err != nil {
-			return nil, fmt.Errorf("invalid baseDir %q: file %q not found: %w", baseDir, f, err)
+	if baseDir != "" {
+		expectedFiles := []string{
+			"resources/style.css",
+			"templates/ledger.html",
+		}
+		for _, f := range expectedFiles {
+			if _, err := os.Stat(path.Join(baseDir, f)); err != nil {
+				return nil, fmt.Errorf("invalid baseDir %q: file %q not found: %w", baseDir, f, err)
+			}
 		}
 	}
 	store, err := LoadStore(ledgerPath)
@@ -199,9 +225,22 @@ func (s *Server) DebugMode(enabled bool) {
 	s.debugMode = enabled
 }
 
+func (s *Server) useEmbedded() bool {
+	return s.baseDir == ""
+}
+
 func (s *Server) reloadTemplates() error {
-	glob := path.Join(s.baseDir, "templates", "*.html")
-	tmpl, err := template.New("__root__").Funcs(commonFuncs()).ParseGlob(glob)
+	var tmpl *template.Template
+	var err error
+	if s.useEmbedded() {
+		// Use embedded templates
+		glob := "templates/*.html"
+		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseFS(embeddedResources, glob)
+	} else {
+		// Use templates from file system.
+		glob := path.Join(s.baseDir, "templates", "*.html")
+		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseGlob(glob)
+	}
 	if err != nil {
 		return fmt.Errorf("could not parse templates: %w", err)
 	}
@@ -1354,11 +1393,18 @@ func jsonHandler(h http.HandlerFunc) http.HandlerFunc {
 
 func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
-	// Serve static resources like CSS from resources/ dir.
-	mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources",
-		http.FileServer(http.Dir(path.Join(s.baseDir, "resources")))))
-	mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo/dist",
-		http.FileServer(http.Dir(path.Join(s.baseDir, "dist")))))
+	// Serve static resources like CSS from resources/ and dist/ dirs.
+	if s.useEmbedded() {
+		mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo",
+			http.FileServer(http.FS(embeddedResources))))
+		mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo",
+			http.FileServer(http.FS(embeddedResources))))
+	} else {
+		mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources",
+			http.FileServer(http.Dir(path.Join(s.baseDir, "resources")))))
+		mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo/dist",
+			http.FileServer(http.Dir(path.Join(s.baseDir, "dist")))))
+	}
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
