@@ -21,6 +21,8 @@
                 <th>Currency</th>
                 <th>Closing price</th>
                 <th>Date</th>
+                <th>Latest avail.</th>
+                <th>&Delta;d</th>
             </tr>
         </thead>
         <tbody>
@@ -34,6 +36,8 @@
                 <td>{{.Currency}}</td>
                 <td>{{money .ClosingPrice}}</td>
                 <td>{{yyyymmdd .Date}}</td>
+                <td>{{if not .LatestDate.IsZero}}{{yyyymmdd .LatestDate}}{{else}}n/a{{end}}</td>
+                <td>{{if not .LatestDate.IsZero}}{{days .DataAge}}{{end}}</td>
             </tr>
             {{end}}
         </tbody>

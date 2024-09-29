@@ -259,27 +259,43 @@ func (s *Store) EntriesAround(assetID string, date Date, n int) (before, after [
 	return
 }
 
+func (s *Store) PriceAt(assetID string, t Date) (Micros, Date, bool) {
+	es := s.entries[assetID]
+	// Find first entry after t.
+	i := sort.Search(len(es), func(i int) bool {
+		return es[i].ValueDate.After(t.Time)
+	})
+	// Scan backwards until first entry containing a price is found.
+	i--
+	for ; i >= 0; i-- {
+		if es[i].PriceMicros != 0 {
+			return es[i].PriceMicros, es[i].ValueDate, true
+		}
+	}
+	return 0, Date{}, false
+}
+
 // ExchangeRateAt returns the BaseCurrency/QuoteCurrency exchange rate at the given time.
 // A value of 1.50 means that for 1 BaseCurrency you get 1.50 QuoteCurrency c.
 // The rate is derived from ExchangeRate entries in the ledger; the most recent rate
 // before t is used and its date is returned as the second return value.
 // If no exchange rate between the given currency c and the base currency is known at t,
-// the result is zero and an error is returned.
-func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, error) {
+// the result is zero and the third return value is false.
+func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, bool) {
 	if c == s.BaseCurrency() {
-		return UnitValue, t, nil
+		return UnitValue, t, true
 	}
 	rs, ok := s.exchangeRates[c]
 	if !ok || len(rs) == 0 {
-		return 0, Date{}, fmt.Errorf("no exchange rates for currency %s", c)
+		return 0, Date{}, false
 	}
 	i := sort.Search(len(rs), func(i int) bool {
 		return rs[i].ValueDate.Compare(t) > 0
 	})
 	if i == 0 {
-		return 0, Date{}, fmt.Errorf("no exchange rates for currency %s at %v", c, t)
+		return 0, Date{}, false
 	}
-	return rs[i-1].PriceMicros, rs[i-1].ValueDate, nil
+	return rs[i-1].PriceMicros, rs[i-1].ValueDate, true
 }
 
 func NewStore(ledger *Ledger, path string) (*Store, error) {

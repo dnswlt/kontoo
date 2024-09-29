@@ -10,6 +10,8 @@
         <th>Price</th>
         <th>Qty (CSV)</th>
         <th>Qty (Ledger)</th>
+        <th>Latest avail.</th>
+        <th>&Delta;d</th>
     </thead>
     <tbody>
         {{$checkAll := true}}
@@ -29,6 +31,8 @@
                 <span class="tooltiptext">Quantities in CSV and ledger differ at this value date</span>
                 {{end}}
             </td>
+            <td>{{if not .PriceDate.IsZero}}{{yyyymmdd .PriceDate}}{{else}}n/a{{end}}</td>
+            <td>{{if not .PriceDate.IsZero}}{{days .DataAge}}{{end}}</td>
             {{$checkAll = and $checkAll .Preselect}}
         </tr>
         {{end}}

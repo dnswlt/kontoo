@@ -554,6 +554,8 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 		Currency     Currency
 		ClosingPrice Micros
 		Date         time.Time
+		LatestDate   Date
+		DataAge      time.Duration
 	}
 	if s.yFinance == nil {
 		// No quotes service, can't show quotes.
@@ -574,6 +576,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 	}
 	for _, h := range hist {
 		a := assetMap[h.Symbol]
+		_, priceDate, _ := s.Store().PriceAt(a.ID(), ToDate(h.Timestamp))
 		entries = append(entries, &QuoteEntry{
 			AssetID:      a.ID(),
 			AssetName:    a.Name,
@@ -581,6 +584,8 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 			Currency:     h.Currency,
 			ClosingPrice: h.ClosingPrice,
 			Date:         h.Timestamp,
+			LatestDate:   priceDate,
+			DataAge:      h.Timestamp.Sub(priceDate.Time),
 		})
 	}
 	quoteCurrencies := s.Store().QuoteCurrencies()
@@ -707,6 +712,8 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, 
 		QuantityImportMicros  Micros
 		QuantityCurrentMicros Micros
 		Preselect             bool
+		PriceDate             Date
+		DataAge               time.Duration
 	}
 	var rows []*Row
 	for _, item := range items {
@@ -723,7 +730,9 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, 
 			Currency:              asset.Currency,
 			QuantityImportMicros:  item.QuantityMicros,
 			QuantityCurrentMicros: p.QuantityMicros,
-			Preselect:             p.LastUpdated.Before(item.ValueDate.Time),
+			Preselect:             p.PriceDate.Before(item.ValueDate.Time),
+			PriceDate:             p.PriceDate,
+			DataAge:               item.ValueDate.Sub(p.PriceDate.Time),
 		})
 	}
 	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", map[string]any{

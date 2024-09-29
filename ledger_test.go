@@ -406,20 +406,82 @@ func TestExchangeRatesAdd(t *testing.T) {
 	}
 }
 
-func TestExchangeRatesLookup(t *testing.T) {
+func TestPriceAt(t *testing.T) {
+	tests := []struct {
+		assetID   string
+		date      Date
+		wantDate  Date
+		wantPrice Micros
+		wantNOK   bool
+	}{
+		{"BMW", DateVal(2023, 1, 1), Date{}, 0, true},
+		{"BMW", DateVal(2024, 1, 1), DateVal(2024, 1, 1), 180 * UnitValue, false},
+		{"BMW", DateVal(2024, 1, 31), DateVal(2024, 1, 1), 180 * UnitValue, false},
+		{"BMW", DateVal(2024, 2, 1), DateVal(2024, 2, 1), 190 * UnitValue, false},
+		{"Mercedes", DateVal(2024, 1, 1), Date{}, 0, true},
+	}
+	entries := []*LedgerEntry{
+		{
+			Type:        AssetPrice,
+			AssetID:     "BMW",
+			Currency:    "EUR",
+			PriceMicros: 180 * UnitValue,
+			ValueDate:   DateVal(2024, 1, 1),
+		},
+		{
+			Type:        AssetPrice,
+			AssetID:     "BMW",
+			Currency:    "EUR",
+			PriceMicros: 190 * UnitValue,
+			ValueDate:   DateVal(2024, 2, 1),
+		},
+		{
+			Type:        DividendPayment,
+			AssetID:     "Mercedes",
+			Currency:    "EUR",
+			ValueMicros: 50 * UnitValue,
+			ValueDate:   DateVal(2024, 1, 1),
+		},
+	}
+	s, err := newTestStore(entries, Stock)
+	if err != nil {
+		t.Fatal("Cannot create store:", err)
+	}
+	for _, tc := range tests {
+		price, date, ok := s.PriceAt(tc.assetID, tc.date)
+		if tc.wantNOK {
+			if ok {
+				t.Errorf("Found unexpected price for %v at %v", tc.assetID, tc.date)
+			}
+			continue
+		}
+		if !ok {
+			t.Errorf("Cannot get price for %v at %v", tc.assetID, tc.date)
+			continue
+		}
+		if price != tc.wantPrice {
+			t.Errorf("Wrong price: %v, want: %v", price, tc.wantPrice)
+		}
+		if !date.Equal(tc.wantDate) {
+			t.Errorf("Wrong date: %v, want: %v", date, tc.wantDate)
+		}
+	}
+}
+
+func TestExchangeRatesAt(t *testing.T) {
 	tests := []struct {
 		date     Date
 		wantDate Date
 		wantRate Micros
-		wantErr  bool
+		wantNOK  bool
 	}{
-		{date: DateVal(2024, 1, 1), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantErr: false},
-		{date: DateVal(2023, 12, 31), wantErr: true},
-		{date: DateVal(2024, 1, 15), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantErr: false},
-		{date: DateVal(2024, 2, 1), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantErr: false},
-		{date: DateVal(2024, 2, 15), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantErr: false},
-		{date: DateVal(2024, 3, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantErr: false},
-		{date: DateVal(2024, 4, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantErr: false},
+		{date: DateVal(2024, 1, 1), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
+		{date: DateVal(2023, 12, 31), wantNOK: true},
+		{date: DateVal(2024, 1, 15), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
+		{date: DateVal(2024, 2, 1), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
+		{date: DateVal(2024, 2, 15), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
+		{date: DateVal(2024, 3, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
+		{date: DateVal(2024, 4, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
 	}
 	l := &Ledger{
 		Header: &LedgerHeader{
@@ -449,15 +511,15 @@ func TestExchangeRatesLookup(t *testing.T) {
 		ValueDate:     DateVal(2024, 3, 1),
 	})
 	for _, tc := range tests {
-		rate, date, err := s.ExchangeRateAt("USD", tc.date)
-		if tc.wantErr {
-			if err == nil {
-				t.Errorf("Want error, got none for %v", tc.date)
+		rate, date, ok := s.ExchangeRateAt("USD", tc.date)
+		if tc.wantNOK {
+			if ok {
+				t.Errorf("Found unexpected rate for %v", tc.date)
 			}
 			continue
 		}
-		if err != nil {
-			t.Errorf("Cannot get exchange rate: %s", err)
+		if !ok {
+			t.Errorf("Cannot get exchange rate for %v", tc.date)
 			continue
 		}
 		if rate != tc.wantRate {
