@@ -34,9 +34,10 @@ type DailyQuote struct {
 }
 
 type YFinance struct {
-	client    *http.Client
-	cookieJar CookieJar
-	cache     *PriceHistoryCache
+	client         *http.Client
+	cookieJar      CookieJar
+	cache          *PriceHistoryCache
+	tracingEnabled bool // Log Y! requests/responses to stdout
 }
 
 type SimpleCookie struct {
@@ -76,6 +77,41 @@ type YFIndicators struct {
 }
 type YFQuote struct {
 	Close []float64 `json:"close"`
+}
+
+// Response for /quoteSummary GET requests:
+type YFQuoteSummaryResponse struct {
+	QuoteSummary *YFQuoteSummary `json:"quoteSummary"`
+}
+type YFQuoteSummary struct {
+	Result []*YFQuoteSummaryResult `json:"result"`
+	Error  *YFError                `json:"error"`
+}
+type YFQuoteSummaryResult struct {
+	QuoteType *YFQuoteType `json:"quoteType"`
+}
+type YFQuoteType struct {
+	GMTOffsetMilliseconds int64  `json:"gmtOffSetMilliseconds"`
+	Symbol                string `json:"symbol"`
+	LongName              string `json:"longName"`
+	TimeZoneFullName      string `json:"timeZoneFullName"`
+}
+
+func (r *YFQuoteSummaryResponse) ExchangeTimezone() *time.Location {
+	if r.QuoteSummary == nil || len(r.QuoteSummary.Result) != 1 {
+		return nil
+	}
+	qt := r.QuoteSummary.Result[0].QuoteType
+	if qt == nil {
+		return nil
+	}
+	if qt.TimeZoneFullName != "" {
+		if loc, err := time.LoadLocation(qt.TimeZoneFullName); err == nil {
+			return loc
+		}
+	}
+	offsetSeconds := int(qt.GMTOffsetMilliseconds / 1_000)
+	return time.FixedZone(fmt.Sprintf("Fixed(%d)", offsetSeconds), offsetSeconds)
 }
 
 const (
@@ -227,6 +263,10 @@ func (yf *YFinance) getCrumb() (string, error) {
 	return string(body), nil
 }
 
+func (yf *YFinance) EnableTracing(enabled bool) {
+	yf.tracingEnabled = enabled
+}
+
 // Get closing exchange rates of multiple currencies for a single day.
 func (yf *YFinance) GetDailyExchangeRates(baseCurrency Currency, quoteCurrencies []Currency, date time.Time) ([]*DailyExchangeRate, error) {
 	// For Y! Finance, exchange rates are just quotes, with a special ticker symbol encoding.
@@ -308,7 +348,9 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 	}
 	req.Header.Add("User-Agent", userAgent)
 	yf.cookieJar.AddCookies(req)
-	log.Printf("Fetching data for %s/%v/%v from %s", symbol, start.Format(time.RFC3339), end.Format(time.RFC3339), url)
+	if yf.tracingEnabled {
+		log.Printf("Fetching price history data for %s/%v/%v: %s", symbol, start.Format(time.RFC3339), end.Format(time.RFC3339), url)
+	}
 	resp, err := yf.client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request to get historic data failed: %w", err)
@@ -321,6 +363,9 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 	var yresp YFChartResponse
 	if err := json.Unmarshal(body, &yresp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal YFChartResponse: %w", err)
+	}
+	if yf.tracingEnabled {
+		log.Print("Response:", string(body))
 	}
 	if yresp.Chart == nil {
 		log.Printf("Unexpected response structure: %s", string(body))
@@ -363,10 +408,10 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 }
 
 // This is the second API that might be useful. Currently not used.
-func PrintQuote(client *http.Client, ticker string, jar *CookieJar) error {
+func (yf *YFinance) FetchQuoteSummary(ticker string) (*YFQuoteSummaryResponse, error) {
 	url, err := url.Parse("https://query2.finance.yahoo.com/v10/finance/quoteSummary/" + ticker)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	q := url.Query()
 	modules := []string{
@@ -376,41 +421,31 @@ func PrintQuote(client *http.Client, ticker string, jar *CookieJar) error {
 		"quoteType",
 	}
 	q.Set("modules", strings.Join(modules, ","))
-	q.Set("crumb", jar.Crumb)
+	q.Set("crumb", yf.cookieJar.Crumb)
 	q.Set("symbol", ticker)
 	q.Set("formatted", "false")
 	q.Set("corsDomain", "finance.yahoo.com")
 	url.RawQuery = q.Encode()
 	req, err := http.NewRequest("GET", url.String(), nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Add("User-Agent", userAgent)
-	for _, c := range jar.Cookies {
-		req.AddCookie(&http.Cookie{
-			Name:  c.Name,
-			Value: c.Value,
-		})
-	}
-	resp, err := client.Do(req)
+	yf.cookieJar.AddCookies(req)
+	resp, err := yf.client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return err
+	var response YFQuoteSummaryResponse
+	if err := json.Unmarshal(body, &response); err != nil {
+		return nil, err
 	}
-	j, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return err
-	}
-	fmt.Println(string(j))
-	return nil
+	return &response, nil
 }
 
 type quoteCacheKey struct {

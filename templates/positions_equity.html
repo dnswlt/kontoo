@@ -155,7 +155,7 @@
                 <th>Type</th>
                 <th class="ralign">Ccy</th>
                 {{ range .QuarterlyReport.Data }}
-                <th class="ralign">{{ .Period.Label }}</th>
+                <th colspan="2" class="zebra ralign">{{ .Period.Label }}</th>
                 {{ end }}
             </tr>
         </thead>
@@ -169,7 +169,12 @@
                 <td>{{ assetType .Type }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 {{ range $data }}
-                <td class="ralign">
+                <td class=" ralign">
+                    <span class="{{if negative (index .ProfitLoss $assetIdx)}}negative-amount{{end}}">
+                        {{ money (index .ProfitLoss $assetIdx) }}
+                    </span>
+                </td>
+                <td class="zebra ralign">
                     <span class="{{if negative (index .ProfitLossRatio $assetIdx)}}negative-amount{{end}}">
                         {{ percentAcc (index .ProfitLossRatio $assetIdx) }}
                     </span>

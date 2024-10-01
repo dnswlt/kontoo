@@ -76,10 +76,13 @@ type assetTypeInfo struct {
 	category        AssetCategory
 	displayName     string
 	validEntryTypes []EntryType
-	// Reports whether the asset type tracks invididual credit/debit
+	// True if the asset type tracks invididual credit/debit
 	// transactions in asset positions. The alternative is to only
 	// track the current balance.
 	useTransactionTracking bool
+	// True if the asset type is "account-like". Should be set to true
+	// for all types for which AccountBalance is a common ledger entry type.
+	isAccountType bool
 }
 
 var (
@@ -136,30 +139,35 @@ var (
 			displayName:            "Fixed deposit",
 			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment, AssetMaturity},
 			useTransactionTracking: true,
+			isAccountType:          true,
 		},
 		{
 			typ:             MoneyMarketAccount,
 			category:        CashEquivalents,
 			displayName:     "Money mkt acct",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			isAccountType:   true,
 		},
 		{
 			typ:             SavingsAccount,
 			category:        CashEquivalents,
 			displayName:     "Savings account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			isAccountType:   true,
 		},
 		{
 			typ:             CheckingAccount,
 			category:        CashEquivalents,
 			displayName:     "Checking account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			isAccountType:   true,
 		},
 		{
 			typ:             BrokerageAccount,
 			category:        CashEquivalents,
 			displayName:     "Brokerage account",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
+			isAccountType:   true,
 		},
 		{
 			typ:                    PensionAccount,
@@ -167,6 +175,7 @@ var (
 			displayName:            "Pension account",
 			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 			useTransactionTracking: true,
+			isAccountType:          true,
 		},
 		{
 			typ:             Commodity,
@@ -199,6 +208,7 @@ var (
 			category:        Debt,
 			displayName:     "Credit card",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			isAccountType:   true,
 		},
 		{
 			typ:             OtherDebt,
@@ -230,6 +240,9 @@ func (t AssetType) DisplayName() string {
 
 func (t AssetType) UseTransactionTracking() bool {
 	return assetTypeInfos[t].useTransactionTracking
+}
+func (t AssetType) IsAccountType() bool {
+	return assetTypeInfos[t].isAccountType
 }
 
 type InterestPaymentSchedule string

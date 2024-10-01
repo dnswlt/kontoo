@@ -16,7 +16,7 @@ function followUrl(item) {
 
 function contextMenuSelected(item) {
     const action = item.dataset.action;
-    if (["add-entry", "show-ledger", "edit-asset"].includes(action)) {
+    if (["add-entry", "update-balance", "show-ledger", "edit-asset"].includes(action)) {
         return followUrl(item);
     }
     if (action === "toggle-chart") {

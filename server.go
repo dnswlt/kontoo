@@ -484,6 +484,14 @@ func newURL(path string, queryParams url.Values) *url.URL {
 }
 
 func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
+	addP := func(q url.Values, key, value string) url.Values {
+		r := make(url.Values)
+		for k, v := range q {
+			r[k] = v
+		}
+		r.Add(key, value)
+		return r
+	}
 	ctx["Today"] = time.Now().Format("2006-01-02")
 	ctx["Now"] = time.Now().Format("2006-01-02 15:04:05")
 	ctx["BaseCurrency"] = s.Store().BaseCurrency()
@@ -495,18 +503,16 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		ctx["Date"] = date
 		ctxQ.Set("date", date)
 	}
-	// Default filter for ledger view: no prices and exchange rates.
-	ctxQ.Set("q", `$main`)
-	ledgerURL := newURL("/kontoo/ledger", ctxQ)
-	ctxQ.Del("q")
 	ctx["Nav"] = map[string]string{
-		"ledger":    ledgerURL.String(),
-		"positions": newURL("/kontoo/positions", ctxQ).String(),
-		"addEntry":  newURL("/kontoo/entries/new", ctxQ).String(),
-		"addAsset":  newURL("/kontoo/assets/new", ctxQ).String(),
-		"editAsset": newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
-		"uploadCSV": newURL("/kontoo/csv/upload", ctxQ).String(),
-		"quotes":    newURL("/kontoo/quotes", ctxQ).String(),
+		// Default filter for ledger view: no prices and exchange rates.
+		"ledger":        newURL("/kontoo/ledger", addP(ctxQ, "q", "$main")).String(),
+		"positions":     newURL("/kontoo/positions", ctxQ).String(),
+		"addEntry":      newURL("/kontoo/entries/new", ctxQ).String(),
+		"updateBalance": newURL("/kontoo/entries/new", addP(ctxQ, "prefill", "balance")).String(),
+		"addAsset":      newURL("/kontoo/assets/new", ctxQ).String(),
+		"editAsset":     newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
+		"uploadCSV":     newURL("/kontoo/csv/upload", ctxQ).String(),
+		"quotes":        newURL("/kontoo/quotes", ctxQ).String(),
 	}
 	return ctx
 }
@@ -549,7 +555,15 @@ func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *Ledger
 		// Populate input field values from query params
 		q := r.URL.Query()
 		entry.AssetID = q.Get("AssetID")
-		if t, err := ParseEntryTypeString(q.Get("Type")); err == nil {
+		if prefill := q.Get("prefill"); prefill != "" {
+			switch prefill {
+			case "balance":
+				entry.Type = AccountBalance
+				if p := s.Store().AssetPositionAt(entry.AssetID, date); p != nil {
+					entry.ValueMicros = p.MarketValue()
+				}
+			}
+		} else if t, err := ParseEntryTypeString(q.Get("Type")); err == nil {
 			entry.Type = t
 		}
 	}
@@ -1425,7 +1439,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))
 	mux.HandleFunc("POST /kontoo/ledger/reload", s.reloadHandler(s.handleLedgerReload))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/kontoo/ledger", http.StatusTemporaryRedirect)
+		http.Redirect(w, r, "/kontoo/positions", http.StatusTemporaryRedirect)
 	})
 	return mux
 }

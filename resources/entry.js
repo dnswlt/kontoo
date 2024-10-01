@@ -74,7 +74,8 @@ function assetIdChange(assetId) {
         return;
     }
     const assetList = document.getElementById("AssetList");
-    const asset = assetList.options[assetId];
+    // All IDs are prefixed with OptionID_ b/c numeric IDs otherwise don't yield a valid DOM ID.
+    const asset = assetList.options["OptionID_"+assetId];
     if (asset == null) {
         // Unknown asset: enable all types
         document.querySelectorAll("#TypeList option").forEach((opt) => {

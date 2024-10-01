@@ -46,6 +46,11 @@
                     <div class="contextmenu-options">
                         <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .AssetID}}'
                             data-action="add-entry">Add entry</div>
+                        {{ if .AssetType.IsAccountType }}
+                        {{/* <!-- Provide option to update balance from current balance for account types only. --> */}}
+                        <div class="contextmenu-option" data-url='{{setp $nav.updateBalance "AssetID" .AssetID}}'
+                            data-action="update-balance">Update balance</div>
+                        {{ end }}
                         <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .AssetID) }}'
                             data-action="show-ledger">Show ledger</div>
                         <div class="contextmenu-option" data-id='{{ .AssetID }}' data-action="toggle-chart">Show/hide in
@@ -56,7 +61,7 @@
                 </td>
                 <td>{{ .AssetID }}</td>
                 <td>{{ assetCategory .AssetType }}</td>
-                <td>{{ assetType .AssetType }}</td> 
+                <td>{{ assetType .AssetType }}</td>
                 <td class="ralign">{{ .Currency }}</td>
                 <td class="ralign tooltip">
                     <span class="{{if negative .Value}}negative-amount{{end}}">{{money .Value}}</span>

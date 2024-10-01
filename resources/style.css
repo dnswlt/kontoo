@@ -46,6 +46,11 @@ table.zebra tr:nth-child(even) {
     background-color: var(--light-table-zebra);
 }
 
+/* For zebra columns */
+td.zebra, th.zebra {
+    background-color: var(--light-table-zebra);
+}
+
 .nowrap {
     white-space: nowrap;
 }
@@ -510,7 +515,7 @@ ul.filter-chips a {
 }
 
 .contextmenu-option {
-    padding: 10px;
+    padding: 6px;
     cursor: pointer;
 }
 

@@ -33,7 +33,7 @@
                         <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.Entry.AssetID}}">
                         <datalist id="AssetList">
                             {{range .Assets}}
-                            <option id="{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">
+                            <option id="OptionID_{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">
                                 {{.Name}}</option>
                             {{end}}
                         </datalist>
