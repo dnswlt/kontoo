@@ -23,19 +23,16 @@
                     <span class="tooltiptext">Purchase price including costs</span>
                 </th>
                 <th class="ralign tooltip">P&amp;L
-                    <span class="tooltiptext">Profits & losses</span>
+                    <span class="tooltiptext">Profit & loss</span>
                 </th>
                 <th class="ralign tooltip">P&amp;L%
-                    <span class="tooltiptext">Profits & losses (%)</span>
+                    <span class="tooltiptext">Profit & loss (%)</span>
                 </th>
                 <th class="ralign tooltip">PL1Y
-                    <span class="tooltiptext">Profits & losses (1 year)</span>
+                    <span class="tooltiptext">Profit & loss (1 year)</span>
                 </th>
                 <th class="ralign tooltip">PL1Y%
-                    <span class="tooltiptext">Profits & losses (1 year, %)</span>
-                </th>
-                <th class="ralign tooltip">P&Delta;1Y
-                    <span class="tooltiptext">Purchases & sales (1 year)</span>
+                    <span class="tooltiptext">Profit & loss (1 year, %)</span>
                 </th>
                 <th class="ralign">Qty</th>
                 <th class="ralign">Price</th>
@@ -73,9 +70,6 @@
                     <span class="{{if negative .ProfitLoss1YRatio}}negative-amount{{end}}">{{ percentAcc
                         .ProfitLoss1YRatio }}</span>
                 </td>
-                <td class="ralign">
-                    <span class="{{if negative .Purchases1Y}}negative-amount{{end}}">{{ money .Purchases1Y }}</span>
-                </td>
                 <td class="ralign">{{ quantity .Quantity }}</td>
                 <td class="ralign">{{ price .Price }}</td>
                 <td>{{ yyyymmdd .PriceDate }}</td>
@@ -108,10 +102,85 @@
                 <td></td>
                 <td></td>
                 <td></td>
-                <td></td>
             </tr>
         </tbody>
     </table>
+
+    {{ if .QuarterlyReport }}
+    <h2>Quarterly Purchases</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Type</th>
+                <th class="ralign">Ccy</th>
+                {{ range .QuarterlyReport.Data }}
+                <th class="ralign">{{ .Period.Label }}</th>
+                {{ end }}
+            </tr>
+        </thead>
+        <tbody>
+            {{ with $q := .QuarterlyReport }}
+            {{ $data := .Data }}
+            {{ range $assetIdx := .AssetsWithPurchases }}
+            <tr>
+                {{ with index $q.Assets . }}
+                <td>{{ .Name }}</td>
+                <td>{{ .ID }}</td>
+                <td>{{ assetType .Type }}</td>
+                <td class="ralign">{{ .Currency }}</td>
+                {{ end }}
+                {{ range $data }}
+                <td class="ralign">
+                    <span class="{{if negative (index .Purchases $assetIdx)}}negative-amount{{end}}">
+                        {{ money (index .Purchases $assetIdx) }}
+                    </span>
+                </td>
+                {{ end }}
+            </tr>
+            {{ end }}
+            {{ end }}
+        </tbody>
+    </table>
+    {{ end }}
+
+    {{ if .QuarterlyReport }}
+    <h2>Quarterly Profit & Loss</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Code</th>
+                <th>Type</th>
+                <th class="ralign">Ccy</th>
+                {{ range .QuarterlyReport.Data }}
+                <th class="ralign">{{ .Period.Label }}</th>
+                {{ end }}
+            </tr>
+        </thead>
+        <tbody>
+            {{ with $q := .QuarterlyReport }}
+            {{ $data := .Data }}
+            {{ range $assetIdx, $asset := .Assets }}
+            <tr>
+                <td>{{ .Name }}</td>
+                <td>{{ .ID }}</td>
+                <td>{{ assetType .Type }}</td>
+                <td class="ralign">{{ .Currency }}</td>
+                {{ range $data }}
+                <td class="ralign">
+                    <span class="{{if negative (index .ProfitLossRatio $assetIdx)}}negative-amount{{end}}">
+                        {{ percentAcc (index .ProfitLossRatio $assetIdx) }}
+                    </span>
+                </td>
+                {{ end }}
+            </tr>
+            {{ end }}
+            {{ end }}
+        </tbody>
+    </table>
+    {{ end }}
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>

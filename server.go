@@ -273,7 +273,6 @@ type PositionTableRow struct {
 	PriceDate         Date
 	ProfitLoss1Y      Micros
 	ProfitLoss1YBasis Micros // the basis value relative to which the 1Y P&L ratio is calculated.
-	Purchases1Y       Micros
 
 	// Only populated for maturing assets:
 	NominalValue            Micros
@@ -361,11 +360,11 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *AssetPosition) int {
-		c := int(a.Asset.Type) - int(b.Asset.Type)
+		c := strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 		if c != 0 {
 			return c
 		}
-		return strings.Compare(a.Name(), b.Name())
+		return strings.Compare(a.ID(), b.ID())
 	})
 	var res []*PositionTableRow
 	for _, p := range positions {
@@ -374,7 +373,6 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			continue
 		}
 		profitLoss1Y, profitLoss1YBasis, err := s.ProfitLossInPeriod(a.ID(), date.AddDays(-364), date)
-		purchases1Y := s.AssetPurchases(a.ID(), date.AddDays(-364), date)
 		if err != nil {
 			// TODO: remove once we're happy with the results.
 			log.Print("Cannot calculate profit&loss over 1y period:", err)
@@ -393,7 +391,6 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			ProfitLoss1Y:      profitLoss1Y,
 			ProfitLoss1YBasis: profitLoss1YBasis,
 			PurchasePrice:     p.PurchasePrice(),
-			Purchases1Y:       purchases1Y,
 		}
 		res = append(res, row)
 	}
@@ -738,8 +735,9 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"ProfitLoss1Y":      totalPL1Y,
 			"ProfitLoss1YRatio": totalProfitLoss1YRatio,
 		},
-		"MonthOptions": monthOptions(*r.URL, date, maxDate),
-		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
+		"MonthOptions":    monthOptions(*r.URL, date, maxDate),
+		"YearOptions":     yearOptions(*r.URL, date, minDate, maxDate),
+		"QuarterlyReport": s.Store().QuarterlyReport(date, 5),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_equity.html", ctx)
 }

@@ -81,7 +81,12 @@ func ProcessServe(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("flag parse error: %w", err)
 	}
-
+	if fs.NArg() != 0 {
+		return fmt.Errorf("extraneous args: %v", strings.Join(fs.Args(), " "))
+	}
+	if *debugMode && *baseDir == "" {
+		return fmt.Errorf("must specify -base-dir if -debug is true")
+	}
 	s, err := kontoo.NewServer(fmt.Sprintf("localhost:%d", *port), *ledgerPath, *baseDir)
 	if err != nil {
 		return err

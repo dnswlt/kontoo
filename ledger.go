@@ -896,7 +896,7 @@ type AssetPosition struct {
 	PriceDate      Date
 	// Items are the constituent parts of the accumulated asset position.
 	// The are stored in chronological order (latest comes last) and can
-	// be used to determine profits and losses (P&L) and to update the
+	// be used to determine profit & loss (P&L) and to update the
 	// accumulated values when an asset is partially sold.
 	Items []AssetPositionItem
 }
@@ -1092,6 +1092,9 @@ func (p *AssetPosition) Copy() *AssetPosition {
 	return &q
 }
 
+func (p *AssetPosition) ID() string {
+	return p.Asset.ID()
+}
 func (p *AssetPosition) Name() string {
 	return p.Asset.Name
 }
