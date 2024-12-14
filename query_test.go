@@ -253,3 +253,103 @@ func TestStringFields(t *testing.T) {
 		t.Errorf("invalid number of fields: %d", len(fs))
 	}
 }
+
+func TestQuerySort(t *testing.T) {
+	asset := func(name, sym string) *Asset {
+		return &Asset{Name: name, TickerSymbol: sym}
+	}
+	tests := []struct {
+		q    string
+		rows []*LedgerEntryRow
+		want []int // indices of the corresponding row in the sorted result
+	}{
+		{
+			q: "order:desc", // Use default labels, but sort in descending order.
+			rows: []*LedgerEntryRow{
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{SequenceNum: 0, ValueDate: DateVal(2024, 1, 1)},
+				},
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{SequenceNum: 1, ValueDate: DateVal(2024, 1, 1)},
+				},
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{SequenceNum: 2, ValueDate: DateVal(2024, 2, 1)},
+				},
+			},
+			want: []int{2, 1, 0},
+		},
+		{
+			q: "order:newest",
+			rows: []*LedgerEntryRow{
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+				},
+				{
+					A: asset("Apple", "AAPL"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+				},
+				{
+					A: asset("Apple", "AAPL"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+				},
+			},
+			want: []int{2, 1, 0},
+		},
+		{
+			q: "order:assetname,-valuedate",
+			rows: []*LedgerEntryRow{
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 3, 1)},
+				},
+				{
+					A: asset("Apple", "AAPL"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+				},
+				{
+					A: asset("Apple", "AAPL"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+				},
+			},
+			want: []int{2, 1, 0},
+		},
+		{
+			q: "order:-assetid",
+			rows: []*LedgerEntryRow{
+				{
+					A: asset("Microsoft", "MSFT"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+				},
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 3, 1)},
+				},
+				{
+					A: asset("Apple", "AAPL"),
+					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+				},
+			},
+			want: []int{0, 1, 2},
+		},
+	}
+	for _, tc := range tests {
+		query, err := ParseQuery(tc.q)
+		if err != nil {
+			t.Fatalf("Cannot parse query %q: %v", tc.q, err)
+		}
+		sorted := make([]*LedgerEntryRow, len(tc.rows))
+		copy(sorted, tc.rows)
+		query.Sort(sorted)
+		for i := 0; i < len(sorted); i++ {
+			wantIdx := tc.want[i]
+			if tc.rows[i] != sorted[wantIdx] {
+				t.Errorf("Wrong order: want item #%d at position %d, but found %v (%v)",
+					i, wantIdx, sorted[wantIdx].Label(), sorted[wantIdx].ValueDate())
+			}
+		}
+	}
+}

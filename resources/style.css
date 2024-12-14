@@ -121,6 +121,9 @@ button.emoji-button {
     font-size: 10pt;
     color: var(--gray-text);
 }
+.footer code {
+    font-size: 9pt;
+}
 
 /* Links */
 a.plain {

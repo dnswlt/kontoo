@@ -1,6 +1,7 @@
 package kontoo
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -16,6 +17,11 @@ type fieldTerm struct {
 	re      *regexp.Regexp
 }
 
+type fieldOrdering struct {
+	name       string
+	descending bool
+}
+
 type Query struct {
 	raw          string
 	terms        []string
@@ -23,7 +29,8 @@ type Query struct {
 	sequenceNums []int64 // 2-pairs of inclusive ranges of valid sequence numbers. empty means "all numbers".
 	fromDate     Date
 	untilDate    Date
-	descending   bool // whether to return results in ascending (default) or descending order
+	descending   bool            // whether to return results in ascending (default) or descending order
+	ordering     []fieldOrdering // Fields to order by. If set, the `descending` field is ignored.
 	// Maximum number of entries to return per "group" (typically: asset)
 	maxPerGroup int
 }
@@ -35,10 +42,81 @@ func (q *Query) Empty() bool {
 var (
 	// Pre-defined query terms that can be referenced through
 	// variable names (e.g., $main).
-	queryVariables = map[string]string{
-		"main": "!type~price|rate",
+	queryVariables = map[string][]string{
+		"main": {"!type~price|rate", "order:newest"},
 	}
 )
+
+var (
+	// Field names by which LedgerEntryRow values can be compared.
+	// Lower-case due to normalization.
+	rowCompareFuncs = map[string]func(a, b *LedgerEntryRow) int{
+		"assetid": func(a, b *LedgerEntryRow) int {
+			return cmp.Compare(a.AssetID(), b.AssetID())
+		},
+		"assetname": func(a, b *LedgerEntryRow) int {
+			return cmp.Compare(a.AssetName(), b.AssetName())
+		},
+		"newest": func(a, b *LedgerEntryRow) int {
+			c := -a.ValueDate().Compare(b.ValueDate())
+			if c != 0 {
+				return c
+			}
+			c = cmp.Compare(a.Label(), b.Label())
+			if c != 0 {
+				return c
+			}
+			return int(a.SequenceNum() - b.SequenceNum())
+		},
+		"num": func(a, b *LedgerEntryRow) int {
+			return int(a.SequenceNum() - b.SequenceNum())
+		},
+		"oldest": func(a, b *LedgerEntryRow) int {
+			c := a.ValueDate().Compare(b.ValueDate())
+			if c != 0 {
+				return c
+			}
+			c = cmp.Compare(a.Label(), b.Label())
+			if c != 0 {
+				return c
+			}
+			return int(a.SequenceNum() - b.SequenceNum())
+		},
+		"valuedate": func(a, b *LedgerEntryRow) int {
+			return a.ValueDate().Compare(b.ValueDate())
+		},
+	}
+)
+
+// parseOrdering parses the given string as a comma-separated
+// list of supported field names to order results by.
+// Each field name can be prefixed with a "-", indicating that the
+// field should be ordered descending.
+func parseOrdering(s string) ([]fieldOrdering, error) {
+	var res []fieldOrdering
+	fs := strings.Split(s, ",")
+	for _, f := range fs {
+		f = strings.TrimSpace(f)
+		if len(f) == 0 || f == "-" {
+			return nil, fmt.Errorf("empty field in ordering list %q", s)
+		}
+		desc := false
+		if f[0] == '-' {
+			f = f[1:]
+			desc = true
+		}
+		if _, ok := rowCompareFuncs[f]; !ok {
+			knownFields := make([]string, 0, len(rowCompareFuncs))
+			for k := range rowCompareFuncs {
+				knownFields = append(knownFields, k)
+			}
+			slices.Sort(knownFields)
+			return nil, fmt.Errorf("invalid field %q (valid: %v)", f, strings.Join(knownFields, ","))
+		}
+		res = append(res, fieldOrdering{name: f, descending: desc})
+	}
+	return res, nil
+}
 
 // ParseQuery parses rawQuery as a query expression.
 // A query expression consists of whitespace-separated query terms.
@@ -61,19 +139,24 @@ var (
 // num:3 or num:10-100 or num:10-20,80-90,100  (all inclusive)
 func ParseQuery(rawQuery string) (*Query, error) {
 	rawQuery = strings.TrimSpace(rawQuery)
-	fts := strings.Fields(strings.ToLower(rawQuery))
 	q := &Query{
 		raw:       rawQuery,
 		untilDate: DateVal(9999, 12, 31),
 	}
-	for _, ft := range fts {
-		if ft[0] == '$' {
-			if repl, ok := queryVariables[ft[1:]]; ok {
-				ft = repl
+	// expand query variables
+	var expandedTerms []string
+	for _, t := range strings.Fields(strings.ToLower(rawQuery)) {
+		if t[0] == '$' {
+			if repl, ok := queryVariables[t[1:]]; ok {
+				expandedTerms = append(expandedTerms, repl...)
 			} else {
-				return nil, fmt.Errorf("undefined variable: %q", ft)
+				return nil, fmt.Errorf("undefined variable: %q", t)
 			}
+		} else {
+			expandedTerms = append(expandedTerms, t)
 		}
+	}
+	for _, ft := range expandedTerms {
 		sep := strings.IndexAny(ft, ":~")
 		if sep == -1 {
 			// No field given => generic search term across standard fields
@@ -92,6 +175,9 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		}
 		if f == "order" {
 			// Ordering
+			if neg {
+				return nil, fmt.Errorf("cannot negate \"order:\"")
+			}
 			if ft[sep] != ':' {
 				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
 			}
@@ -101,7 +187,11 @@ func ParseQuery(rawQuery string) (*Query, error) {
 			case "desc":
 				q.descending = true
 			default:
-				return nil, fmt.Errorf(`invalid ordering %q (must be "asc" or "desc")`, t)
+				var err error
+				q.ordering, err = parseOrdering(t)
+				if err != nil {
+					return nil, fmt.Errorf(`invalid ordering %q: (must be "asc" or "desc" or list of field names): %v`, t, err)
+				}
 			}
 		} else if f == "max" {
 			if ft[sep] != ':' {
@@ -287,19 +377,36 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 	return true
 }
 
-// Sort ledger rows by (ValueDate, SequenceNum), ascending or descending.
+// Sort ledger rows by specified ordering fields or the default (ValueDate, SequenceNum).
 func (q *Query) Sort(rows []*LedgerEntryRow) {
-	ascCmp := func(a, b *LedgerEntryRow) int {
-		c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
-		if c != 0 {
-			return c
+	var cmp func(a *LedgerEntryRow, b *LedgerEntryRow) int
+	if len(q.ordering) == 0 {
+		sgn := 1
+		if q.descending {
+			sgn = -1
 		}
-		return int(a.E.SequenceNum - b.E.SequenceNum)
-	}
-	cmp := ascCmp
-	if q.descending {
+		// No fields specified => order by (ValueDate, SequenceNum).
 		cmp = func(a, b *LedgerEntryRow) int {
-			return -ascCmp(a, b)
+			c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
+			if c != 0 {
+				return sgn * c
+			}
+			return sgn * int(a.E.SequenceNum-b.E.SequenceNum)
+		}
+	} else {
+		// Order by specified ordering fields
+		cmp = func(a, b *LedgerEntryRow) int {
+			for _, o := range q.ordering {
+				c := rowCompareFuncs[o.name](a, b)
+				if c != 0 {
+					if o.descending {
+						return -c
+					}
+					return c
+				}
+			}
+			// tie-breaker: sequence number
+			return int(a.SequenceNum() - b.SequenceNum())
 		}
 	}
 	slices.SortFunc(rows, cmp)
