@@ -5,7 +5,7 @@ import (
 	"flag"
 	"os"
 	"path"
-	"strings"
+	"regexp"
 	"testing"
 	"time"
 )
@@ -113,8 +113,9 @@ func TestGetDailyQuotesFuture(t *testing.T) {
 		t.Fatalf("Failed to create YFinance: %v", err)
 	}
 	future := time.Now().Add(10 * 24 * time.Hour)
-	_, err = yf.GetDailyQuotes([]string{"FOO"}, future)
-	if err == nil || !strings.Contains(err.Error(), "in the past") {
+	_, err = yf.GetDailyQuote("FOO", future)
+	responseRegexp := regexp.MustCompile("in the past|in the future")
+	if err == nil || !responseRegexp.MatchString(err.Error()) {
 		t.Errorf("Expected error for future date, got %q", err)
 	}
 }

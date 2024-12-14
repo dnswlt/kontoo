@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/text/encoding/charmap"
@@ -97,21 +98,15 @@ type YFQuoteType struct {
 	TimeZoneFullName      string `json:"timeZoneFullName"`
 }
 
-func (r *YFQuoteSummaryResponse) ExchangeTimezone() *time.Location {
+func (r *YFQuoteSummaryResponse) ExchangeTimezone() string {
 	if r.QuoteSummary == nil || len(r.QuoteSummary.Result) != 1 {
-		return nil
+		return ""
 	}
 	qt := r.QuoteSummary.Result[0].QuoteType
 	if qt == nil {
-		return nil
+		return ""
 	}
-	if qt.TimeZoneFullName != "" {
-		if loc, err := time.LoadLocation(qt.TimeZoneFullName); err == nil {
-			return loc
-		}
-	}
-	offsetSeconds := int(qt.GMTOffsetMilliseconds / 1_000)
-	return time.FixedZone(fmt.Sprintf("Fixed(%d)", offsetSeconds), offsetSeconds)
+	return qt.TimeZoneFullName
 }
 
 const (
@@ -131,8 +126,10 @@ func (j *CookieJar) AddCookies(req *http.Request) {
 
 func NewYFinance() (*YFinance, error) {
 	yf := &YFinance{
-		client: &http.Client{},
-		cache:  NewPriceHistoryCache(),
+		client: &http.Client{
+			Timeout: 5 * time.Second,
+		},
+		cache: NewPriceHistoryCache(),
 	}
 	if err := yf.LoadCookieJar(); err != nil {
 		if os.IsNotExist(err) || errors.Is(err, ErrCookiesExpired) {
@@ -268,63 +265,47 @@ func (yf *YFinance) EnableTracing(enabled bool) {
 }
 
 // Get closing exchange rates of multiple currencies for a single day.
-func (yf *YFinance) GetDailyExchangeRates(baseCurrency Currency, quoteCurrencies []Currency, date time.Time) ([]*DailyExchangeRate, error) {
+func (yf *YFinance) GetDailyExchangeRate(baseCurrency Currency, quoteCurrency Currency, date time.Time) (*DailyExchangeRate, error) {
 	// For Y! Finance, exchange rates are just quotes, with a special ticker symbol encoding.
-	// We can use GetDailyQuotes to obtain the rates, and just have to transform the output data structure.
-	symbols := make([]string, len(quoteCurrencies))
-	for i, q := range quoteCurrencies {
-		symbols[i] = fmt.Sprintf("%s%s=X", baseCurrency, q)
-	}
-	quotes, err := yf.GetDailyQuotes(symbols, date)
+	// We can use GetDailyQuote to obtain the rates, and just have to transform the output data structure.
+	symbol := fmt.Sprintf("%s%s=X", baseCurrency, quoteCurrency)
+	q, err := yf.GetDailyQuote(symbol, date)
 	if err != nil {
 		return nil, err
 	}
-	res := make([]*DailyExchangeRate, len(quotes))
-	for i, q := range quotes {
-		res[i] = &DailyExchangeRate{
-			BaseCurrency:  baseCurrency,
-			QuoteCurrency: q.Currency,
-			Timestamp:     q.Timestamp,
-			ClosingPrice:  q.ClosingPrice,
-		}
-	}
-	return res, nil
+	return &DailyExchangeRate{
+		BaseCurrency:  baseCurrency,
+		QuoteCurrency: q.Currency,
+		Timestamp:     q.Timestamp,
+		ClosingPrice:  q.ClosingPrice,
+	}, nil
 }
 
-// Get closing prices of multiple stocks for a single day.
-func (yf *YFinance) GetDailyQuotes(symbols []string, date time.Time) ([]*DailyQuote, error) {
-	if date.After(time.Now()) {
-		return nil, fmt.Errorf("date must be in the past, was %v", date)
+// Get closing prices of an equity for a single day.
+func (yf *YFinance) GetDailyQuote(sym string, date time.Time) (*DailyQuote, error) {
+	if time.Since(date) < -24*time.Hour {
+		return nil, fmt.Errorf("date must not be more than 24h in the future, was %v", date)
 	}
-	var result []*DailyQuote
-	var uncached []string
-	for _, sym := range symbols {
-		cached, err := yf.cache.Get(sym, date)
-		if err != nil {
-			if errors.Is(err, ErrNotCached) {
-				uncached = append(uncached, sym)
-				continue
-			}
-			return nil, fmt.Errorf("failed to read from cache: %w", err)
-		}
-		result = append(result, cached)
+	cached, err := yf.cache.Get(sym, date)
+	if err == nil {
+		return cached, nil
+	}
+	if !errors.Is(err, ErrNotCached) {
+		return nil, fmt.Errorf("failed to read from cache: %w", err)
 	}
 	startDate := date.AddDate(0, 0, -8)
-	for _, sym := range uncached {
-		hist, err := yf.FetchPriceHistory(sym, startDate, date)
-		if err != nil {
-			return nil, fmt.Errorf("failed to fetch price history for %s: %w", sym, err)
-		}
-		if len(hist) == 0 {
-			return nil, fmt.Errorf("no results when fetching price history for %s", sym)
-		}
-		err = yf.cache.AddAll(hist, startDate, date)
-		if err != nil {
-			return nil, fmt.Errorf("failed to add price history to cache: %w", err)
-		}
-		result = append(result, hist[len(hist)-1])
+	hist, err := yf.FetchPriceHistory(sym, startDate, date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch price history for %s: %w", sym, err)
 	}
-	return result, nil
+	if len(hist) == 0 {
+		return nil, fmt.Errorf("no results when fetching price history for %s", sym)
+	}
+	err = yf.cache.AddAll(hist, startDate, date)
+	if err != nil {
+		return nil, fmt.Errorf("failed to add price history to cache: %w", err)
+	}
+	return hist[len(hist)-1], nil
 }
 
 func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*DailyQuote, error) {
@@ -407,9 +388,10 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 	return hist, nil
 }
 
-// This is the second API that might be useful. Currently not used.
-func (yf *YFinance) FetchQuoteSummary(ticker string) (*YFQuoteSummaryResponse, error) {
-	url, err := url.Parse("https://query2.finance.yahoo.com/v10/finance/quoteSummary/" + ticker)
+// FetchQuoteSummary fetches quote summary data from Y! This in particular includes
+// the time zone in which the equity's exchange is located.
+func (yf *YFinance) FetchQuoteSummary(symbol string) (*YFQuoteSummaryResponse, error) {
+	url, err := url.Parse("https://query2.finance.yahoo.com/v10/finance/quoteSummary/" + symbol)
 	if err != nil {
 		return nil, err
 	}
@@ -422,7 +404,7 @@ func (yf *YFinance) FetchQuoteSummary(ticker string) (*YFQuoteSummaryResponse, e
 	}
 	q.Set("modules", strings.Join(modules, ","))
 	q.Set("crumb", yf.cookieJar.Crumb)
-	q.Set("symbol", ticker)
+	q.Set("symbol", symbol)
 	q.Set("formatted", "false")
 	q.Set("corsDomain", "finance.yahoo.com")
 	url.RawQuery = q.Encode()
@@ -432,6 +414,9 @@ func (yf *YFinance) FetchQuoteSummary(ticker string) (*YFQuoteSummaryResponse, e
 	}
 	req.Header.Add("User-Agent", userAgent)
 	yf.cookieJar.AddCookies(req)
+	if yf.tracingEnabled {
+		log.Printf("Fetching quote summary data for %s: %s", symbol, url)
+	}
 	resp, err := yf.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -441,11 +426,23 @@ func (yf *YFinance) FetchQuoteSummary(ticker string) (*YFQuoteSummaryResponse, e
 	if err != nil {
 		return nil, err
 	}
-	var response YFQuoteSummaryResponse
-	if err := json.Unmarshal(body, &response); err != nil {
+	if yf.tracingEnabled {
+		log.Print("Response:", string(body))
+	}
+	var yresp YFQuoteSummaryResponse
+	if err := json.Unmarshal(body, &yresp); err != nil {
 		return nil, err
 	}
-	return &response, nil
+	if yresp.QuoteSummary == nil {
+		return nil, fmt.Errorf("YFQuoteSummaryResponse does not contain quote summary: %s", string(body))
+	}
+	if e := yresp.QuoteSummary.Error; e != nil {
+		if e.Code == "Not Found" {
+			return nil, ErrTickerNotFound
+		}
+		return nil, fmt.Errorf("YFQuoteSummaryResponse contains an error: (code=%q, description=%q)", e.Code, e.Description)
+	}
+	return &yresp, nil
 }
 
 type quoteCacheKey struct {
@@ -458,6 +455,11 @@ type quoteCacheValue struct {
 }
 type PriceHistoryCache struct {
 	entries map[quoteCacheKey]quoteCacheValue
+	// Access to the cache (both read and write) is internally synchronized
+	// using this mutex. Concurrent updates from the quote service are
+	// easily possible (e.g. user Ctrl-R's the page multiple times) and did
+	// occur in practice (resulting in "fatal error: concurrent map writes").
+	mut sync.Mutex
 }
 
 func NewPriceHistoryCache() *PriceHistoryCache {
@@ -467,6 +469,8 @@ func NewPriceHistoryCache() *PriceHistoryCache {
 }
 
 func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) error {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	if start.After(end) {
 		return fmt.Errorf("start after end: %v > %v", start, end)
 	}
@@ -509,6 +513,8 @@ func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) e
 }
 
 func (c *PriceHistoryCache) Get(symbol string, date time.Time) (*DailyQuote, error) {
+	c.mut.Lock()
+	defer c.mut.Unlock()
 	key := quoteCacheKey{
 		date:   date.Format("2006-01-02"),
 		symbol: symbol,

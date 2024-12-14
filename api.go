@@ -277,9 +277,11 @@ type Asset struct {
 	// More ticker symbols, to get stock quotes online.
 	// Keyed by quote service. Not used as ID.
 	QuoteServiceSymbols map[string]string `json:",omitempty"`
-	CustomID            string            `json:",omitempty"`
-	Currency            Currency
-	Comment             string `json:",omitempty"`
+	// (Optional) time zone in which the main exchange trading the equity is located.
+	ExchangeTimezone string `json:",omitempty"`
+	CustomID         string `json:",omitempty"`
+	Currency         Currency
+	Comment          string `json:",omitempty"`
 }
 
 //go:generate go-enum -type=EntryType -string -json -all=false

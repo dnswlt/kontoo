@@ -20,7 +20,7 @@
                 <th>Ticker symbol</th>
                 <th>Currency</th>
                 <th>Closing price</th>
-                <th>Date</th>
+                <th>Quote Timestamp</th>
                 <th>Latest avail.</th>
                 <th>&Delta;d</th>
             </tr>
@@ -35,7 +35,7 @@
                 <td><a href="https://finance.yahoo.com/quote/{{.Symbol}}" target="_blank">{{.Symbol}}</a></td>
                 <td>{{.Currency}}</td>
                 <td>{{money .ClosingPrice}}</td>
-                <td>{{yyyymmdd .Date}}</td>
+                <td>{{isodate .Date}}</td>
                 <td>{{if not .LatestDate.IsZero}}{{yyyymmdd .LatestDate}}{{else}}n/a{{end}}</td>
                 <td>{{if not .LatestDate.IsZero}}{{days .DataAge}}{{end}}</td>
             </tr>
@@ -44,7 +44,13 @@
     </table>
     {{else}}
     <div>
-        No assets have a y!finance (YF) ticker symbol. Consider adding them to enable the online quote service.
+    {{if .Error}}
+        <p>There was a problem getting prices from the quote service:</p>
+        <p>{{.Error}}</p>
+    {{else}}
+        No assets have a y!finance (YF) ticker symbol.
+        Consider adding YF ticket symbols to enable the online quote service.
+    {{end}}
     </div>
     {{end}}
 
@@ -57,7 +63,7 @@
                 <th>Base currency</th>
                 <th>Quote currency</th>
                 <th>Closing price</th>
-                <th>Date</th>
+                <th>Quote Timestamp</th>
             </tr>
         </thead>
         <tbody>
@@ -69,7 +75,7 @@
                 <td>{{.BaseCurrency}}</td>
                 <td>{{.QuoteCurrency}}</td>
                 <td>{{price .ClosingPrice}}</td>
-                <td>{{yyyymmdd .Timestamp}}</td>
+                <td>{{isodate .Timestamp}}</td>
             </tr>
             {{end}}
             <tr>

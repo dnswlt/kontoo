@@ -11,6 +11,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -153,10 +154,32 @@ type Store struct {
 	assets        map[string]*Asset           // Maps the ledger's assets by ID.
 	entries       map[string][]*LedgerEntry   // Entries by asset ID, ordered chronologically.
 	exchangeRates map[Currency][]*LedgerEntry // Exchange rates from Base Currency to other currencies, ordered chronologically
+	// Cache for already seen time zone names.
+	// Time zones are checked during ledger validation, so we don't want to re-load them from disk for each asset.
+	timezones map[string]*time.Location
+	mut       sync.Mutex
 }
 
 func (s *Store) BaseCurrency() Currency {
 	return s.ledger.Header.BaseCurrency
+}
+
+func (s *Store) timezone(tz string) (*time.Location, error) {
+	s.mut.Lock()
+	defer s.mut.Unlock()
+	if tz == "" {
+		// Default time zone: NYC, the center of the financial world.
+		tz = "America/New_York"
+	}
+	if loc, ok := s.timezones[tz]; ok {
+		return loc, nil
+	}
+	loc, err := time.LoadLocation(tz)
+	if err != nil {
+		return nil, fmt.Errorf("invalid exchange timezone: %w", err)
+	}
+	s.timezones[tz] = loc
+	return loc, nil
 }
 
 func (s *Store) allEntryRows() []*LedgerEntryRow {
@@ -309,6 +332,7 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		entries:       make(map[string][]*LedgerEntry),
 		assets:        make(map[string]*Asset),
 		exchangeRates: make(map[Currency][]*LedgerEntry),
+		timezones:     make(map[string]*time.Location),
 	}
 	// Build asset index.
 	for _, asset := range ledger.Assets {
@@ -826,6 +850,11 @@ func (s *Store) validateAsset(a *Asset) error {
 	}
 	if a.IBAN != "" && !validIBAN(a.IBAN) {
 		return fmt.Errorf("invalid IBAN: %q", a.IBAN)
+	}
+	if a.ExchangeTimezone != "" {
+		if _, err := s.timezone(a.ExchangeTimezone); err != nil {
+			return fmt.Errorf("invalid ExchangeTimezone: %v", err)
+		}
 	}
 	return nil
 }

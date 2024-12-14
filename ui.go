@@ -167,6 +167,9 @@ func commonFuncs() template.FuncMap {
 		"ymdhm": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04")
 		},
+		"isodate": func(t time.Time) string {
+			return t.Format("2006-01-02 15:04:05-07:00")
+		},
 		"assetType": func(t AssetType) string {
 			return t.DisplayName()
 		},

@@ -70,16 +70,18 @@ func main() {
 		for _, sym := range symbols {
 			summary, err := yf.FetchQuoteSummary(sym)
 			if err != nil {
-				log.Fatal("Cannot get quote summary:", err)
+				log.Fatal("Cannot get quote summary: ", err)
 			}
 			startTime := startDate.Time
 			endTime := startDate.Time
-			if tz := summary.ExchangeTimezone(); tz != nil {
-				log.Printf("Updating time range to time zone %s", tz.String())
-				y, m, d := startDate.Time.Date()
-				startTime = time.Date(y, m, d, 7, 0, 0, 0, tz)
-				y, m, d = endDate.Time.Date()
-				endTime = time.Date(y, m, d, 18, 0, 0, 0, tz)
+			if tz := summary.ExchangeTimezone(); tz != "" {
+				if loc, err := time.LoadLocation(tz); err == nil {
+					log.Printf("Updating time range to time zone %s", loc.String())
+					y, m, d := startDate.Time.Date()
+					startTime = time.Date(y, m, d, 7, 0, 0, 0, loc)
+					y, m, d = endDate.Time.Date()
+					endTime = time.Date(y, m, d, 18, 0, 0, 0, loc)
+				}
 			}
 			hist, err := yf.FetchPriceHistory(sym, startTime, endTime)
 			if err != nil {
@@ -110,7 +112,9 @@ func main() {
 	if *currenciesStr != "" {
 		currencies := strings.Split(*currenciesStr, ",")
 		for _, ccy := range currencies {
-			hist, err := yf.FetchPriceHistory(fmt.Sprintf("%s%s=X", *baseCurrency, ccy), startDate.Time, endDate.Time)
+			sym := fmt.Sprintf("%s%s=X", *baseCurrency, ccy)
+			yf.FetchQuoteSummary(sym)
+			hist, err := yf.FetchPriceHistory(sym, startDate.Time, endDate.Time)
 			if err != nil {
 				log.Fatalf("Cannot get history: %v", err)
 			}

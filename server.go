@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -223,6 +224,9 @@ func (s *Server) ReloadStore() error {
 
 func (s *Server) DebugMode(enabled bool) {
 	s.debugMode = enabled
+	if s.yFinance != nil {
+		s.yFinance.EnableTracing(enabled)
+	}
 }
 
 func (s *Server) useEmbedded() bool {
@@ -599,7 +603,7 @@ func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *Asset)
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
 
-func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Time) error {
+func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) error {
 	type QuoteEntry struct {
 		AssetID      string
 		AssetName    string
@@ -614,25 +618,32 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 		// No quotes service, can't show quotes.
 		return s.templates.ExecuteTemplate(w, "quotes.html", s.addCommonCtx(r, map[string]any{}))
 	}
-	var entries []*QuoteEntry
-	var exchangeRates []*DailyExchangeRate
 	assets := s.Store().FindAssetsForQuoteService("YF")
-	symbols := make([]string, len(assets))
-	assetMap := make(map[string]*Asset)
-	for i, a := range assets {
-		symbols[i] = a.QuoteServiceSymbols["YF"]
-		assetMap[a.QuoteServiceSymbols["YF"]] = a
-	}
-	hist, err := s.yFinance.GetDailyQuotes(symbols, date)
-	if err != nil {
-		log.Printf("Failed to get price history: %v", err)
-	}
-	for _, h := range hist {
-		a := assetMap[h.Symbol]
-		_, priceDate, _ := s.Store().PriceAt(a.ID(), ToDate(h.Timestamp))
+	entries := make([]*QuoteEntry, 0, len(assets))
+	var errorMessage string
+	for _, asset := range assets {
+		symbol := asset.QuoteServiceSymbols["YF"]
+		loc, err := s.Store().timezone(asset.ExchangeTimezone)
+		if err != nil {
+			log.Printf("Cannot get exchange timezone for asset %s: %v", asset.ID(), err)
+			continue
+		}
+		// Request prices at 18:00 (EOD) of the requested date in the relevant time zone.
+		t := time.Date(date.Year(), date.Month(), date.Day(), 18, 0, 0, 0, loc)
+		h, err := s.yFinance.GetDailyQuote(symbol, t)
+		if err != nil {
+			log.Printf("Failed to get price history: %v", err)
+			var connErr *url.Error
+			if errors.As(err, &connErr) {
+				errorMessage = err.Error()
+				break // Give up on network issues
+			}
+			continue
+		}
+		_, priceDate, _ := s.Store().PriceAt(asset.ID(), ToDate(h.Timestamp))
 		entries = append(entries, &QuoteEntry{
-			AssetID:      a.ID(),
-			AssetName:    a.Name,
+			AssetID:      asset.ID(),
+			AssetName:    asset.Name,
 			Symbol:       h.Symbol,
 			Currency:     h.Currency,
 			ClosingPrice: h.ClosingPrice,
@@ -642,16 +653,27 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date time.Ti
 		})
 	}
 	quoteCurrencies := s.Store().QuoteCurrencies()
-	if len(quoteCurrencies) > 0 {
-		var err error
-		exchangeRates, err = s.yFinance.GetDailyExchangeRates(s.Store().BaseCurrency(), quoteCurrencies, date)
-		if err != nil {
-			log.Printf("Failed to get exchange rates: %v", err)
+	exchangeRates := make([]*DailyExchangeRate, 0, len(quoteCurrencies))
+	if errorMessage == "" {
+		for _, qc := range quoteCurrencies {
+			// Use UTC here on purpose: exchange rates in Y! are Europe/London based anyway.
+			rate, err := s.yFinance.GetDailyExchangeRate(s.Store().BaseCurrency(), qc, date.Time)
+			if err != nil {
+				log.Printf("Failed to get exchange rate: %v", err)
+				var connErr *url.Error
+				if errors.As(err, &connErr) {
+					errorMessage = err.Error()
+					break // Give up on network issues
+				}
+				continue
+			}
+			exchangeRates = append(exchangeRates, rate)
 		}
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"Entries":       entries,
 		"ExchangeRates": exchangeRates,
+		"Error":         errorMessage,
 	})
 	return s.templates.ExecuteTemplate(w, "quotes.html", ctx)
 }
@@ -907,7 +929,7 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := s.renderQuotesTemplate(&buf, r, date.Time); err != nil {
+	if err := s.renderQuotesTemplate(&buf, r, date); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -1270,6 +1292,16 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	if req.Asset == nil {
 		http.Error(w, "missing asset", http.StatusBadRequest)
 		return
+	}
+	// Try to retrieve timezone for quote service symbol, if it is not already set.
+	if len(req.Asset.QuoteServiceSymbols) > 0 && req.Asset.QuoteServiceSymbols["YF"] != "" {
+		if s.yFinance != nil && req.Asset.ExchangeTimezone == "" {
+			qs, err := s.yFinance.FetchQuoteSummary(req.Asset.QuoteServiceSymbols["YF"])
+			if err == nil {
+				log.Printf("Adding timezone %q to asset %q", qs.ExchangeTimezone(), req.Asset.Name)
+				req.Asset.ExchangeTimezone = qs.ExchangeTimezone()
+			}
+		}
 	}
 	if req.AssetID == "" {
 		// Insert
