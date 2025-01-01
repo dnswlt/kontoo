@@ -22,6 +22,20 @@
     --light-table-zebra: #f0f0f0;
 }
 
+@media print {
+
+    /* Used to exclude menus, navigation bars, etc. from prints. */
+    .no-print {
+        display: none;
+    }
+
+    /* Ensure subtotal and other table row background colors are printed. */
+    tr {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
 body {
     font-family: "Open Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
     font-size: 11pt;
@@ -47,7 +61,8 @@ table.zebra tr:nth-child(even) {
 }
 
 /* For zebra columns */
-td.zebra, th.zebra {
+td.zebra,
+th.zebra {
     background-color: var(--light-table-zebra);
 }
 
@@ -121,6 +136,7 @@ button.emoji-button {
     font-size: 10pt;
     color: var(--gray-text);
 }
+
 .footer code {
     font-size: 9pt;
 }
@@ -327,6 +343,7 @@ input.filter {
     background-color: var(--yellow-background);
     text-align: center;
 }
+
 #asset-info th {
     font-weight: normal;
     background-color: var(--light-table-zebra);

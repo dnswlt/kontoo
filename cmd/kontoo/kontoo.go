@@ -113,7 +113,8 @@ func main() {
 	case "create":
 		err = ProcessCreate(os.Args[2:])
 	default:
-		err = fmt.Errorf("invalid command: %q", os.Args[1])
+		err = fmt.Errorf("invalid command: %q (valid values are [%s])",
+			os.Args[1], strings.Join(commands, ", "))
 	}
 	if err != nil && !errors.Is(err, flag.ErrHelp) {
 		fmt.Fprintf(os.Stderr, "%v\n", err)

@@ -165,7 +165,7 @@ var (
 		{
 			typ:             BrokerageAccount,
 			category:        CashEquivalents,
-			displayName:     "Brokerage account",
+			displayName:     "Brokerage acct",
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance, InterestPayment},
 			isAccountType:   true,
 		},
