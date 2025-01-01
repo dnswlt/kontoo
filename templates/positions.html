@@ -7,7 +7,7 @@
 
 <body id="positions-page">
     {{template "nav.html" .}}
-    <h1>Positions</h1>
+    <h1>Positions &middot;  {{.Date}}</h1>
     {{template "positions_subnav.html" .}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
