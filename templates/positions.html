@@ -34,7 +34,7 @@
                 <th>Type</th>
                 <th>Currency</th>
                 <th>Mkt value</th>
-                <th><!-- Warnings --></th>
+                <th class="no-print low-key" title="Days since last ledger entry (only displayed if &gt;7)">&Delta;d</th>
             </tr>
         </thead>
         <tbody>
@@ -69,10 +69,13 @@
                     <span class="tooltiptext">{{range .Notes}}<p>{{.}}</p>{{end}}</span>
                     {{end}}
                 </td>
-                <td class="tooltip">
+                <td class="no-print low-key">
+                    {{if gt (days .DataAge) 7}}
+                    {{days .DataAge}}
+                    {{end}}
+
                     {{if gt (days .DataAge) 35}}
                     <i class="emoji emoji-warning"></i>
-                    <span class="tooltiptext">Data is {{days .DataAge}} days old.</span>
                     {{end}}
                 </td>
             </tr>

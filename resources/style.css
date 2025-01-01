@@ -131,6 +131,12 @@ button.emoji-button {
     outline: none;
 }
 
+/* Text elements that are "low key", i.e. inconspicuous. */
+
+.low-key {
+    color: var(--gray-text);
+}
+
 .footer {
     font-style: italic;
     font-size: 10pt;
