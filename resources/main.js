@@ -36,6 +36,10 @@ async function initUploadCsvPage() {
     const uploadCsv = await import('./upload_csv.js');
     uploadCsv.init();
 }
+async function initCalcPage() {
+    const calc = await import('./calc.js');
+    calc.init();
+}
 
 // Validate that input contains a decimal number with an optional '%' at the end.
 // (I.e., a string that can be JSON-parsed as Micros.)
@@ -100,6 +104,9 @@ switch (document.body.id) {
         break;
     case "upload-csv-page":
         initUploadCsvPage();
+        break;
+    case "calc-page":
+        initCalcPage();
         break;
     default:
         console.error(`Page with body id "${document.body.id}" not handled in main.js`);

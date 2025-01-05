@@ -132,6 +132,21 @@ type LedgerAssetInfoResponse struct {
 	InnerHTML string     `json:"innerHTML"`
 }
 
+type CalculateIRRRequest struct {
+	PurchasePrice Micros `json:"purchasePrice"`
+	PurchaseDate  Date   `json:"purchaseDate"`
+	MaturityDate  Date   `json:"maturityDate"`
+	InterestRate  Micros `json:"interestRate"`
+	InterestDate  *Date  `json:"interestDate"` // Optional
+}
+
+type CalculateIRRResponse struct {
+	Status       StatusCode `json:"status"`
+	Error        string     `json:"error,omitempty"`
+	IRRMicros    int64      `json:"irrMicros"`
+	IRRFormatted string     `json:"irrFormatted"`
+}
+
 type StatusCode string
 
 const (
@@ -517,6 +532,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		"editAsset":     newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
 		"uploadCSV":     newURL("/kontoo/csv/upload", ctxQ).String(),
 		"quotes":        newURL("/kontoo/quotes", ctxQ).String(),
+		"calc":          newURL("/kontoo/calc", ctxQ).String(),
 	}
 	return ctx
 }
@@ -780,6 +796,10 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 
 func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
 	return s.templates.ExecuteTemplate(w, "upload_csv.html", s.addCommonCtx(r, map[string]any{}))
+}
+
+func (s *Server) renderCalcTemplate(w io.Writer, r *http.Request) error {
+	return s.templates.ExecuteTemplate(w, "calc.html", s.addCommonCtx(r, map[string]any{}))
 }
 
 func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, store *Store) error {
@@ -1107,6 +1127,40 @@ func (s *Server) handlePositionsEquity(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html")
 	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleCalc(w http.ResponseWriter, r *http.Request) {
+	var buf bytes.Buffer
+	err := s.renderCalcTemplate(&buf, r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+	}
+	w.Header().Set("Content-Type", "text/html")
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
+	var req CalculateIRRRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	if req.PurchaseDate.IsZero() || req.MaturityDate.IsZero() {
+		s.jsonResponse(w, CalculateIRRResponse{
+			Status: StatusInvalidArgument,
+			Error:  "Purchase date and maturity date must not be empty",
+		})
+		return
+	}
+	price := req.PurchasePrice
+	interestRate := req.InterestRate
+
+	irrMicros := irrWithInterest(price, interestRate, req.PurchaseDate, req.MaturityDate)
+	s.jsonResponse(w, CalculateIRRResponse{
+		Status:       StatusOK,
+		IRRMicros:    int64(irrMicros),
+		IRRFormatted: irrMicros.Format("()'.2%"),
+	})
 }
 
 func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
@@ -1459,6 +1513,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/assets/edit/{assetID}", s.reloadHandler(s.handleAssetsEdit))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
+	mux.HandleFunc("GET /kontoo/calc", s.reloadHandler(s.handleCalc))
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
@@ -1469,6 +1524,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/assets", jsonHandler(s.handleAssetsPost))
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))
+	mux.HandleFunc("POST /kontoo/calculate", jsonHandler(s.handleCalculate))
 	mux.HandleFunc("POST /kontoo/ledger/reload", s.reloadHandler(s.handleLedgerReload))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/positions", http.StatusTemporaryRedirect)

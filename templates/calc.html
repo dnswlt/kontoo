@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    {{template "head_common.html"}}
+</head>
+
+<body id="calc-page">
+    {{template "nav.html" .}}
+    <h1>Calculator</h1>
+    <div id="status-callout" class="callout hidden"></div>
+
+    <h2>Internal rate of return &middot; IRR</h2>
+
+    <div>
+        <div class="field">
+            <div class="field-label">
+                <label for="PurchasePrice">Purchase price</label>
+            </div>
+            <div class="field-value">
+                <input id="PurchasePrice" name="PurchasePrice" type="text" class="micros" value="">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="PurchaseDate">Purchase date</label>
+            </div>
+            <div class="field-value">
+                <input id="PurchaseDate" name="PurchaseDate" value="" class="datepicker" required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="MaturityDate">Maturity date</label>
+            </div>
+            <div class="field-value">
+                <input id="MaturityDate" name="MaturityDate" value="" class="datepicker" required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="InterestRate">Interest rate</label>
+            </div>
+            <div class="field-value">
+                <input id="InterestRate" name="InterestRate" type="text" value="" pattern="\d+(\.\d+)?%?">
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="InterestDate">Interest payment date</label>
+            </div>
+            <div class="field-value">
+                <input id="InterestDate" name="InterestDate" value="" class="datepicker" required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="IRR">Internal rate of return</label>
+            </div>
+            <div class="field-value">
+                <input id="IRR" name="IRR" type="text" value="" readonly>
+            </div>
+        </div>
+        <div class="button-field">
+            <input class="click-button" id="calculate-irr" type="button" name="Submit" value="Calculate">
+        </div>
+    </div>
+</body>
+
+</html>

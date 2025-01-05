@@ -95,6 +95,25 @@ func bisect(y, low, high float64, f func(float64) float64) (float64, error) {
 	return 0, fmt.Errorf("bisect: failed to converge after %d iterations", maxIter)
 }
 
+// Used to calculate IRR in the Calculator UI.
+func irrWithInterest(price Micros, interestRate Micros, purchaseDate Date, maturityDate Date) Micros {
+	p := AssetPosition{
+		Asset: &Asset{
+			MaturityDate:    &maturityDate,
+			InterestMicros:  interestRate,
+			InterestPayment: AnnualPayment,
+		},
+		Items: []AssetPositionItem{
+			{
+				ValueDate:      purchaseDate,
+				QuantityMicros: UnitValue,
+				PriceMicros:    price,
+			},
+		},
+	}
+	return internalRateOfReturn(&p)
+}
+
 // internalRateOfReturn calculates the internal rate of return (IRR) of the
 // given asset position. Its semantics are analogous to Excel's XIRR function.
 func internalRateOfReturn(p *AssetPosition) Micros {
