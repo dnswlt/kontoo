@@ -7,32 +7,6 @@ import (
 	"strings"
 )
 
-// totalEarningsAtMaturity calculates the predicted earnings of a fixed-income
-// asset position by its maturity date. These earnings include both interest
-// and capital gains (or losses) from price appreciation or depreciation.
-// It assumes the asset matures at 100% of its nominal value.
-func totalEarningsAtMaturity(p *AssetPosition) Micros {
-	md := p.Asset.MaturityDate
-	if md == nil {
-		return 0
-	}
-	interestRate := p.Asset.InterestMicros
-	var interest, gains Micros
-	for _, item := range p.Items {
-		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
-		gains += item.QuantityMicros - item.PurchasePrice()
-		switch p.Asset.InterestPayment {
-		case AccruedPayment:
-			interest += item.QuantityMicros.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - item.QuantityMicros
-		case AnnualPayment:
-			interest += item.QuantityMicros.Mul(interestRate).Mul(FloatAsMicros(years))
-		default:
-			// If no payment schedule is specified, we can't calculate the interest
-		}
-	}
-	return interest + gains
-}
-
 // newton implements the Newton-Raphson root-finding algorithm to find the root
 // of f(x)-y.
 // ffp must return the tuple (f(x), f'(x)).
@@ -95,27 +69,147 @@ func bisect(y, low, high float64, f func(float64) float64) (float64, error) {
 	return 0, fmt.Errorf("bisect: failed to converge after %d iterations", maxIter)
 }
 
-// Used to calculate IRR in the Calculator UI.
-func irrWithInterest(price Micros, interestRate Micros, purchaseDate Date, maturityDate Date) Micros {
-	p := AssetPosition{
-		Asset: &Asset{
-			MaturityDate:    &maturityDate,
-			InterestMicros:  interestRate,
-			InterestPayment: AnnualPayment,
-		},
-		Items: []AssetPositionItem{
-			{
-				ValueDate:      purchaseDate,
-				QuantityMicros: UnitValue,
-				PriceMicros:    price,
-			},
-		},
+// totalEarningsAtMaturity calculates the predicted earnings of a fixed-income
+// asset position by its maturity date. These earnings include both interest
+// and capital gains (or losses) from price appreciation or depreciation.
+// It assumes the asset matures at 100% of its nominal value.
+func totalEarningsAtMaturity(p *AssetPosition) Micros {
+	md := p.Asset.MaturityDate
+	if md == nil {
+		return 0
 	}
-	return internalRateOfReturn(&p)
+	interestRate := p.Asset.InterestMicros
+	var interest, gains Micros
+	for _, item := range p.Items {
+		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
+		gains += item.QuantityMicros - item.PurchasePrice()
+		switch p.Asset.InterestPayment {
+		case AccruedPayment:
+			interest += item.QuantityMicros.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - item.QuantityMicros
+		case AnnualPayment:
+			interest += item.QuantityMicros.Mul(interestRate).Mul(FloatAsMicros(years))
+		default:
+			// If no payment schedule is specified, we can't calculate the interest
+		}
+	}
+	return interest + gains
+}
+
+// xIRR calculates the internal rate of return like Excel's XIRR function does.
+// values and dates have to be of the same length (>= 2), and dates have to be sorted
+// in ascending order.
+func xIRR(values []Micros, dates []Date) (Micros, error) {
+	if len(values) != len(dates) {
+		return 0, fmt.Errorf("values and dates are of different sizes")
+	}
+	l := len(values)
+	if l < 2 {
+		return 0, fmt.Errorf("too few values")
+	}
+	for i := 1; i < l; i++ {
+		if dates[i-1].After(dates[i].Time) {
+			return 0, fmt.Errorf("dates are not sorted")
+		}
+	}
+	// Prepare dates (time in years, values as floats).
+	ts := make([]float64, l)
+	xs := make([]float64, l)
+	endDate := dates[l-1]
+	for i := 0; i < l; i++ {
+		ts[i] = endDate.Sub(dates[i].Time).Hours() / 24 / 365
+		xs[i] = values[i].Float()
+	}
+
+	// returnsFunc calculates the returns y and first derivative yd
+	// using r as the (accruing) interest rate.
+	returnsFunc := func(r float64) (y float64, yd float64) {
+		for i := 0; i < len(ts); i++ {
+			y += xs[i] * math.Pow(1+r, ts[i])
+			yd += ts[i] * xs[i] * math.Pow(1+r, ts[i]-1)
+		}
+		return y, yd
+	}
+	// Find the zero using Newton first.
+	irr, err := newton(0, 0.05, returnsFunc)
+	if err != nil {
+		// Newton did not converge, try bisection.
+		irr, err = bisect(0, 0, 0.1, func(r float64) float64 {
+			y, _ := returnsFunc(r)
+			return y
+		})
+		if err != nil {
+			// No method found a solution, give up
+			return 0, err
+		}
+	}
+	return FloatAsMicros(irr), nil
+}
+
+type irrParams struct {
+	nominalValue    Micros
+	price           Micros
+	interestRate    Micros
+	cost            Micros
+	purchaseDate    Date
+	maturityDate    Date
+	interestPayment InterestPaymentSchedule
+}
+
+// irrWithInterest calculates the IRR for a single purchase of a fixed-income asset.
+// The price must be given in %.
+// This function is used in the Calculator UI.
+func irrWithInterest(p irrParams) (Micros, error) {
+
+	var values []Micros
+	var dates []Date
+	values = append(values, -p.price.Mul(p.nominalValue)-p.cost)
+	dates = append(dates, p.purchaseDate)
+
+	if p.interestPayment == AnnualPayment {
+		// Append interest payments each year on the (MM/DD) day of maturity.
+		var iDates []Date
+		d := p.maturityDate
+		for d.After(p.purchaseDate.Time) {
+			iDates = append(iDates, d)
+			d = Date{d.AddDate(-1, 0, 0)}
+		}
+		l := len(iDates)
+		for i := l - 1; i >= 0; i-- {
+			interest := p.interestRate
+			if i == l-1 {
+				// Pro-rate interest of first year. There may be leap year anomalies (s == 366/365),
+				// but we don't account for that in accrued payments below either.
+				s := iDates[i].Sub(p.purchaseDate.Time).Hours() / 24 / 365
+				interest = interest.Mul(FloatAsMicros(s))
+			}
+			values = append(values, p.nominalValue.Mul(interest))
+			dates = append(dates, iDates[i])
+		}
+	} else if p.interestPayment == AccruedPayment {
+		// Append a single (accrued) interest payment on the date of maturity.
+		years := p.maturityDate.Sub(p.purchaseDate.Time).Hours() / 24 / 365
+		interest := FloatAsMicros(math.Pow(1+p.interestRate.Float(), years) - 1)
+		values = append(values, p.nominalValue.Mul(interest))
+		dates = append(dates, p.maturityDate)
+	} else {
+		return 0, fmt.Errorf("unsupported payment schedule: %v", p.interestPayment)
+	}
+	// Append redemption payment.
+	values = append(values, p.nominalValue)
+	dates = append(dates, p.maturityDate)
+
+	return xIRR(values, dates)
 }
 
 // internalRateOfReturn calculates the internal rate of return (IRR) of the
-// given asset position. Its semantics are analogous to Excel's XIRR function.
+// given asset position. Its semantics are similar to Excel's XIRR function;
+// in contrast to XIRR (and irrWithInterest above), this function does not
+// include compound interest payments for positions with annual interest
+// payment schedules. Instead, all interest is assumed to be paid out in full
+// at the date of maturity (without accrual).
+// The intuition is that while interest from bonds with annual payments
+// are probably reinvested somehow, they are typically not reinvested in the
+// same bond and may therefore yield very different returns.
 func internalRateOfReturn(p *AssetPosition) Micros {
 	md := p.Asset.MaturityDate
 	if md == nil || len(p.Items) == 0 {

@@ -217,3 +217,132 @@ func TestInternalRateOfReturnSingle(t *testing.T) {
 		t.Errorf("Wrong IRR: want %v, got %v", want, got)
 	}
 }
+
+func TestXIRR(t *testing.T) {
+	tests := []struct {
+		values []Micros
+		dates  []Date
+		want   Micros
+	}{
+		{
+			// Pay 100%, get back 100% ==> 0% IRR
+			values: []Micros{-10000 * UnitValue, 10000 * UnitValue},
+			dates:  []Date{DateVal(2024, 1, 6), DateVal(2026, 1, 6)},
+			want:   0,
+		},
+		{
+			// Pay 80%, get back 100% ==> 4.5614% IRR
+			values: []Micros{-8000 * UnitValue, 10000 * UnitValue},
+			dates:  []Date{DateVal(2025, 1, 6), DateVal(2030, 1, 6)},
+			want:   45614,
+		},
+		{
+			// Pay 90%, get 2% interest each year, get back 100% ==> 4.2606% IRR
+			values: []Micros{
+				-9000 * UnitValue,
+				200 * UnitValue,
+				200 * UnitValue,
+				200 * UnitValue,
+				200 * UnitValue,
+				200 * UnitValue,
+				10000 * UnitValue,
+			},
+			dates: []Date{
+				DateVal(2025, 1, 6),
+				DateVal(2026, 1, 6),
+				DateVal(2027, 1, 6),
+				DateVal(2028, 1, 6),
+				DateVal(2029, 1, 6),
+				DateVal(2030, 1, 6),
+				DateVal(2030, 1, 6),
+			},
+			want: 42606,
+		},
+	}
+	for _, tc := range tests {
+		irr, err := xIRR(tc.values, tc.dates)
+		if err != nil {
+			t.Fatal("xIRR failed:", err)
+		}
+		if irr != tc.want {
+			t.Errorf("xIRR wrong result: want %v, got %v", tc.want, irr)
+		}
+	}
+}
+
+func TestXIRRError(t *testing.T) {
+	tests := []struct {
+		values  []Micros
+		dates   []Date
+		wantErr string
+	}{
+		{
+			values:  []Micros{-1, 2, 3},
+			dates:   []Date{DateVal(2024, 1, 6), DateVal(2024, 1, 6)},
+			wantErr: "different size",
+		},
+		{
+			values:  []Micros{-1},
+			dates:   []Date{DateVal(2024, 1, 6)},
+			wantErr: "few values",
+		},
+		{
+			values:  nil,
+			dates:   nil,
+			wantErr: "few values",
+		},
+		{
+			values:  []Micros{-1, 2},
+			dates:   []Date{DateVal(2030, 1, 6), DateVal(2024, 1, 6)},
+			wantErr: "sorted",
+		},
+	}
+	for _, tc := range tests {
+		irr, err := xIRR(tc.values, tc.dates)
+		if err == nil {
+			t.Fatalf("Wanted error, got result %v", irr)
+		}
+		if !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("Wanted error containing %q, got: %v", tc.wantErr, err)
+		}
+	}
+}
+
+func TestIRRWithInterest(t *testing.T) {
+	tests := []struct {
+		p    irrParams
+		want Micros
+	}{
+		{
+			p: irrParams{
+				nominalValue:    1000 * UnitValue,
+				price:           UnitValue,
+				interestRate:    30 * Millis,
+				purchaseDate:    DateVal(2025, 1, 6),
+				maturityDate:    DateVal(2029, 1, 6),
+				interestPayment: AnnualPayment,
+			},
+			want: 29980,
+		},
+		{
+			p: irrParams{
+				nominalValue:    1000 * UnitValue,
+				price:           UnitValue,
+				interestRate:    30 * Millis,
+				purchaseDate:    DateVal(2025, 1, 6),
+				maturityDate:    DateVal(2026, 7, 6),
+				interestPayment: AnnualPayment,
+			},
+			want: 30075,
+		},
+	}
+	for _, tc := range tests {
+		irr, err := irrWithInterest(tc.p)
+		if err != nil {
+			t.Fatal("irrWithInterest failed:", err)
+		}
+		if irr != tc.want {
+			t.Errorf("irrWithInterest wrong result: want %v, got %v", tc.want, irr)
+		}
+	}
+}

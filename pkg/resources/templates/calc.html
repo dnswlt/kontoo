@@ -15,10 +15,26 @@
     <div>
         <div class="field">
             <div class="field-label">
+                <label for="NominalValue">Nominal value</label>
+            </div>
+            <div class="field-value">
+                <input id="NominalValue" name="NominalValue" type="text" class="micros" value="10000" required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
                 <label for="PurchasePrice">Purchase price</label>
             </div>
             <div class="field-value">
-                <input id="PurchasePrice" name="PurchasePrice" type="text" class="micros" value="">
+                <input id="PurchasePrice" name="PurchasePrice" type="text" class="micros" value="100%" required>
+            </div>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Cost">Cost</label>
+            </div>
+            <div class="field-value">
+                <input id="Cost" name="Cost" type="text" class="micros" value="0" required>
             </div>
         </div>
         <div class="field">
@@ -26,7 +42,7 @@
                 <label for="PurchaseDate">Purchase date</label>
             </div>
             <div class="field-value">
-                <input id="PurchaseDate" name="PurchaseDate" value="" class="datepicker" required>
+                <input id="PurchaseDate" name="PurchaseDate" value="{{.Today}}" class="datepicker" required>
             </div>
         </div>
         <div class="field">
@@ -34,7 +50,7 @@
                 <label for="MaturityDate">Maturity date</label>
             </div>
             <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate" value="" class="datepicker" required>
+                <input id="MaturityDate" name="MaturityDate" value="{{.DefaultMaturity}}" class="datepicker" required>
             </div>
         </div>
         <div class="field">
@@ -42,15 +58,7 @@
                 <label for="InterestRate">Interest rate</label>
             </div>
             <div class="field-value">
-                <input id="InterestRate" name="InterestRate" type="text" value="" pattern="\d+(\.\d+)?%?">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="InterestDate">Interest payment date</label>
-            </div>
-            <div class="field-value">
-                <input id="InterestDate" name="InterestDate" value="" class="datepicker" required>
+                <input id="InterestRate" name="InterestRate" type="text" value="2%" pattern="\d+(\.\d+)?%?">
             </div>
         </div>
         <div class="field">

@@ -133,11 +133,13 @@ type LedgerAssetInfoResponse struct {
 }
 
 type CalculateIRRRequest struct {
-	PurchasePrice Micros `json:"purchasePrice"`
-	PurchaseDate  Date   `json:"purchaseDate"`
-	MaturityDate  Date   `json:"maturityDate"`
-	InterestRate  Micros `json:"interestRate"`
-	InterestDate  *Date  `json:"interestDate"` // Optional
+	NominalValue    Micros `json:"nominalValue"`
+	PurchasePrice   Micros `json:"purchasePrice"`
+	PurchaseDate    Date   `json:"purchaseDate"`
+	MaturityDate    Date   `json:"maturityDate"`
+	InterestRate    Micros `json:"interestRate"`
+	Cost            Micros `json:"cost"`
+	AccruedInterest bool   `json:"accruedInterest"` // Whether interest is accrued or paid annually.
 }
 
 type CalculateIRRResponse struct {
@@ -793,7 +795,9 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
 }
 
 func (s *Server) renderCalcTemplate(w io.Writer, r *http.Request) error {
-	return s.templates.ExecuteTemplate(w, "calc.html", s.addCommonCtx(r, map[string]any{}))
+	return s.templates.ExecuteTemplate(w, "calc.html", s.addCommonCtx(r, map[string]any{
+		"DefaultMaturity": time.Now().AddDate(1, 0, 0).Format("2006-01-02"),
+	}))
 }
 
 func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, store *Store) error {
@@ -1146,10 +1150,33 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	price := req.PurchasePrice
-	interestRate := req.InterestRate
-
-	irrMicros := irrWithInterest(price, interestRate, req.PurchaseDate, req.MaturityDate)
+	if req.NominalValue == 0 || req.PurchasePrice == 0 {
+		s.jsonResponse(w, CalculateIRRResponse{
+			Status: StatusInvalidArgument,
+			Error:  "Nominal value and price must be non-zero",
+		})
+		return
+	}
+	interestPayment := AnnualPayment
+	if req.AccruedInterest {
+		interestPayment = AccruedPayment
+	}
+	irrMicros, err := irrWithInterest(irrParams{
+		nominalValue:    req.NominalValue,
+		price:           req.PurchasePrice,
+		interestRate:    req.InterestRate,
+		cost:            req.Cost,
+		purchaseDate:    req.PurchaseDate,
+		maturityDate:    req.MaturityDate,
+		interestPayment: interestPayment,
+	})
+	if err != nil {
+		s.jsonResponse(w, CalculateIRRResponse{
+			Status: StatusInvalidArgument,
+			Error:  err.Error(),
+		})
+		return
+	}
 	s.jsonResponse(w, CalculateIRRResponse{
 		Status:       StatusOK,
 		IRRMicros:    int64(irrMicros),
