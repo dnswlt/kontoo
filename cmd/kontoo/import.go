@@ -14,7 +14,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/kontoo"
+	"github.com/dnswlt/kontoo/pkg/kontoo"
 )
 
 func ProcessImport(args []string) error {

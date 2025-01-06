@@ -1,4 +1,4 @@
-import { calloutError, calloutStatus } from "./common";
+import { calloutError, calloutStatus, hideCallout } from "./common";
 
 export function init() {
     // Send calculate IRR JSON request to backend on click
@@ -36,6 +36,7 @@ export function init() {
                 return;
             }
             // Display result.
+            hideCallout();
             document.querySelector("#IRR").value = data.irrFormatted;
         }
         catch (error) {

@@ -220,6 +220,11 @@ div.field {
     /* Adds a smooth transition effect */
 }
 
+input.result-display {
+    background-color: #dfffd6;
+    font-weight: bold;
+}
+
 input[type="text"]:focus {
     border-color: var(--dark-border);
     /* Changes the border color on focus */

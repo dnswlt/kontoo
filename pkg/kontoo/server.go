@@ -2,7 +2,6 @@ package kontoo
 
 import (
 	"bytes"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dnswlt/kontoo/pkg/resources"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -157,14 +157,8 @@ const (
 
 // END JSON API
 
-// Embedded resources
-// Important: build the dist/ files with npm before building the Go binary!
-
-//go:embed dist resources templates
-var embeddedResources embed.FS
-
 func ListEmbeddedResources() (files []string, err error) {
-	err = fs.WalkDir(embeddedResources, ".", func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(resources.Files, ".", func(path string, d fs.DirEntry, err error) error {
 		if d.IsDir() {
 			return nil
 		}
@@ -254,7 +248,7 @@ func (s *Server) reloadTemplates() error {
 	if s.useEmbedded() {
 		// Use embedded templates
 		glob := "templates/*.html"
-		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseFS(embeddedResources, glob)
+		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseFS(resources.Files, glob)
 	} else {
 		// Use templates from file system.
 		glob := path.Join(s.baseDir, "templates", "*.html")
@@ -1493,10 +1487,12 @@ func (s *Server) createMux() *http.ServeMux {
 	mux := &http.ServeMux{}
 	// Serve static resources like CSS from resources/ and dist/ dirs.
 	if s.useEmbedded() {
-		mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo",
-			http.FileServer(http.FS(embeddedResources))))
+		mux.Handle("/kontoo/images/", http.StripPrefix("/kontoo",
+			http.FileServer(http.FS(resources.Files))))
 		mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo",
-			http.FileServer(http.FS(embeddedResources))))
+			http.FileServer(http.FS(resources.Files))))
+		mux.Handle("/kontoo/css/", http.StripPrefix("/kontoo",
+			http.FileServer(http.FS(resources.Files))))
 	} else {
 		mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources",
 			http.FileServer(http.Dir(path.Join(s.baseDir, "resources")))))
@@ -1539,6 +1535,6 @@ func (s *Server) Serve() error {
 		Handler: mux,
 	}
 
-	fmt.Printf("Server available at http://%s/\n", s.addr)
+	fmt.Printf("Running kontoo server at http://%s/ for %s\n", s.addr, s.ledgerPath)
 	return srv.ListenAndServe()
 }

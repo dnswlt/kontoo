@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/kontoo"
+	"github.com/dnswlt/kontoo/pkg/kontoo"
 )
 
 type dateFlag struct {

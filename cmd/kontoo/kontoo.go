@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dnswlt/kontoo"
+	"github.com/dnswlt/kontoo/pkg/kontoo"
 )
 
 func ProcessAdd(args []string) error {
