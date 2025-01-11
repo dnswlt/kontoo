@@ -186,6 +186,13 @@
         </tbody>
     </table>
     {{ end }}
+
+    <!-- Doughnut chart for asset allocation -->
+    <div id="equity-chart" class="chart-container hidden topsep" style="width: 600px;">
+        <canvas id="equity-canvas"></canvas>
+        <button type="button" class="close">&times;</button>
+    </div>
+
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>

@@ -1,8 +1,6 @@
-import { registerDropdown, registerContextMenu, base64ToString, stringToBase64 } from "./common";
+import { registerDropdown, registerContextMenu } from "./common";
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
-import { format } from "date-fns";
-import { enGB } from 'date-fns/locale';
 
 
 let chart = null;
@@ -19,33 +17,23 @@ function contextMenuSelected(item) {
     console.error(`Unhandled action in context menu: ${action}`);
 }
 
-function drawBarChart(maturities) {
+function drawDoughnutChart(chartData) {
     if (!chart) {
         chart = new Chart(
-            document.getElementById('maturities-canvas'),
+            document.getElementById('equity-canvas'),
             {
-                type: 'bar',
+                type: 'doughnut',
                 data: {},
                 options: {
                     animation: false,
-                    parsing: true,
-                    scales: {
-                        y: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: maturities.currency
-                            }
-                        }
-                    },
                     plugins: {
                         legend: {
-                            position: 'top',
+                            position: 'bottom',
                             display: true
                         },
                         title: {
                             display: true,
-                            text: "Value by time to maturity (years)"
+                            text: `Equity asset allocation (${chartData.currency})`
                         },
                         tooltip: {
                             callbacks: {
@@ -66,20 +54,20 @@ function drawBarChart(maturities) {
         );
     }
     chart.data = {
-        labels: maturities.bucketLabels,
-        datasets: maturities.values.map(v => ({
-            label: v.label,
-            data: v.valueMicros.map(x => Math.round(x / 1e6))
-        }))
+        labels: chartData.assetNames,
+        datasets: [{
+            label: "Mkt value",
+            data: chartData.valueMicros.map(v => Math.round(v / 1e6))
+        }]
     }
     chart.update('none');
 }
 
-async function fetchAndDrawMaturities() {
+async function fetchAndDrawEquity() {
     try {
         const dateParam = new URLSearchParams(window.location.search).get("date");
         const endTimestamp = dateParam ? new Date(dateParam).getTime() : Date.now();
-        const resp = await fetch("/kontoo/positions/maturities", {
+        const resp = await fetch("/kontoo/charts/equity", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json"
@@ -96,11 +84,11 @@ async function fetchAndDrawMaturities() {
             console.log("Response not OK:", result);
             return;
         }
-        drawBarChart(result.maturities);
-        document.getElementById("maturities-chart").classList.remove("hidden");
+        drawDoughnutChart(result);
+        document.getElementById("equity-chart").classList.remove("hidden");
     }
     catch (error) {
-        console.error("Error fetching maturities:", error);
+        console.error("Error fetching equity:", error);
         return;
     }
 }
@@ -111,9 +99,9 @@ export function init() {
     document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
         registerContextMenu(td, contextMenuSelected);
     });
-    const chartDiv = document.querySelector("#maturities-chart");
+    const chartDiv = document.querySelector("#equity-chart");
     chartDiv.querySelector(".close").addEventListener("click", () => {
         chartDiv.classList.add("hidden");
     });
-    fetchAndDrawMaturities();
+    fetchAndDrawEquity();
 }

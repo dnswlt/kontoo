@@ -18,7 +18,7 @@ import (
 
 func TestLoadTemplates(t *testing.T) {
 	s := &Server{
-		baseDir: ".",
+		baseDir: "../resources",
 	}
 	if err := s.reloadTemplates(); err != nil {
 		t.Fatalf("Failed to load templates: %v", err)
@@ -40,7 +40,7 @@ func countElements(n *html.Node, elem string) int {
 func TestHandleLedger(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/kontoo/ledger", nil)
 	w := httptest.NewRecorder()
-	s, err := NewServer("localhost:8080", "./testdata/testledger.json", ".")
+	s, err := NewServer("localhost:8080", "./testdata/testledger.json", "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
 	}
@@ -65,7 +65,7 @@ func TestHandleLedger(t *testing.T) {
 func TestHandlePositionsRedirect(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/kontoo/positions", nil)
 	w := httptest.NewRecorder()
-	s, err := NewServer("localhost:8080", "./testdata/testledger.json", ".")
+	s, err := NewServer("localhost:8080", "./testdata/testledger.json", "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
 	}
@@ -107,7 +107,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	tempDir := t.TempDir()
 	tempLedger := filepath.Join(tempDir, "testledger.json")
 	copyFile("./testdata/testledger.json", tempLedger)
-	s, err := NewServer("localhost:8080", tempLedger, ".")
+	s, err := NewServer("localhost:8080", tempLedger, "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
 	}

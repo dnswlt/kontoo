@@ -2,6 +2,7 @@ package kontoo
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -122,6 +123,16 @@ type PositionsMaturitiesResponse struct {
 	Maturities *MaturitiesChartData `json:"maturities,omitempty"`
 }
 
+type EquityChartRequest struct {
+	EndTimestamp int64 `json:"endTimestamp"`
+}
+type EquityChartResponse struct {
+	Status      StatusCode `json:"status"`
+	Currency    string     `json:"currency"`
+	AssetNames  []string   `json:"assetNames"`
+	ValueMicros []int64    `json:"valueMicros"`
+}
+
 type LedgerAssetInfoRequest struct {
 	AssetID string `json:"assetId"`
 	Date    *Date  `json:"date"` // Optional
@@ -189,7 +200,7 @@ type Server struct {
 func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
 	if baseDir != "" {
 		expectedFiles := []string{
-			"resources/style.css",
+			"css/style.css",
 			"templates/ledger.html",
 		}
 		for _, f := range expectedFiles {
@@ -1031,6 +1042,41 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 	})
 }
 
+func (s *Server) handleChartsEquity(w http.ResponseWriter, r *http.Request) {
+	var req EquityChartRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	date := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	rows := equityPositionTableRows(s.Store(), date)
+	// Sort by value, descending
+	sort.Slice(rows, func(i, j int) bool {
+		c := cmp.Compare(rows[j].Value, rows[i].Value)
+		if c != 0 {
+			return c < 0
+		}
+		return cmp.Less(rows[j].AssetName, rows[i].AssetName)
+	})
+	var assetNames []string
+	var valueMicros []int64
+	for _, r := range rows {
+		if r.ExchangeRate == 0 {
+			// Ignore assess whose value we cannot calculate in the base currency. Should not happen.
+			log.Printf("handleChartsEquity: no exchange rate for asset %q", r.AssetID)
+			continue
+		}
+		assetNames = append(assetNames, r.AssetName)
+		valueMicros = append(valueMicros, int64(r.Value.Div(r.ExchangeRate)))
+	}
+	s.jsonResponse(w, EquityChartResponse{
+		Status:      StatusOK,
+		Currency:    string(s.Store().BaseCurrency()),
+		AssetNames:  assetNames,
+		ValueMicros: valueMicros,
+	})
+}
+
 func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Request) {
 	var req PositionsMaturitiesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -1521,10 +1567,12 @@ func (s *Server) createMux() *http.ServeMux {
 		mux.Handle("/kontoo/css/", http.StripPrefix("/kontoo",
 			http.FileServer(http.FS(resources.Files))))
 	} else {
-		mux.Handle("/kontoo/resources/", http.StripPrefix("/kontoo/resources",
-			http.FileServer(http.Dir(path.Join(s.baseDir, "resources")))))
+		mux.Handle("/kontoo/images/", http.StripPrefix("/kontoo/images",
+			http.FileServer(http.Dir(path.Join(s.baseDir, "images")))))
 		mux.Handle("/kontoo/dist/", http.StripPrefix("/kontoo/dist",
 			http.FileServer(http.Dir(path.Join(s.baseDir, "dist")))))
+		mux.Handle("/kontoo/css/", http.StripPrefix("/kontoo/css",
+			http.FileServer(http.Dir(path.Join(s.baseDir, "css")))))
 	}
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
@@ -1541,6 +1589,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
 	mux.HandleFunc("POST /kontoo/positions/maturities", jsonHandler(s.handlePositionsMaturities))
+	mux.HandleFunc("POST /kontoo/charts/equity", jsonHandler(s.handleChartsEquity))
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
 	mux.HandleFunc("POST /kontoo/entries/assetinfo", jsonHandler(s.handleEntriesAssetInfo))
