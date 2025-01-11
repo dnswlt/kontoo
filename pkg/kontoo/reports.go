@@ -17,9 +17,11 @@ type ReportingPeriodData struct {
 	// "Columns" of the report, i.e. different values for all assets of the report.
 	// Make sure to update sortAssets() and ensureLength() when adding columns!
 	Purchases       []Micros
+	PurchasesTotal  Micros
 	MarketValue     []Micros
 	ProfitLoss      []Micros
 	ProfitLossRatio []Micros
+	ProfitLossTotal Micros // Sum of ProfitLoss in base currency
 }
 
 type Report struct {
@@ -124,13 +126,14 @@ func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
 		// If we get them in advance, we could also iterate over the assets in the right order,
 		// avoiding the need to call .sortAssets below.
 		positions := s.AssetPositionsAt(period.End)
+		var purchasesTotal, plTotal Micros
 		for _, pos := range positions {
 			if pos.Asset.Category() != Equity {
 				continue
 			}
 			id := pos.Asset.ID()
-			j, ok := assetIdx[id]
-			if !ok {
+			j, rateFound := assetIdx[id]
+			if !rateFound {
 				j = len(assetIdx)
 				assetIdx[id] = j
 			}
@@ -145,7 +148,15 @@ func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
 			}
 			report.Data[i].Purchases[j] = pur
 			report.Data[i].MarketValue[j] = pos.MarketValue()
+			// Update total purchases and total P&L in base currency.
+			rate, _, rateFound := s.ExchangeRateAt(pos.Currency(), period.End)
+			if rateFound {
+				purchasesTotal += pur.Div(rate)
+				plTotal += profitLoss.Div(rate)
+			}
 		}
+		report.Data[i].PurchasesTotal = purchasesTotal
+		report.Data[i].ProfitLossTotal = plTotal
 	}
 	// Add assets to report, in the order of their data.
 	report.Assets = make([]*Asset, len(assetIdx))

@@ -140,6 +140,20 @@
                 {{ end }}
             </tr>
             {{ end }}
+            <!-- Total quarterly purchases -->
+            <tr class="total">
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td class="ralign">{{ $baseCurrency }}</td>
+                {{ range $data }}
+                <td class="ralign">
+                    <span class="{{if negative .PurchasesTotal}}negative-amount{{end}}">
+                        {{ money .PurchasesTotal }}
+                    </span>
+                </td>
+                {{ end }}
+            </tr>
             {{ end }}
         </tbody>
     </table>
@@ -182,6 +196,21 @@
                 {{ end }}
             </tr>
             {{ end }}
+            <!-- Total P&L -->
+            <tr class="total">
+                <td>Total</td>
+                <td></td>
+                <td></td>
+                <td class="ralign">{{ $baseCurrency }}</td>
+                {{ range $data }}
+                <td class=" ralign">
+                    <span class="{{if negative .ProfitLossTotal}}negative-amount{{end}}">
+                        {{ money .ProfitLossTotal }}
+                    </span>
+                </td>
+                <td class="zebra ralign"></td>
+                {{ end }}
+            </tr>
             {{ end }}
         </tbody>
     </table>
