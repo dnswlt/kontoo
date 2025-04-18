@@ -424,8 +424,9 @@ input.filter {
 }
 
 .tooltip .tooltiptext {
-    visibility: hidden;
-    width: 13em;
+    /* width: 13em; */
+    white-space: nowrap;
+    width: max-content;
     background-color: var(--dark-background-active);
     color: var(--dark-foreground);
     text-align: left;
@@ -437,14 +438,15 @@ input.filter {
     /* Position the tooltip above the text */
     left: 0%;
     opacity: 0;
-    transition: opacity 0.3s;
+    pointer-events: none; /* Prevent interaction when hidden */
+    transition: opacity 0.2s ease-in-out;
     font-size: 10pt;
     font-weight: normal;
 }
 
 .tooltip:hover .tooltiptext {
-    visibility: visible;
     opacity: 1;
+    pointer-events: auto;
 }
 
 .tooltiptext p {

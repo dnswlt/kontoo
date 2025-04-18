@@ -48,7 +48,7 @@ func (a Micros) Div(b Micros) Micros {
 
 // Calculates a*numer/denom, truncated towards zero.
 // The idea is that this function is defined for more
-// inputs than a.Mul(numer).Div(denom) would be.
+// inputs than a.Mul(numer).Div(denom) would be as it avoids overflow.
 func (a Micros) Frac(numer, denom Micros) Micros {
 	if denom == 0 {
 		panic("Frac: zero denominator")

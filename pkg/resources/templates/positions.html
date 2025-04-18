@@ -7,7 +7,7 @@
 
 <body id="positions-page">
     {{template "nav.html" .}}
-    <h1>Positions &middot;  {{.Date}}</h1>
+    <h1>Positions &middot; {{.Date}}</h1>
     {{template "positions_subnav.html" .}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
@@ -34,7 +34,8 @@
                 <th>Type</th>
                 <th>Currency</th>
                 <th>Mkt value</th>
-                <th class="no-print low-key" title="Days since last ledger entry (only displayed if &gt;7)">&Delta;d</th>
+                <th class="no-print low-key" title="Days since last ledger entry (only displayed if &gt;7)">&Delta;d
+                </th>
             </tr>
         </thead>
         <tbody>
@@ -87,9 +88,10 @@
                 <td>{{.Category}}</td>
                 <td></td>
                 <td class="ralign">{{ $baseCurrency }}</td>
-                <td class="ralign">
+                <td class="ralign tooltip">
                     <span class="{{if negative .ValueBaseCurrency}}negative-amount{{end}}">{{money
                         .ValueBaseCurrency}}</span>
+                    <span class="tooltiptext">{{percent .FractionOfTotal}} of Total</span>
                 </td>
             </tr>
             {{end}}
