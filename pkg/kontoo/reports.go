@@ -1,7 +1,9 @@
 package kontoo
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -55,6 +57,7 @@ func (d *ReportingPeriodData) ensureLength(n int) {
 	d.ProfitLossRatio = append(d.ProfitLossRatio, make([]Micros, dl)...)
 }
 
+// quarterlyPeriods returns the numPeriods quarterly reporting periods up to endDate.
 func quarterlyPeriods(endDate Date, numPeriods int) []*ReportingPeriod {
 	if numPeriods <= 0 {
 		return nil
@@ -114,30 +117,50 @@ func (r *Report) sortAssets(less func(a, b *Asset) bool) {
 	}
 }
 
+// AssetsInPeriod returns all assets that had a non-zero value at any point in time
+// between startDate and endDate.
+func (s *Store) AssetsInPeriod(startDate, endDate Date) []*Asset {
+	var res []*Asset
+	for assetId, asset := range s.assets {
+		// Existed at start date:
+		if pos := s.AssetPositionAt(assetId, startDate); pos.MarketValue() != 0 {
+			res = append(res, asset)
+			continue
+		}
+		// Had activity between start and end date:
+		if entries := s.EntriesInRange(assetId, startDate, endDate); len(entries) > 0 {
+			res = append(res, asset)
+		}
+	}
+	return res
+}
+
 func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
 	report := &Report{}
-	assetIdx := make(map[string]int)
+	// assetIdx := make(map[string]int)
 	periods := quarterlyPeriods(endDate, numPeriods)
 	report.Data = make([]*ReportingPeriodData, len(periods))
+	// Collect all equity assets that had a non-zero value at any period.End.
+	// In each reporting period, we will iterate over these assets to calculate
+	// their P&L and purchases/sales.
+	allAssets := s.AssetsInPeriod(periods[0].Start, periods[len(periods)-1].End)
+	equityAssets := make([]*Asset, 0, len(allAssets))
+	for _, a := range allAssets {
+		if a.Category() == Equity {
+			equityAssets = append(equityAssets, a)
+		}
+	}
+	slices.SortFunc(equityAssets, func(a, b *Asset) int {
+		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+	})
 	for i, period := range periods {
 		report.Data[i] = &ReportingPeriodData{}
 		report.Data[i].Period = period
-		// TODO: Include all equity assets with non-zero value at any period.End, not just the last one.
-		// If we get them in advance, we could also iterate over the assets in the right order,
-		// avoiding the need to call .sortAssets below.
-		positions := s.AssetPositionsAt(period.End)
+		report.Data[i].ensureLength(len(equityAssets))
 		var purchasesTotal, plTotal Micros
-		for _, pos := range positions {
-			if pos.Asset.Category() != Equity {
-				continue
-			}
+		for j, asset := range equityAssets {
+			pos := s.AssetPositionAt(asset.ID(), period.End)
 			id := pos.Asset.ID()
-			j, rateFound := assetIdx[id]
-			if !rateFound {
-				j = len(assetIdx)
-				assetIdx[id] = j
-			}
-			report.Data[i].ensureLength(j + 1)
 			pur := s.AssetPurchases(id, period.Start, period.End)
 			profitLoss, profitLossBasis, err := s.ProfitLossInPeriod(id, period.Start, period.End)
 			if err == nil {
@@ -159,16 +182,6 @@ func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
 		report.Data[i].ProfitLossTotal = plTotal
 	}
 	// Add assets to report, in the order of their data.
-	report.Assets = make([]*Asset, len(assetIdx))
-	for id, i := range assetIdx {
-		report.Assets[i] = s.assets[id]
-	}
-	// Ensure all quarters have data for all assets (rectangular data).
-	for _, d := range report.Data {
-		d.ensureLength(len(assetIdx))
-	}
-	report.sortAssets(func(a, b *Asset) bool {
-		return strings.ToLower(a.Name) < strings.ToLower(b.Name)
-	})
+	report.Assets = equityAssets
 	return report
 }

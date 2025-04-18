@@ -293,7 +293,7 @@ func validIBAN(iban string) bool {
 		return false
 	}
 	// Check ISO code and checksum.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if !(iban[i] >= 'A' && iban[i] <= 'Z' || i >= 2 && iban[i] >= '0' && iban[i] <= '9') {
 			return false
 		}
@@ -312,7 +312,7 @@ func validIBAN(iban string) bool {
 		}
 	}
 	// Add the first 4 characters at the end of the validation number.
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		c := iban[i]
 		if c >= 'A' && c <= 'Z' {
 			k.Mul(k, big100) // Shift left by two digits.
