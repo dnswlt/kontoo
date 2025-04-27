@@ -211,17 +211,18 @@ div.field {
     font-family: inherit;
 }
 
+.field-value input[type="number"],
 .field-value input[type="text"] {
     padding: 6px;
     border: 1px solid var(--light-border);
     border-radius: 5px;
     font-size: inherit;
-    box-sizing: border-box;
     /* Ensures padding and borders don't affect the total width */
-    outline: none;
+    box-sizing: border-box;
     /* Removes the default outline */
-    transition: border-color 0.3s ease;
+    outline: none;
     /* Adds a smooth transition effect */
+    transition: border-color 0.3s ease;
 }
 
 input.result-display {

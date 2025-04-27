@@ -1402,3 +1402,25 @@ func TestMarshalDate(t *testing.T) {
 		}
 	}
 }
+
+func TestMonthlyRange(t *testing.T) {
+	d := DateVal(2025, 6, 3)
+	got := repeatMonthly(d, 3)
+	want := []Date{
+		DateVal(2025, 6, 3), DateVal(2025, 7, 3), DateVal(2025, 8, 3),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Range differs (-want, +got): %s", diff)
+	}
+}
+
+func TestMonthlyRangeClamped(t *testing.T) {
+	d := DateVal(2025, 1, 31)
+	got := repeatMonthly(d, 4)
+	want := []Date{
+		DateVal(2025, 1, 31), DateVal(2025, 2, 28), DateVal(2025, 3, 31), DateVal(2025, 4, 30),
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Range differs (-want, +got): %s", diff)
+	}
+}

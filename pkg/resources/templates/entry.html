@@ -33,7 +33,9 @@
                         <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.Entry.AssetID}}">
                         <datalist id="AssetList">
                             {{range .Assets}}
-                            <option id="OptionID_{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' value="{{.ID}}">
+                            <option id="OptionID_{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}'
+                                data-supports-repeat="{{.Type.SupportsRepeatedLedgerEntries}}"
+                                value="{{.ID}}">
                                 {{.Name}}</option>
                             {{end}}
                         </datalist>
@@ -107,6 +109,14 @@
                     <div class="field-value">
                         <input id="Cost" name="Cost" type="text" class="micros"
                             value="{{if .Entry.CostMicros}}{{.Entry.CostMicros}}{{end}}">
+                    </div>
+                </div>
+                <div id="RepeatForMonthsField" class="field">
+                    <div class="field-label">
+                        <label for="RepeatForMonths">Repeat for N months</label>
+                    </div>
+                    <div class="field-value">
+                        <input id="RepeatForMonths" name="RepeatForMonths" type="number" min="0" max="48" value="0">
                     </div>
                 </div>
                 <div id="CommentField" class="field">

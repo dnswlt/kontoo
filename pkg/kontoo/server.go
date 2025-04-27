@@ -29,8 +29,12 @@ import (
 // JSON API for server requests and responses.
 type UpsertLedgerEntryRequest struct {
 	// Optional. If set, it is an update request, otherwise an add.
-	UpdateExisting bool         `json:"updateExisting"`
-	Entry          *LedgerEntry `json:"entry"`
+	UpdateExisting bool `json:"updateExisting"`
+	// Optional. If nonzero, indicates how often the entry should be
+	// repeated monthly. Mostly useful for repeated payments or distributing
+	// tax estimates across a year.
+	RepeatForMonths int          `json:"repeatForMonths"`
+	Entry           *LedgerEntry `json:"entry"`
 }
 type UpsertLedgerEntryResponse struct {
 	Status      StatusCode `json:"status"`
@@ -1335,6 +1339,9 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing entry in request", http.StatusBadRequest)
 		return
 	}
+	if req.RepeatForMonths > 1 && req.UpdateExisting {
+		http.Error(w, "cannot update multiple entries", http.StatusBadRequest)
+	}
 	if req.UpdateExisting {
 		// Update
 		if err := s.Store().Update(req.Entry); err != nil {
@@ -1346,7 +1353,14 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		// Insert
-		if err := s.Store().Add(req.Entry); err != nil {
+		var err error
+		log.Printf("Received lekker RepeatForMonths: %d\n", req.RepeatForMonths)
+		if req.RepeatForMonths > 1 {
+			err = s.Store().AddMonthly(req.Entry, req.RepeatForMonths)
+		} else {
+			err = s.Store().Add(req.Entry)
+		}
+		if err != nil {
 			s.jsonResponse(w, UpsertLedgerEntryResponse{
 				Status: StatusInvalidArgument,
 				Error:  err.Error(),

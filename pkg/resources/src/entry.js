@@ -75,7 +75,7 @@ function assetIdChange(assetId) {
     }
     const assetList = document.getElementById("AssetList");
     // All IDs are prefixed with OptionID_ b/c numeric IDs otherwise don't yield a valid DOM ID.
-    const asset = assetList.options["OptionID_"+assetId];
+    const asset = assetList.options["OptionID_" + assetId];
     if (asset == null) {
         // Unknown asset: enable all types
         document.querySelectorAll("#TypeList option").forEach((opt) => {
@@ -108,8 +108,22 @@ function entryTypeChange(typ) {
     if (typ === "ExchangeRate") {
         showAssetInfo(false);
         showFields(["QuoteCurrency", "Price"]);
-    } else if (typ === "AccountBalance" || typ === "AccountDebit" || typ === "AccountCredit") {
+    } else if (typ === "AccountBalance") {
         showFields(["AssetID", "Value"]);
+    } else if (typ == "AccountDebit" || typ === "AccountCredit") {
+        const fields = ["AssetID", "Value"];
+        // Add "Repeat for N months" if asset type supports it:
+        const assetId = document.querySelector("#AssetID").value;
+        if (assetId) {
+            const assetList = document.querySelector("#AssetList");
+            // All IDs are prefixed with OptionID_ b/c numeric IDs otherwise don't yield a valid DOM ID.
+            const asset = assetList.options["OptionID_" + assetId];
+            const supportsRepeat = asset.dataset.supportsRepeat === "true";
+            if (supportsRepeat) {
+                fields.push("RepeatForMonths");
+            }
+        }
+        showFields(fields);
     } else if (typ === "AssetHolding") {
         showFields(["AssetID", "Value", "Quantity", "Price"]);
     } else if (typ === "InterestPayment" || typ == "DividendPayment") {
@@ -125,7 +139,7 @@ function entryTypeChange(typ) {
 
 function showFields(fieldNames) {
     const allFieldNames = [
-        "AssetID", "Value", "Quantity", "Price", "Cost", "QuoteCurrency"
+        "AssetID", "Value", "Quantity", "Price", "Cost", "QuoteCurrency", "RepeatForMonths"
     ];
     for (const fieldName of allFieldNames) {
         if (fieldNames.includes(fieldName)) {
@@ -153,10 +167,12 @@ async function submitForm(event) {
     })
     try {
         const update = formData.has("SequenceNum");
+        const repeatForMonths = Number(formData.get("RepeatForMonths") || 0);
         const response = await fetch(this.action, {
             method: "POST",
             body: JSON.stringify({
                 updateExisting: update,
+                repeatForMonths: repeatForMonths,
                 entry: entry
             }),
             headers: {

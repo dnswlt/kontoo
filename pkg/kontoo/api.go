@@ -83,6 +83,9 @@ type assetTypeInfo struct {
 	// True if the asset type is "account-like". Should be set to true
 	// for all types for which AccountBalance is a common ledger entry type.
 	isAccountType bool
+	// True if the asset type supports adding repeated ledger entries
+	// (e.g. tax debit repeated for the next 12 months).
+	supportsRepeatedLedgerEntries bool
 }
 
 var (
@@ -190,11 +193,12 @@ var (
 			validEntryTypes: []EntryType{AccountCredit, AccountDebit, AccountBalance},
 		},
 		{
-			typ:                    TaxLiability,
-			category:               Taxes,
-			displayName:            "Tax liability",
-			validEntryTypes:        []EntryType{AccountCredit, AccountDebit, AccountBalance},
-			useTransactionTracking: true,
+			typ:                           TaxLiability,
+			category:                      Taxes,
+			displayName:                   "Tax liability",
+			validEntryTypes:               []EntryType{AccountCredit, AccountDebit, AccountBalance},
+			useTransactionTracking:        true,
+			supportsRepeatedLedgerEntries: true,
 		},
 		{
 			typ:                    TaxPayment,
@@ -228,6 +232,10 @@ func init() {
 
 func (t AssetType) ValidEntryTypes() []EntryType {
 	return assetTypeInfos[t].validEntryTypes
+}
+
+func (t AssetType) SupportsRepeatedLedgerEntries() bool {
+	return assetTypeInfos[t].supportsRepeatedLedgerEntries
 }
 
 func (t AssetType) category() AssetCategory {

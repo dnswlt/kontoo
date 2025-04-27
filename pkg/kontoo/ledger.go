@@ -739,6 +739,41 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	return nil
 }
 
+// Returns d and (months-1) dates of the following months at the same day as d.
+// If that day cannot be represented in any month, that month's last day is used.
+func repeatMonthly(d Date, months int) []Date {
+	res := make([]Date, 0, months)
+	year, month, day := d.Date()
+	loc := d.Location()
+
+	for i := range months {
+		m := month + time.Month(i)
+		dt := time.Date(year, m, day, 0, 0, 0, 0, loc)
+		if dt.Month() != ((month+time.Month(i)-1)%12)+1 {
+			// Rolled over to next month, clamp to last day of desired month
+			dt = time.Date(year, m+1, 0, 0, 0, 0, 0, loc)
+		}
+		res = append(res, Date{dt})
+	}
+	return res
+}
+
+// AddMonthly adds the given entry e for its given value date and (months-1)
+// subsequent months.
+// If the value date's day cannot be represented in any subsequent month,
+// the last day of that month is used instead.
+func (s *Store) AddMonthly(e *LedgerEntry, months int) error {
+	dates := repeatMonthly(e.ValueDate, months)
+	for _, d := range dates {
+		eCopy := *e
+		eCopy.ValueDate = d
+		if err := s.Add(&eCopy); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // Add validates the given entry e and, on successful validation, inserts
 // the entry into the store.
 func (s *Store) Add(e *LedgerEntry) error {
