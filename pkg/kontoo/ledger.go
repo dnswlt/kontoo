@@ -71,9 +71,9 @@ type LedgerEntryRow struct {
 	E *LedgerEntry
 	A *Asset
 	// Asset position values after incorporating ledger entry E.
-	marketValue   Micros
-	totalQuantity Micros
-	totalCost     Micros
+	totalMarketValue Micros
+	totalQuantity    Micros
+	totalCost        Micros
 }
 
 func (e *LedgerEntryRow) SequenceNum() int64 {
@@ -126,6 +126,15 @@ func (e *LedgerEntryRow) Currency() string {
 func (e *LedgerEntryRow) Value() Micros {
 	return e.E.ValueMicros
 }
+
+// EntryMarketValue returns the market value of the ledger entry.
+// Use PositionMarketValue to obtain the position's market value.
+func (e *LedgerEntryRow) EntryMarketValue() Micros {
+	if e.E.ValueMicros != 0 {
+		return e.E.ValueMicros
+	}
+	return e.E.QuantityMicros.Mul(e.E.PriceMicros)
+}
 func (e *LedgerEntryRow) Cost() Micros {
 	return e.E.CostMicros
 }
@@ -138,8 +147,8 @@ func (e *LedgerEntryRow) Price() Micros {
 func (e *LedgerEntryRow) Comment() string {
 	return e.E.Comment
 }
-func (e *LedgerEntryRow) MarketValue() Micros {
-	return e.marketValue
+func (e *LedgerEntryRow) TotalMarketValue() Micros {
+	return e.totalMarketValue
 }
 func (e *LedgerEntryRow) TotalQuantity() Micros {
 	return e.totalQuantity
@@ -195,11 +204,11 @@ func (s *Store) allEntryRows() []*LedgerEntryRow {
 			pos.Update(e)
 			totalCost += e.CostMicros
 			allRows = append(allRows, &LedgerEntryRow{
-				A:             asset,
-				E:             e,
-				marketValue:   pos.MarketValue(),
-				totalQuantity: pos.QuantityMicros,
-				totalCost:     totalCost,
+				A:                asset,
+				E:                e,
+				totalMarketValue: pos.MarketValue(),
+				totalQuantity:    pos.QuantityMicros,
+				totalCost:        totalCost,
 			})
 		}
 	}

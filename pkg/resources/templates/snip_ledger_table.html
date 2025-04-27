@@ -26,7 +26,8 @@
                 <button title="Delete entry" type="button" class="emoji-button delete" data-seq="{{.SequenceNum}}">
                     <i class="emoji emoji-wastebasket"></i>
                 </button>
-                <a title="Edit entry" href="/kontoo/entries/edit/{{.SequenceNum}}"><i class="emoji emoji-page-facing-up"></i></a>
+                <a title="Edit entry" href="/kontoo/entries/edit/{{.SequenceNum}}"><i
+                        class="emoji emoji-page-facing-up"></i></a>
             </td>
             <td class="ralign" title="Created: {{ ymdhm .Created }}">{{ .SequenceNum }}</td>
             <td class="nowrap">{{ .ValueDate }}</td>
@@ -42,12 +43,16 @@
             {{end}}
             <td class="ralign">{{ .Currency }}</td>
             <td class="ralign">
-                <span class="{{if negative .Value}}negative-amount{{end}}">{{if nonzero .Value}}{{ money .Value }}{{end}}</span>
+                {{if nonzero .Value}}
+                <span class="{{if negative .Value}}negative-amount{{end}}">{{ money .Value }}</span>
+                {{else}}
+                <span class="calculated-value {{if negative .EntryMarketValue}}negative-amount{{end}}">{{ money .EntryMarketValue }}</span>
+                {{end}}
             </td>
             <td class="ralign">{{if nonzero .Cost}}{{ money .Cost }}{{end}}</td>
             <td class="ralign">{{if nonzero .Quantity}}{{ quantity .Quantity }}{{end}}</td>
             <td class="ralign">{{if nonzero .Price}}{{ price .Price }}{{end}}</td>
-            <td class="ralign">{{money .MarketValue }}</td>
+            <td class="ralign">{{money .TotalMarketValue }}</td>
             <td class="ralign">{{if nonzero .TotalQuantity}}{{ quantity .TotalQuantity }}{{end}}</td>
             <td class="ralign">{{if nonzero .TotalCost}}{{ money .TotalCost }}{{end}}</td>
             <td>{{ .Comment }}</td>

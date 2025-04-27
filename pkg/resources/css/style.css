@@ -85,6 +85,10 @@ tr.total td {
 .negative-amount {
     color: var(--red-number);
 }
+.calculated-value {
+    font-style: italic;
+    /* font-weight: 300; */
+}
 
 /* Horizontal separation between widgets. */
 div.topsep {
