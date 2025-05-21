@@ -1354,7 +1354,6 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Insert
 		var err error
-		log.Printf("Received lekker RepeatForMonths: %d\n", req.RepeatForMonths)
 		if req.RepeatForMonths > 1 {
 			err = s.Store().AddMonthly(req.Entry, req.RepeatForMonths)
 		} else {
