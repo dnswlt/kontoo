@@ -52,7 +52,7 @@
                         <div class="contextmenu-option" data-url='{{setp $nav.updateBalance "AssetID" .AssetID}}'
                             data-action="update-balance">Update balance</div>
                         {{ end }}
-                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id:" .AssetID) }}'
+                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id=" .AssetID) }}'
                             data-action="show-ledger">Show ledger</div>
                         <div class="contextmenu-option" data-id='{{ .AssetID }}' data-action="toggle-chart">Show/hide in
                             chart</div>

@@ -7,6 +7,44 @@ import (
 	"github.com/google/go-cmp/cmp"
 )
 
+func TestParseQueryFull(t *testing.T) {
+	tests := []struct {
+		q    string
+		want *Query
+	}{
+		{
+			q: "foo=BAR !baz=_quz_",
+			want: &Query{
+				raw:       "foo=BAR !baz=_quz_",
+				untilDate: DateVal(9999, 12, 31),
+				fieldTerms: []fieldTerm{
+					{
+						field:     "foo",
+						term:      "bar",
+						fullMatch: true,
+					},
+					{
+						field:     "baz",
+						term:      "_quz_",
+						negated:   true,
+						fullMatch: true,
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range tests {
+		q, err := ParseQuery(tc.q)
+		if err != nil {
+			t.Fatalf("Cannot parse query %q: %v", tc.q, err)
+		}
+		if diff := cmp.Diff(tc.want, q,
+			cmp.AllowUnexported(Query{}, fieldTerm{})); diff != "" {
+			t.Errorf("wrong terms (-want +got): %s", diff)
+		}
+	}
+}
+
 func TestParseQuery(t *testing.T) {
 	tests := []struct {
 		q               string
@@ -20,11 +58,22 @@ func TestParseQuery(t *testing.T) {
 			wantTerms: []string{"foo"},
 		},
 		{
+			q:         "FooBär",
+			wantTerms: []string{"foobär"},
+		},
+		{
 			q:         " foo bar ",
 			wantTerms: []string{"foo", "bar"},
 		},
 		{
 			q: "f:foo r:bar",
+			wantFields: map[string]string{
+				"f": "foo",
+				"r": "bar",
+			},
+		},
+		{
+			q: "f=foo !r=bar",
 			wantFields: map[string]string{
 				"f": "foo",
 				"r": "bar",
@@ -215,6 +264,11 @@ func TestQueryMatch(t *testing.T) {
 		{q: "num:100", e: r100, want: true},
 		{q: "num:1-50,60-100", e: r100, want: true},
 		{q: "num:1-99,101-110", e: r100, want: false},
+
+		{q: "id:de123", e: rFoo, want: true},
+		{q: "id:de12", e: rFoo, want: true},
+		{q: "id=de123", e: rFoo, want: true},
+		{q: "id=de12", e: rFoo, want: false},
 
 		{q: "foo", e: rFoo, want: true},
 		{q: "name:foo", e: rFoo, want: true},

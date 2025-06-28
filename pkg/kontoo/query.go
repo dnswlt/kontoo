@@ -11,10 +11,11 @@ import (
 )
 
 type fieldTerm struct {
-	field   string
-	negated bool
-	term    string
-	re      *regexp.Regexp
+	field     string
+	negated   bool
+	term      string
+	fullMatch bool // true means match the full string, not just a substring.
+	re        *regexp.Regexp
 }
 
 type fieldOrdering struct {
@@ -123,8 +124,9 @@ func parseOrdering(s string) ([]fieldOrdering, error) {
 // A query term can be one of:
 // foo    ==> Any of the "main" fields must contain the substring "foo".
 // f:foo  ==> Field f must exist and contain the substring "foo"
+// f=foo  ==> Field f must be exactly equal to "foo"
 // f~foo  ==> Field f must regexp-match foo (which can be a full regexp, e.g. "bar|baz")
-// Negations of the above: !f:foo, !f~foo
+// Negations of the above: !f:foo, !f~foo, !f=foo
 //
 // Supported field names are dependent on the entity being matched (ledger entry, asset position, ...).
 // Well-known field names are: {id, type, name}
@@ -157,7 +159,7 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		}
 	}
 	for _, ft := range expandedTerms {
-		sep := strings.IndexAny(ft, ":~")
+		sep := strings.IndexAny(ft, ":=~")
 		if sep == -1 {
 			// No field given => generic search term across standard fields
 			q.terms = append(q.terms, ft)
@@ -173,7 +175,8 @@ func ParseQuery(rawQuery string) (*Query, error) {
 		if len(t) == 0 {
 			return nil, fmt.Errorf("no term specified for field %q", ft)
 		}
-		if f == "order" {
+		switch f {
+		case "order":
 			// Ordering
 			if neg {
 				return nil, fmt.Errorf("cannot negate \"order:\"")
@@ -193,7 +196,7 @@ func ParseQuery(rawQuery string) (*Query, error) {
 					return nil, fmt.Errorf(`invalid ordering %q: (must be "asc" or "desc" or list of field names): %v`, t, err)
 				}
 			}
-		} else if f == "max" {
+		case "max":
 			if ft[sep] != ':' {
 				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
 			}
@@ -203,7 +206,7 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				return nil, fmt.Errorf("invalid argument for max: %q", t)
 			}
 			q.maxPerGroup = n
-		} else if f == "num" {
+		case "num":
 			if ft[sep] != ':' {
 				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
 			}
@@ -228,7 +231,7 @@ func ParseQuery(rawQuery string) (*Query, error) {
 					q.sequenceNums = append(q.sequenceNums, n, n)
 				}
 			}
-		} else if f == "date" || f == "year" || f == "from" || f == "until" {
+		case "date", "year", "from", "until":
 			// Dates
 			if ft[sep] != ':' {
 				return nil, fmt.Errorf("only operator : is allowed for %q filter", f)
@@ -267,11 +270,12 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				}
 				q.untilDate = Date{until}
 			}
-		} else {
+		default:
 			// Search term for a specific entry field.
 			r := fieldTerm{
-				field:   f,
-				negated: neg,
+				field:     f,
+				negated:   neg,
+				fullMatch: ft[sep] == '=',
 			}
 			if ft[sep] == '~' {
 				var err error
@@ -345,10 +349,17 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 			return false
 		}
 		if t.re != nil {
+			// '~' match
 			if t.re.MatchString(strings.ToLower(fval)) != expectMatch {
 				return false
 			}
+		} else if t.fullMatch {
+			// '=' match
+			if match := strings.ToLower(fval) == t.term; match != expectMatch {
+				return false
+			}
 		} else {
+			// ':' match
 			if matchLower(fval, t.term) != expectMatch {
 				return false
 			}
