@@ -691,7 +691,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 	exchangeRates := make([]*quotes.DailyExchangeRate, 0, len(quoteCurrencies))
 	if errorMessage == "" {
 		for _, qc := range quoteCurrencies {
-			// Use UTC here on purpose: exchange rates in Y! are Europe/London based anyway.
+			// Use UTC here on purpose: exchange rates in Y! are Europe/London (UTC/BST) based anyway.
 			rate, err := s.yFinance.GetDailyExchangeRate(s.Store().BaseCurrency(), qc, date.In(time.UTC).Add(18*time.Hour))
 			if err != nil {
 				log.Printf("Failed to get exchange rate: %v", err)
