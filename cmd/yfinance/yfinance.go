@@ -8,7 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/kontoo/pkg/kontoo"
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/quotes"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 type dateFlag struct {
@@ -39,7 +42,7 @@ func main() {
 		symbolsStr    = flag.String("symbols", "", "Comma-separated list of symbols to fetch data for")
 		baseCurrency  = flag.String("base-currency", "EUR", "Base currency to use for exchange rates")
 		currenciesStr = flag.String("currencies", "", "Comma-separated list of currencies to fetch data for")
-		ledger        = flag.String("ledger", "", "Path to a ledger JSON file into which to import the data")
+		ledgerPath    = flag.String("ledger", "", "Path to a ledger JSON file into which to import the data")
 		quarterly     = flag.Bool("quarterly", true, "Only import quarterly prices into ledger")
 		trace         = flag.Bool("trace", false, "Print the full JSON response(s) to stdout")
 	)
@@ -52,14 +55,14 @@ func main() {
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	yf, err := kontoo.NewYFinance()
+	yf, err := quotes.NewYFinance()
 	if err != nil {
 		log.Fatalf("Cannot create YFinance: %v", err)
 	}
 	yf.EnableTracing(*trace)
-	var store *kontoo.Store
-	if *ledger != "" {
-		if s, err := kontoo.LoadStore(*ledger); err != nil {
+	var store *ledger.Store
+	if *ledgerPath != "" {
+		if s, err := ledger.LoadStore(*ledgerPath); err != nil {
 			log.Fatal("Cannot load store:", err)
 		} else {
 			store = s
@@ -95,9 +98,9 @@ func main() {
 				if isLastOfMonth && (!*quarterly || isQuarter) {
 					// Add only last entries of each month to the store.
 					if store != nil {
-						err := store.Add(&kontoo.LedgerEntry{
-							Type:        kontoo.AssetPrice,
-							ValueDate:   kontoo.ToDate(h.Timestamp),
+						err := store.Add(&ledger.LedgerEntry{
+							Type:        ledger.AssetPrice,
+							ValueDate:   civil.ToDate(h.Timestamp),
 							AssetRef:    h.Symbol,
 							PriceMicros: h.ClosingPrice,
 						})
@@ -126,11 +129,11 @@ func main() {
 				if isLastOfMonth && (!*quarterly || isQuarter) {
 					// Add only last entries of each month to the store.
 					if store != nil {
-						err := store.Add(&kontoo.LedgerEntry{
-							Type:          kontoo.ExchangeRate,
-							ValueDate:     kontoo.ToDate(h.Timestamp),
+						err := store.Add(&ledger.LedgerEntry{
+							Type:          ledger.ExchangeRate,
+							ValueDate:     civil.ToDate(h.Timestamp),
 							PriceMicros:   h.ClosingPrice,
-							Currency:      kontoo.Currency(*baseCurrency),
+							Currency:      units.Currency(*baseCurrency),
 							QuoteCurrency: h.Currency,
 						})
 						if err != nil {

@@ -1,4 +1,4 @@
-package kontoo
+package ledger
 
 import (
 	"cmp"
@@ -6,11 +6,14 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 type ReportingPeriod struct {
-	Start Date
-	End   Date
+	Start civil.Date
+	End   civil.Date
 	Label string
 }
 
@@ -18,12 +21,12 @@ type ReportingPeriodData struct {
 	Period *ReportingPeriod
 	// "Columns" of the report, i.e. different values for all assets of the report.
 	// Make sure to update sortAssets() and ensureLength() when adding columns!
-	Purchases       []Micros
-	PurchasesTotal  Micros
-	MarketValue     []Micros
-	ProfitLoss      []Micros
-	ProfitLossRatio []Micros
-	ProfitLossTotal Micros // Sum of ProfitLoss in base currency
+	Purchases       []units.Micros
+	PurchasesTotal  units.Micros
+	MarketValue     []units.Micros
+	ProfitLoss      []units.Micros
+	ProfitLossRatio []units.Micros
+	ProfitLossTotal units.Micros // Sum of ProfitLoss in base currency
 }
 
 type Report struct {
@@ -51,14 +54,14 @@ func (d *ReportingPeriodData) ensureLength(n int) {
 		return
 	}
 	dl := n - len(d.Purchases)
-	d.Purchases = append(d.Purchases, make([]Micros, dl)...)
-	d.MarketValue = append(d.MarketValue, make([]Micros, dl)...)
-	d.ProfitLoss = append(d.ProfitLoss, make([]Micros, dl)...)
-	d.ProfitLossRatio = append(d.ProfitLossRatio, make([]Micros, dl)...)
+	d.Purchases = append(d.Purchases, make([]units.Micros, dl)...)
+	d.MarketValue = append(d.MarketValue, make([]units.Micros, dl)...)
+	d.ProfitLoss = append(d.ProfitLoss, make([]units.Micros, dl)...)
+	d.ProfitLossRatio = append(d.ProfitLossRatio, make([]units.Micros, dl)...)
 }
 
 // quarterlyPeriods returns the numPeriods quarterly reporting periods up to endDate.
-func quarterlyPeriods(endDate Date, numPeriods int) []*ReportingPeriod {
+func quarterlyPeriods(endDate civil.Date, numPeriods int) []*ReportingPeriod {
 	if numPeriods <= 0 {
 		return nil
 	}
@@ -67,14 +70,14 @@ func quarterlyPeriods(endDate Date, numPeriods int) []*ReportingPeriod {
 	i := numPeriods - 1
 	m := ((endDate.Month()-1)/3)*3 + 1 // Truncate to nearest quarter start
 	ps[i] = &ReportingPeriod{
-		Start: DateVal(endDate.Year(), m, 1),
+		Start: civil.DateVal(endDate.Year(), m, 1),
 		End:   endDate,
 	}
 	// Other periods are regular:
 	i--
 	for ; i >= 0; i-- {
 		ps[i] = &ReportingPeriod{
-			Start: Date{ps[i+1].Start.AddDate(0, -3, 0)},
+			Start: ps[i+1].Start.AddDate(0, -3, 0),
 			End:   ps[i+1].Start.AddDays(-1),
 		}
 	}
@@ -88,8 +91,8 @@ func quarterlyPeriods(endDate Date, numPeriods int) []*ReportingPeriod {
 
 // Sort assets and their data in the report by the given asset comparison function.
 func (r *Report) sortAssets(less func(a, b *Asset) bool) {
-	reorderMicros := func(indices []int, ms []Micros) {
-		tmp := make([]Micros, len(indices))
+	reorderMicros := func(indices []int, ms []units.Micros) {
+		tmp := make([]units.Micros, len(indices))
 		for i, idx := range indices {
 			tmp[i] = ms[idx]
 		}
@@ -119,7 +122,7 @@ func (r *Report) sortAssets(less func(a, b *Asset) bool) {
 
 // AssetsInPeriod returns all assets that had a non-zero value at any point in time
 // between startDate and endDate.
-func (s *Store) AssetsInPeriod(startDate, endDate Date) []*Asset {
+func (s *Store) AssetsInPeriod(startDate, endDate civil.Date) []*Asset {
 	var res []*Asset
 	for assetId, asset := range s.assets {
 		// Existed at start date:
@@ -135,7 +138,7 @@ func (s *Store) AssetsInPeriod(startDate, endDate Date) []*Asset {
 	return res
 }
 
-func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
+func (s *Store) QuarterlyReport(endDate civil.Date, numPeriods int) *Report {
 	report := &Report{}
 	// assetIdx := make(map[string]int)
 	periods := quarterlyPeriods(endDate, numPeriods)
@@ -157,7 +160,7 @@ func (s *Store) QuarterlyReport(endDate Date, numPeriods int) *Report {
 		report.Data[i] = &ReportingPeriodData{}
 		report.Data[i].Period = period
 		report.Data[i].ensureLength(len(equityAssets))
-		var purchasesTotal, plTotal Micros
+		var purchasesTotal, plTotal units.Micros
 		for j, asset := range equityAssets {
 			pos := s.AssetPositionAt(asset.ID(), period.End)
 			id := pos.Asset.ID()

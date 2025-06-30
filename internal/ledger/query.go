@@ -1,4 +1,4 @@
-package kontoo
+package ledger
 
 import (
 	"cmp"
@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
 )
 
 type fieldTerm struct {
@@ -28,12 +30,16 @@ type Query struct {
 	terms        []string
 	fieldTerms   []fieldTerm
 	sequenceNums []int64 // 2-pairs of inclusive ranges of valid sequence numbers. empty means "all numbers".
-	fromDate     Date
-	untilDate    Date
+	fromDate     civil.Date
+	untilDate    civil.Date
 	descending   bool            // whether to return results in ascending (default) or descending order
 	ordering     []fieldOrdering // Fields to order by. If set, the `descending` field is ignored.
 	// Maximum number of entries to return per "group" (typically: asset)
 	maxPerGroup int
+}
+
+func (q *Query) Raw() string {
+	return q.raw
 }
 
 func (q *Query) Empty() bool {
@@ -143,7 +149,7 @@ func ParseQuery(rawQuery string) (*Query, error) {
 	rawQuery = strings.TrimSpace(rawQuery)
 	q := &Query{
 		raw:       rawQuery,
-		untilDate: DateVal(9999, 12, 31),
+		untilDate: civil.DateVal(9999, 12, 31),
 	}
 	// expand query variables
 	var expandedTerms []string
@@ -238,15 +244,15 @@ func ParseQuery(rawQuery string) (*Query, error) {
 			}
 			switch f {
 			case "date":
-				if ymd, err := time.Parse("2006-01-02", t); err == nil {
-					q.fromDate = Date{ymd}
-					q.untilDate = Date{ymd}
+				if d, err := civil.ParseDate(t); err == nil {
+					q.fromDate = d
+					q.untilDate = d
 				} else if ym, err := time.Parse("2006-01", t); err == nil {
-					q.fromDate = Date{ym}
-					q.untilDate = Date{ym.AddDate(0, 1, -1)}
+					q.fromDate = civil.ToDate(ym)
+					q.untilDate = civil.ToDate(ym.AddDate(0, 1, -1))
 				} else if y, err := strconv.Atoi(t); err == nil {
-					q.fromDate = DateVal(y, 1, 1)
-					q.untilDate = DateVal(y, 12, 31)
+					q.fromDate = civil.DateVal(y, 1, 1)
+					q.untilDate = civil.DateVal(y, 12, 31)
 				} else {
 					return nil, fmt.Errorf("invalid date: %q", t)
 				}
@@ -255,20 +261,20 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				if err != nil {
 					return nil, fmt.Errorf("invalid year: %q", t)
 				}
-				q.fromDate = DateVal(y, 1, 1)
-				q.untilDate = DateVal(y, 12, 31)
+				q.fromDate = civil.DateVal(y, 1, 1)
+				q.untilDate = civil.DateVal(y, 12, 31)
 			case "from":
 				from, err := time.Parse("2006-01-02", t)
 				if err != nil {
 					return nil, fmt.Errorf("invalid from: %q", t)
 				}
-				q.fromDate = Date{from}
+				q.fromDate = civil.Date{from}
 			case "until":
 				until, err := time.Parse("2006-01-02", t)
 				if err != nil {
 					return nil, fmt.Errorf("invalid until: %q", t)
 				}
-				q.untilDate = Date{until}
+				q.untilDate = civil.Date{until}
 			}
 		default:
 			// Search term for a specific entry field.

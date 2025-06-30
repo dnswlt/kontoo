@@ -1,4 +1,4 @@
-package kontoo
+package server
 
 import (
 	"bytes"
@@ -22,7 +22,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/kontoo/pkg/resources"
+	"github.com/dnswlt/kontoo/internal/calc"
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/quotes"
+	"github.com/dnswlt/kontoo/internal/ui"
+	"github.com/dnswlt/kontoo/internal/units"
+	"github.com/dnswlt/kontoo/resources"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -33,8 +39,8 @@ type UpsertLedgerEntryRequest struct {
 	// Optional. If nonzero, indicates how often the entry should be
 	// repeated monthly. Mostly useful for repeated payments or distributing
 	// tax estimates across a year.
-	RepeatForMonths int          `json:"repeatForMonths"`
-	Entry           *LedgerEntry `json:"entry"`
+	RepeatForMonths int                 `json:"repeatForMonths"`
+	Entry           *ledger.LedgerEntry `json:"entry"`
 }
 type UpsertLedgerEntryResponse struct {
 	Status      StatusCode `json:"status"`
@@ -51,8 +57,8 @@ type DeleteLedgerEntryResponse struct {
 	SequenceNum int64      `json:"sequenceNum"`
 }
 type UpsertAssetRequest struct {
-	AssetID string `json:"assetId,omitempty"`
-	Asset   *Asset `json:"asset"`
+	AssetID string        `json:"assetId,omitempty"`
+	Asset   *ledger.Asset `json:"asset"`
 }
 type UpsertAssetResponse struct {
 	Status  StatusCode `json:"status"`
@@ -68,15 +74,15 @@ type CsvUploadResponse struct {
 }
 
 type AddQuoteItem struct {
-	AssetID     string `json:"assetID"`
-	Date        Date   `json:"date"`
-	PriceMicros Micros `json:"priceMicros"`
+	AssetID     string       `json:"assetID"`
+	Date        civil.Date   `json:"date"`
+	PriceMicros units.Micros `json:"priceMicros"`
 }
 type AddExchangeRateItem struct {
-	BaseCurrency  Currency `json:"baseCurrency"`
-	QuoteCurrency Currency `json:"quoteCurrency"`
-	Date          Date     `json:"date"`
-	PriceMicros   Micros   `json:"priceMicros"`
+	BaseCurrency  units.Currency `json:"baseCurrency"`
+	QuoteCurrency units.Currency `json:"quoteCurrency"`
+	Date          civil.Date     `json:"date"`
+	PriceMicros   units.Micros   `json:"priceMicros"`
 }
 type AddQuotesRequest struct {
 	Quotes        []*AddQuoteItem        `json:"quotes"`
@@ -99,7 +105,7 @@ type PositionTimeline struct {
 	AssetID    string  `json:"assetId"`
 	AssetName  string  `json:"assetName"`
 	Timestamps []int64 `json:"timestamps"`
-	// Send values as int64 micros: the JSON marshalling of Micros
+	// Send values as int64 micros: the JSON marshalling of units.Micros
 	// would send them as strings (e.g. "12.3").
 	QuantityMicros []int64 `json:"quantityMicros"`
 	ValueMicros    []int64 `json:"valueMicros"`
@@ -138,8 +144,8 @@ type EquityChartResponse struct {
 }
 
 type LedgerAssetInfoRequest struct {
-	AssetID string `json:"assetId"`
-	Date    *Date  `json:"date"` // Optional
+	AssetID string      `json:"assetId"`
+	Date    *civil.Date `json:"date"` // Optional
 }
 type LedgerAssetInfoResponse struct {
 	Status    StatusCode `json:"status"`
@@ -148,13 +154,13 @@ type LedgerAssetInfoResponse struct {
 }
 
 type CalculateIRRRequest struct {
-	NominalValue    Micros `json:"nominalValue"`
-	PurchasePrice   Micros `json:"purchasePrice"`
-	PurchaseDate    Date   `json:"purchaseDate"`
-	MaturityDate    Date   `json:"maturityDate"`
-	InterestRate    Micros `json:"interestRate"`
-	Cost            Micros `json:"cost"`
-	AccruedInterest bool   `json:"accruedInterest"` // Whether interest is accrued or paid annually.
+	NominalValue    units.Micros `json:"nominalValue"`
+	PurchasePrice   units.Micros `json:"purchasePrice"`
+	PurchaseDate    civil.Date   `json:"purchaseDate"`
+	MaturityDate    civil.Date   `json:"maturityDate"`
+	InterestRate    units.Micros `json:"interestRate"`
+	Cost            units.Micros `json:"cost"`
+	AccruedInterest bool         `json:"accruedInterest"` // Whether interest is accrued or paid annually.
 }
 
 type CalculateIRRResponse struct {
@@ -195,10 +201,10 @@ type Server struct {
 	// Use embedded resources if empty.
 	baseDir   string
 	templates *template.Template
-	store     *Store
+	store     *ledger.Store
 	debugMode bool
 	// Stock quote service
-	yFinance *YFinance
+	yFinance *quotes.YFinance
 }
 
 func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
@@ -213,11 +219,11 @@ func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
 			}
 		}
 	}
-	store, err := LoadStore(ledgerPath)
+	store, err := ledger.LoadStore(ledgerPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot load store: %w", err)
 	}
-	yf, err := NewYFinance()
+	yf, err := quotes.NewYFinance()
 	if err != nil {
 		log.Printf("Error creating YFinance. Stock quotes will not be available. Error: %v", err)
 		yf = nil // Should be nil anyway, but better be safe
@@ -235,12 +241,12 @@ func NewServer(addr, ledgerPath, baseDir string) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) Store() *Store {
+func (s *Server) Store() *ledger.Store {
 	return s.store
 }
 
 func (s *Server) ReloadStore() error {
-	store, err := LoadStore(s.ledgerPath)
+	store, err := ledger.LoadStore(s.ledgerPath)
 	if err != nil {
 		return err
 	}
@@ -265,11 +271,11 @@ func (s *Server) reloadTemplates() error {
 	if s.useEmbedded() {
 		// Use embedded templates
 		glob := "templates/*.html"
-		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseFS(resources.Files, glob)
+		tmpl, err = template.New("__root__").Funcs(ui.CommonFuncs()).ParseFS(resources.Files, glob)
 	} else {
 		// Use templates from file system.
 		glob := path.Join(s.baseDir, "templates", "*.html")
-		tmpl, err = template.New("__root__").Funcs(commonFuncs()).ParseGlob(glob)
+		tmpl, err = template.New("__root__").Funcs(ui.CommonFuncs()).ParseGlob(glob)
 	}
 	if err != nil {
 		return fmt.Errorf("could not parse templates: %w", err)
@@ -281,12 +287,12 @@ func (s *Server) reloadTemplates() error {
 type PositionTableRow struct {
 	AssetID   string
 	AssetName string
-	AssetType AssetType
-	Currency  Currency
-	Value     Micros
+	AssetType ledger.AssetType
+	Currency  units.Currency
+	Value     units.Micros
 	// BaseCurrency/Currency exchange rate. Used to calculate all monetary values
 	// of this position in the base currency.
-	ExchangeRate Micros
+	ExchangeRate units.Micros
 	// Notes about the position to be displayed to the user
 	// (e.g. about old data being shown).
 	Notes []string
@@ -295,49 +301,49 @@ type PositionTableRow struct {
 	// above a threshold.
 	DataAge time.Duration
 
-	PurchasePrice Micros
+	PurchasePrice units.Micros
 
 	// Only populated for equities:
-	Quantity          Micros
-	Price             Micros
-	PriceDate         Date
-	ProfitLoss1Y      Micros
-	ProfitLoss1YBasis Micros // the basis value relative to which the 1Y P&L ratio is calculated.
+	Quantity          units.Micros
+	Price             units.Micros
+	PriceDate         civil.Date
+	ProfitLoss1Y      units.Micros
+	ProfitLoss1YBasis units.Micros // the basis value relative to which the 1Y P&L ratio is calculated.
 
 	// Only populated for maturing assets:
-	NominalValue            Micros
-	InterestRate            Micros
-	IssueDate               *Date
-	MaturityDate            *Date
-	TotalEarningsAtMaturity Micros
-	InternalRateOfReturn    Micros
+	NominalValue            units.Micros
+	InterestRate            units.Micros
+	IssueDate               *civil.Date
+	MaturityDate            *civil.Date
+	TotalEarningsAtMaturity units.Micros
+	InternalRateOfReturn    units.Micros
 	YearsToMaturity         float64
 }
 
-func (r *PositionTableRow) ProfitLoss() Micros {
+func (r *PositionTableRow) ProfitLoss() units.Micros {
 	return r.Value - r.PurchasePrice
 }
 
-func (r *PositionTableRow) ProfitLossRatio() Micros {
+func (r *PositionTableRow) ProfitLossRatio() units.Micros {
 	if r.PurchasePrice == 0 {
 		return 0
 	}
-	return FloatAsMicros(r.Value.Float()/r.PurchasePrice.Float() - 1)
+	return units.FloatAsMicros(r.Value.Float()/r.PurchasePrice.Float() - 1)
 }
 
-func (r *PositionTableRow) ProfitLoss1YRatio() Micros {
+func (r *PositionTableRow) ProfitLoss1YRatio() units.Micros {
 	if r.ProfitLoss1YBasis == 0 {
 		return 0
 	}
 	return r.ProfitLoss1Y.Div(r.ProfitLoss1YBasis)
 }
 
-func (r *PositionTableRow) AssetCategory() AssetCategory {
-	return r.AssetType.category()
+func (r *PositionTableRow) AssetCategory() ledger.AssetCategory {
+	return r.AssetType.Category()
 }
 
 // Convenience function for sorting *Date. Nils come last.
-func compareDatePtr(l, r *Date) int {
+func compareDatePtr(l, r *civil.Date) int {
 	if l == nil {
 		if r == nil {
 			return 0
@@ -350,9 +356,9 @@ func compareDatePtr(l, r *Date) int {
 	return l.Compare(*r)
 }
 
-func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
+func maturingPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
-	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+	slices.SortFunc(positions, func(a, b *ledger.AssetPosition) int {
 		c := compareDatePtr(a.Asset.MaturityDate, b.Asset.MaturityDate)
 		if c != 0 {
 			return c
@@ -378,8 +384,8 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 			InterestRate:            a.InterestMicros,
 			IssueDate:               a.IssueDate,
 			MaturityDate:            a.MaturityDate,
-			TotalEarningsAtMaturity: totalEarningsAtMaturity(p),
-			InternalRateOfReturn:    internalRateOfReturn(p),
+			TotalEarningsAtMaturity: calc.TotalEarningsAtMaturity(p),
+			InternalRateOfReturn:    calc.InternalRateOfReturn(p),
 			YearsToMaturity:         a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
 		}
 		res = append(res, row)
@@ -387,9 +393,9 @@ func maturingPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	return res
 }
 
-func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
+func equityPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
-	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+	slices.SortFunc(positions, func(a, b *ledger.AssetPosition) int {
 		c := strings.Compare(strings.ToLower(a.Name()), strings.ToLower(b.Name()))
 		if c != 0 {
 			return c
@@ -399,7 +405,7 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	var res []*PositionTableRow
 	for _, p := range positions {
 		a := p.Asset
-		if a.Category() != Equity {
+		if a.Category() != ledger.Equity {
 			continue
 		}
 		profitLoss1Y, profitLoss1YBasis, err := s.ProfitLossInPeriod(a.ID(), date.AddDays(-364), date)
@@ -427,9 +433,9 @@ func equityPositionTableRows(s *Store, date Date) []*PositionTableRow {
 	return res
 }
 
-func positionTableRows(s *Store, date Date) []*PositionTableRow {
+func positionTableRows(s *ledger.Store, date civil.Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
-	slices.SortFunc(positions, func(a, b *AssetPosition) int {
+	slices.SortFunc(positions, func(a, b *ledger.AssetPosition) int {
 		c := int(a.Asset.Category()) - int(b.Asset.Category())
 		if c != 0 {
 			return c
@@ -465,14 +471,14 @@ func positionTableRows(s *Store, date Date) []*PositionTableRow {
 }
 
 type PositionTableRowGroup struct {
-	Category AssetCategory
+	Category ledger.AssetCategory
 	Rows     []*PositionTableRow
 	// Only set if calculated across all row groups:
-	FractionOfTotal Micros
+	FractionOfTotal units.Micros
 }
 
-func (g *PositionTableRowGroup) ValueBaseCurrency() Micros {
-	var sum Micros
+func (g *PositionTableRowGroup) ValueBaseCurrency() units.Micros {
+	var sum units.Micros
 	for _, r := range g.Rows {
 		if r.ExchangeRate == 0 {
 			return 0 // Cannot calculate sum in base currency
@@ -550,7 +556,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 	return ctx
 }
 
-func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query, snippet bool) error {
+func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *ledger.Query, snippet bool) error {
 	rows := s.Store().LedgerEntryRows(query)
 	tmpl := "ledger.html"
 	if snippet {
@@ -558,19 +564,19 @@ func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *Query
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
-		"Query":     query.raw,
+		"Query":     query.Raw(),
 	})
 	return s.templates.ExecuteTemplate(w, tmpl, ctx)
 }
 
-func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *LedgerEntry, date Date) error {
-	assets := make([]*Asset, len(s.Store().ledger.Assets))
-	copy(assets, s.Store().ledger.Assets)
-	slices.SortFunc(assets, func(a, b *Asset) int {
+func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *ledger.LedgerEntry, date civil.Date) error {
+	assets := make([]*ledger.Asset, len(s.Store().AllAssets()))
+	copy(assets, s.Store().AllAssets())
+	slices.SortFunc(assets, func(a, b *ledger.Asset) int {
 		return strings.Compare(a.Name, b.Name)
 	})
-	quoteCurrenciesMap := make(map[Currency]bool)
-	var quoteCurrencies []Currency
+	quoteCurrenciesMap := make(map[units.Currency]bool)
+	var quoteCurrencies []units.Currency
 	for _, a := range assets {
 		if a.Currency == s.Store().BaseCurrency() {
 			continue
@@ -582,7 +588,7 @@ func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *Ledger
 	}
 	slices.Sort(quoteCurrencies)
 	if entry == nil {
-		entry = &LedgerEntry{
+		entry = &ledger.LedgerEntry{
 			ValueDate: date, // Prepopulate the value date with the context date.
 		}
 		// Populate input field values from query params
@@ -591,12 +597,12 @@ func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *Ledger
 		if prefill := q.Get("prefill"); prefill != "" {
 			switch prefill {
 			case "balance":
-				entry.Type = AccountBalance
+				entry.Type = ledger.AccountBalance
 				if p := s.Store().AssetPositionAt(entry.AssetID, date); p != nil {
 					entry.ValueMicros = p.MarketValue()
 				}
 			}
-		} else if t, err := ParseEntryTypeString(q.Get("Type")); err == nil {
+		} else if t, err := ledger.ParseEntryTypeString(q.Get("Type")); err == nil {
 			entry.Type = t
 		}
 	}
@@ -606,41 +612,41 @@ func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *Ledger
 		"Assets":          assets,
 		"BaseCurrency":    s.Store().BaseCurrency(),
 		"QuoteCurrencies": quoteCurrencies,
-		"EntryTypes":      EntryTypeValues()[1:],
+		"EntryTypes":      ledger.EntryTypeValues()[1:],
 		"Entry":           entry,
 	})
 	return s.templates.ExecuteTemplate(w, "entry.html", ctx)
 }
 
-func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *Asset) error {
-	assetTypeVals := AssetTypeValues()
+func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *ledger.Asset) error {
+	assetTypeVals := ledger.AssetTypeValues()
 	assetTypes := make([]string, 0, len(assetTypeVals))
 	for _, a := range assetTypeVals {
-		if a == UnspecifiedAssetType {
+		if a == ledger.UnspecifiedAssetType {
 			continue
 		}
 		assetTypes = append(assetTypes, a.String())
 	}
 	if asset == nil {
-		asset = &Asset{} // Ensure template can render empty values.
+		asset = &ledger.Asset{} // Ensure template can render empty values.
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"AssetTypes":           assetTypes,
-		"InterestPaymentTypes": allInterestPaymentSchedules,
+		"InterestPaymentTypes": ledger.AllInterestPaymentSchedules,
 		"Asset":                asset,
 	})
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
 
-func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) error {
+func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	type QuoteEntry struct {
 		AssetID      string
 		AssetName    string
 		Symbol       string
-		Currency     Currency
-		ClosingPrice Micros
+		Currency     units.Currency
+		ClosingPrice units.Micros
 		Date         time.Time
-		LatestDate   Date
+		LatestDate   civil.Date
 		DataAge      time.Duration
 	}
 	if s.yFinance == nil {
@@ -652,7 +658,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) e
 	var errorMessage string
 	for _, asset := range assets {
 		symbol := asset.QuoteServiceSymbols["YF"]
-		loc, err := s.Store().timezone(asset.ExchangeTimezone)
+		loc, err := s.Store().LookupTimezone(asset.ExchangeTimezone)
 		if err != nil {
 			log.Printf("Cannot get exchange timezone for asset %s: %v", asset.ID(), err)
 			continue
@@ -669,7 +675,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) e
 			}
 			continue
 		}
-		_, priceDate, _ := s.Store().PriceAt(asset.ID(), ToDate(h.Timestamp))
+		_, priceDate, _ := s.Store().PriceAt(asset.ID(), civil.ToDate(h.Timestamp))
 		entries = append(entries, &QuoteEntry{
 			AssetID:      asset.ID(),
 			AssetName:    asset.Name,
@@ -682,7 +688,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) e
 		})
 	}
 	quoteCurrencies := s.Store().QuoteCurrencies()
-	exchangeRates := make([]*DailyExchangeRate, 0, len(quoteCurrencies))
+	exchangeRates := make([]*quotes.DailyExchangeRate, 0, len(quoteCurrencies))
 	if errorMessage == "" {
 		for _, qc := range quoteCurrencies {
 			// Use UTC here on purpose: exchange rates in Y! are Europe/London based anyway.
@@ -707,10 +713,10 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date Date) e
 	return s.templates.ExecuteTemplate(w, "quotes.html", ctx)
 }
 
-func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
+func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	rows := positionTableRows(s.Store(), date)
 	groups := positionTableRowGroups(rows)
-	var total Micros
+	var total units.Micros
 	for _, g := range groups {
 		total += g.ValueBaseCurrency()
 	}
@@ -723,18 +729,18 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date Date
 		"Groups":                 groups,
 		"ActiveChips": map[string]bool{
 			"all":   true,
-			"today": date.Equal(today()),
+			"today": date.Equal(civil.Today()),
 		},
-		"MonthOptions": monthOptions(*r.URL, date, maxDate),
-		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
+		"MonthOptions": ui.MonthOptions(*r.URL, date, maxDate),
+		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions.html", ctx)
 }
 
-func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
+func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	rows := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
-	var totalValue, totalEarnings, totalIRR Micros
+	var totalValue, totalEarnings, totalIRR units.Micros
 	for _, r := range rows {
 		if r.ExchangeRate == 0 {
 			totalValue, totalEarnings = 0, 0
@@ -752,24 +758,24 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 		"TableRows": rows,
 		"ActiveChips": map[string]bool{
 			"maturing": true,
-			"today":    date.Equal(today()),
+			"today":    date.Equal(civil.Today()),
 		},
-		"Totals": map[string]Micros{
+		"Totals": map[string]units.Micros{
 			"Value":                totalValue,
 			"EarningsAtMaturity":   totalEarnings,
 			"InternalRateOfReturn": totalIRR,
 		},
-		"MonthOptions": monthOptions(*r.URL, date, maxDate),
-		"YearOptions":  yearOptions(*r.URL, date, minDate, maxDate),
+		"MonthOptions": ui.MonthOptions(*r.URL, date, maxDate),
+		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
 }
 
-func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, date Date) error {
+func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	rows := equityPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
-	var totalValue, totalProfitLoss, totalPurchasePrice, totalPL1Y Micros
-	var totalPL1YBasis Micros
+	var totalValue, totalProfitLoss, totalPurchasePrice, totalPL1Y units.Micros
+	var totalPL1YBasis units.Micros
 	for _, r := range rows {
 		if r.ExchangeRate == 0 {
 			totalValue, totalProfitLoss, totalPurchasePrice, totalPL1Y = 0, 0, 0, 0
@@ -781,11 +787,11 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 		totalPL1Y += r.ProfitLoss1Y.Div(r.ExchangeRate)
 		totalPL1YBasis += r.ProfitLoss1YBasis.Div(r.ExchangeRate)
 	}
-	var totalProfitLossRatio Micros
+	var totalProfitLossRatio units.Micros
 	if totalPurchasePrice != 0 {
 		totalProfitLossRatio = totalProfitLoss.Div(totalPurchasePrice)
 	}
-	var totalProfitLoss1YRatio Micros
+	var totalProfitLoss1YRatio units.Micros
 	if totalPL1YBasis != 0 {
 		totalProfitLoss1YRatio = totalPL1Y.Div(totalPL1YBasis)
 	}
@@ -793,9 +799,9 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 		"TableRows": rows,
 		"ActiveChips": map[string]bool{
 			"equity": true,
-			"today":  date.Equal(today()),
+			"today":  date.Equal(civil.Today()),
 		},
-		"Totals": map[string]Micros{
+		"Totals": map[string]units.Micros{
 			"Value":             totalValue,
 			"PurchasePrice":     totalPurchasePrice,
 			"ProfitLoss":        totalProfitLoss,
@@ -803,8 +809,8 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"ProfitLoss1Y":      totalPL1Y,
 			"ProfitLoss1YRatio": totalProfitLoss1YRatio,
 		},
-		"MonthOptions":    monthOptions(*r.URL, date, maxDate),
-		"YearOptions":     yearOptions(*r.URL, date, minDate, maxDate),
+		"MonthOptions":    ui.MonthOptions(*r.URL, date, maxDate),
+		"YearOptions":     ui.YearOptions(*r.URL, date, minDate, maxDate),
 		"QuarterlyReport": s.Store().QuarterlyReport(date, 5),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_equity.html", ctx)
@@ -820,17 +826,17 @@ func (s *Server) renderCalcTemplate(w io.Writer, r *http.Request) error {
 	}))
 }
 
-func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, store *Store) error {
+func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*quotes.DepotExportItem, store *ledger.Store) error {
 	type Row struct {
 		AssetID               string
 		AssetName             string
-		ValueDate             Date
-		PriceMicros           Micros
-		Currency              Currency
-		QuantityImportMicros  Micros
-		QuantityCurrentMicros Micros
+		ValueDate             civil.Date
+		PriceMicros           units.Micros
+		Currency              units.Currency
+		QuantityImportMicros  units.Micros
+		QuantityCurrentMicros units.Micros
 		Preselect             bool
-		PriceDate             Date
+		PriceDate             civil.Date
 		DataAge               time.Duration
 	}
 	var rows []*Row
@@ -858,7 +864,7 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*DepotExportItem, 
 	})
 }
 
-func (s *Server) renderSnipAssetInfo(w io.Writer, asset *Asset, date Date) error {
+func (s *Server) renderSnipAssetInfo(w io.Writer, asset *ledger.Asset, date civil.Date) error {
 	assetID := asset.ID()
 	entriesBefore, entriesAfter := s.Store().EntriesAround(assetID, date, 3)
 	pos := s.Store().AssetPositionAt(assetID, date)
@@ -872,7 +878,7 @@ func (s *Server) renderSnipAssetInfo(w io.Writer, asset *Asset, date Date) error
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	query, err := ParseQuery(q.Get("q"))
+	query, err := ledger.ParseQuery(q.Get("q"))
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Invalid query: %v", err), http.StatusBadRequest)
 		return
@@ -922,7 +928,7 @@ func (s *Server) handleEntriesEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var buf bytes.Buffer
-	if err := s.renderEntryTemplate(&buf, r, e, today()); err != nil {
+	if err := s.renderEntryTemplate(&buf, r, e, civil.Today()); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
@@ -946,7 +952,7 @@ func (s *Server) handleAssetsEdit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "missing assetID", http.StatusBadRequest)
 		return
 	}
-	asset, ok := s.Store().assets[assetID]
+	asset, ok := s.Store().Asset(assetID)
 	if !ok {
 		http.Error(w, "assetID not found", http.StatusNotFound)
 		return
@@ -975,35 +981,32 @@ func (s *Server) handleQuotes(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func dateParam(r *http.Request) (Date, error) {
+func dateParam(r *http.Request) (civil.Date, error) {
 	d := r.URL.Query().Get("date")
-	var date time.Time
 	if d == "" {
-		date = time.Now()
-	} else {
-		var err error
-		date, err = time.Parse("2006-01-02", d)
-		if err != nil {
-			return Date{}, fmt.Errorf("invalid value for date= parameter: %q", d)
-		}
+		return civil.Today(), nil
 	}
-	return Date{date}, nil
+	date, err := civil.ParseDate(d)
+	if err != nil {
+		return civil.Date{}, fmt.Errorf("invalid value for date= parameter: %q", d)
+	}
+	return date, nil
 }
 
-func ensureDateParam(w http.ResponseWriter, r *http.Request) (Date, bool) {
+func ensureDateParam(w http.ResponseWriter, r *http.Request) (civil.Date, bool) {
 	d := r.URL.Query().Get("date")
 	if d == "" {
-		now := today()
+		now := civil.Today()
 		q := r.URL.Query()
 		q.Set("date", now.Format("2006-01-02"))
 		r.URL.RawQuery = q.Encode()
 		http.Redirect(w, r, r.URL.String(), http.StatusSeeOther)
-		return Date{}, false
+		return civil.Date{}, false
 	}
-	date, err := ParseDate(d)
+	date, err := civil.ParseDate(d)
 	if err != nil {
 		http.Error(w, "invalid date: "+err.Error(), http.StatusBadRequest)
-		return Date{}, false
+		return civil.Date{}, false
 	}
 	return date, true
 }
@@ -1014,15 +1017,15 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	end := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
-	start, err := parsePeriod(end, req.Period)
+	end := civil.ToDate(time.UnixMilli(req.EndTimestamp))
+	start, err := ui.ParsePeriod(end, req.Period)
 	if err != nil {
 		http.Error(w, "invalid period: "+err.Error(), http.StatusBadRequest)
 		return
 	}
 	var timelines []*PositionTimeline
 	for _, assetId := range req.AssetIDs {
-		a, ok := s.Store().assets[assetId]
+		a, ok := s.Store().Asset(assetId)
 		if !ok {
 			continue
 		}
@@ -1057,7 +1060,7 @@ func (s *Server) handleChartsEquity(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	date := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
 	rows := equityPositionTableRows(s.Store(), date)
 	// Sort by value, descending
 	sort.Slice(rows, func(i, j int) bool {
@@ -1092,13 +1095,13 @@ func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Reques
 		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
 		return
 	}
-	date := ToDate(time.UnixMilli(req.EndTimestamp).In(time.UTC))
+	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
 	rows := maturingPositionTableRows(s.Store(), date)
 
 	// Calculate total value for each months-bucket defined by these monthBounds.
 	// Use 6-month buckets up to 3 years, then 1-year buckets up to 10 years.
 	monthBounds := []int{0, 6, 12, 18, 24, 30, 36, 48, 60, 72, 84, 96, 108, 120, 15 * 12, 20 * 12, 50 * 12, 100 * 12}
-	buckets := make([]Micros, len(monthBounds))
+	buckets := make([]units.Micros, len(monthBounds))
 	for _, row := range rows {
 		if row.YearsToMaturity < 0 {
 			continue
@@ -1224,18 +1227,18 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	interestPayment := AnnualPayment
+	interestPayment := ledger.AnnualPayment
 	if req.AccruedInterest {
-		interestPayment = AccruedPayment
+		interestPayment = ledger.AccruedPayment
 	}
-	irrMicros, err := irrWithInterest(irrParams{
-		nominalValue:    req.NominalValue,
-		price:           req.PurchasePrice,
-		interestRate:    req.InterestRate,
-		cost:            req.Cost,
-		purchaseDate:    req.PurchaseDate,
-		maturityDate:    req.MaturityDate,
-		interestPayment: interestPayment,
+	irrMicros, err := calc.IRRWithInterest(calc.IRRParams{
+		NominalValue:    req.NominalValue,
+		Price:           req.PurchasePrice,
+		InterestRate:    req.InterestRate,
+		Cost:            req.Cost,
+		PurchaseDate:    req.PurchaseDate,
+		MaturityDate:    req.MaturityDate,
+		InterestPayment: interestPayment,
 	})
 	if err != nil {
 		s.jsonResponse(w, CalculateIRRResponse{
@@ -1291,12 +1294,12 @@ func (s *Server) handleCsvPost(w http.ResponseWriter, r *http.Request) {
 	}
 	// Assume ISO 8859-15 encoding.
 	enc := charmap.ISO8859_15.NewDecoder().Reader(f)
-	items, err := ReadDepotExportCSV(enc)
+	items, err := quotes.ReadDepotExportCSV(enc)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error processing CSV: %v", err), http.StatusBadRequest)
 		return
 	}
-	validItems := make([]*DepotExportItem, 0, len(items))
+	validItems := make([]*quotes.DepotExportItem, 0, len(items))
 	var skipped []string
 	for _, item := range items {
 		if a := s.Store().FindAssetByWKN(item.WKN); a == nil {
@@ -1385,12 +1388,12 @@ func (s *Server) handleEntriesAssetInfo(w http.ResponseWriter, r *http.Request) 
 
 	}
 	var buf bytes.Buffer
-	date := today()
+	date := civil.Today()
 	if req.Date != nil {
 		date = *req.Date
 	}
-	asset := s.Store().assets[req.AssetID]
-	if asset == nil {
+	asset, ok := s.Store().Asset(req.AssetID)
+	if !ok {
 		s.jsonResponse(w, LedgerAssetInfoResponse{
 			Status: StatusInvalidArgument,
 			Error:  fmt.Sprintf("No asset with ID %q", req.AssetID),
@@ -1483,15 +1486,15 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*LedgerEntry, error) {
-	result := make([]*LedgerEntry, 0, len(r.Quotes)+len(r.ExchangeRates))
+func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*ledger.LedgerEntry, error) {
+	result := make([]*ledger.LedgerEntry, 0, len(r.Quotes)+len(r.ExchangeRates))
 	for _, q := range r.Quotes {
-		a, ok := s.Store().assets[q.AssetID]
+		a, ok := s.Store().Asset(q.AssetID)
 		if !ok {
 			return nil, fmt.Errorf("asset %q does not exist", q.AssetID)
 		}
-		result = append(result, &LedgerEntry{
-			Type:        AssetPrice,
+		result = append(result, &ledger.LedgerEntry{
+			Type:        ledger.AssetPrice,
 			ValueDate:   q.Date,
 			AssetID:     q.AssetID,
 			Currency:    a.Currency,
@@ -1500,17 +1503,17 @@ func (s *Server) createLedgerEntries(r *AddQuotesRequest) ([]*LedgerEntry, error
 
 	}
 	for _, e := range r.ExchangeRates {
-		if !currencyRegexp.MatchString(string(e.BaseCurrency)) {
+		if !e.BaseCurrency.Valid() {
 			return nil, fmt.Errorf("invalid currency: %q", e.BaseCurrency)
 		}
-		if !currencyRegexp.MatchString(string(e.QuoteCurrency)) {
+		if !e.QuoteCurrency.Valid() {
 			return nil, fmt.Errorf("invalid currency: %q", e.QuoteCurrency)
 		}
 		if e.PriceMicros <= 0 {
 			return nil, fmt.Errorf("exchange rate must be postive: %v", e.PriceMicros)
 		}
-		result = append(result, &LedgerEntry{
-			Type:          ExchangeRate,
+		result = append(result, &ledger.LedgerEntry{
+			Type:          ledger.ExchangeRate,
 			ValueDate:     e.Date,
 			Currency:      e.BaseCurrency,
 			QuoteCurrency: e.QuoteCurrency,

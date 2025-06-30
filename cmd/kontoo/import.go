@@ -14,14 +14,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dnswlt/kontoo/pkg/kontoo"
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 func ProcessImport(args []string) error {
 	if len(args) != 2 {
 		return fmt.Errorf("please specify ledger and one CSV file. Got: %v", args)
 	}
-	store, err := kontoo.LoadStore(args[0])
+	store, err := ledger.LoadStore(args[0])
 	if err != nil {
 		return fmt.Errorf("cannot load store: %v", err)
 	}
@@ -30,7 +32,7 @@ func ProcessImport(args []string) error {
 		return fmt.Errorf("cannot open CSV file: %v", err)
 	}
 	defer in.Close()
-	parseFloat := func(s string) (kontoo.Micros, error) {
+	parseFloat := func(s string) (units.Micros, error) {
 		s = strings.TrimSpace(strings.ReplaceAll(s, "'", ""))
 		if s == "" {
 			return 0, nil
@@ -39,7 +41,7 @@ func ProcessImport(args []string) error {
 		if err != nil {
 			return 0, err
 		}
-		return kontoo.Micros(math.Round(f * 1e6)), nil
+		return units.Micros(math.Round(f * 1e6)), nil
 	}
 	colIdx := map[string]int{
 		"ValueDate": 0,
@@ -103,20 +105,20 @@ func ProcessImport(args []string) error {
 		}
 		if eps := math.Abs(1 - qty.Mul(price).Float()/val.Float()); eps >= 0.02 {
 			// see if price is given in %
-			price = price.Mul(10 * kontoo.Millis)
+			price = price.Mul(10 * units.Millis)
 			if eps := math.Abs(1 - qty.Mul(price).Float()/val.Float()); eps >= 0.02 {
 				return fmt.Errorf("price*qty != value in row %d: %.2f %v %v %v", i, eps, qty, val, price)
 			}
 		}
-		vdate := kontoo.Date{Time: valueDate}
+		vdate := civil.Date{Time: valueDate}
 		if entries := store.EntriesInRange(assetId, vdate, vdate); len(entries) > 0 {
 			fmt.Printf("WARNING: Skipping potential %d duplicate(s) for %s on %v (%v)\n", len(entries), assetId, vdate, entries[0].Type)
 			continue
 		}
-		e := &kontoo.LedgerEntry{
+		e := &ledger.LedgerEntry{
 			AssetID:        assetId,
 			ValueDate:      vdate,
-			Type:           kontoo.AssetPurchase,
+			Type:           ledger.AssetPurchase,
 			QuantityMicros: qty,
 			ValueMicros:    val,
 			PriceMicros:    val.Div(qty),

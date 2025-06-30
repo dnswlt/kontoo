@@ -1,9 +1,11 @@
-package kontoo
+package ledger
 
 import (
 	"fmt"
-	"regexp"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 //go:generate go-enum -type=AssetType -string -json -all=false
@@ -238,7 +240,7 @@ func (t AssetType) SupportsRepeatedLedgerEntries() bool {
 	return assetTypeInfos[t].supportsRepeatedLedgerEntries
 }
 
-func (t AssetType) category() AssetCategory {
+func (t AssetType) Category() AssetCategory {
 	return assetTypeInfos[t].category
 }
 
@@ -261,7 +263,7 @@ const (
 	AnnualPayment      InterestPaymentSchedule = "annual"  // Interest paid yearly
 )
 
-var allInterestPaymentSchedules = [...]InterestPaymentSchedule{
+var AllInterestPaymentSchedules = []InterestPaymentSchedule{
 	UnspecifiedPayment,
 	AccruedPayment,
 	AnnualPayment,
@@ -273,9 +275,9 @@ type Asset struct {
 	Type            AssetType
 	Name            string
 	ShortName       string                  `json:",omitempty"`
-	IssueDate       *Date                   `json:",omitempty"`
-	MaturityDate    *Date                   `json:",omitempty"`
-	InterestMicros  Micros                  `json:"Interest,omitempty"`
+	IssueDate       *civil.Date             `json:",omitempty"`
+	MaturityDate    *civil.Date             `json:",omitempty"`
+	InterestMicros  units.Micros            `json:"Interest,omitempty"`
 	InterestPayment InterestPaymentSchedule `json:",omitempty"`
 	IBAN            string                  `json:",omitempty"`
 	AccountNumber   string                  `json:",omitempty"`
@@ -288,7 +290,7 @@ type Asset struct {
 	// (Optional) time zone in which the main exchange trading the equity is located.
 	ExchangeTimezone string `json:",omitempty"`
 	CustomID         string `json:",omitempty"`
-	Currency         Currency
+	Currency         units.Currency
 	Comment          string `json:",omitempty"`
 }
 
@@ -311,23 +313,18 @@ const (
 	ExchangeRate
 )
 
-// Dates without a time component.
-type Date struct {
-	time.Time
-}
-
 type LedgerEntry struct {
 	Created     time.Time
 	SequenceNum int64
-	ValueDate   Date      `json:",omitempty"`
-	Type        EntryType `json:",omitempty"`
-	AssetRef    string    `json:",omitempty"`
-	AssetID     string    `json:",omitempty"`
+	ValueDate   civil.Date `json:",omitempty"`
+	Type        EntryType  `json:",omitempty"`
+	AssetRef    string     `json:",omitempty"`
+	AssetID     string     `json:",omitempty"`
 
-	Currency Currency `json:",omitempty"`
+	Currency units.Currency `json:",omitempty"`
 
 	// Only set for ExchangeRate type entries. Currency represents the base currency in that case.
-	QuoteCurrency Currency `json:",omitempty"`
+	QuoteCurrency units.Currency `json:",omitempty"`
 
 	// All *Micros fields are given in either micros of the currency or micros of a fraction.
 	// 1'000'000 in ValueMicros equals 1.00 CHF (or whatever the Currency),
@@ -336,76 +333,22 @@ type LedgerEntry struct {
 	// Value in micros of the currency. For currency CHF, 1'000'000 ValueMicros equals 1 CHF.
 	// Except for accounts, ValueMicros is only informational. The current value of other asset positions
 	// is calculated from its QuantityMicros and its PriceMicros.
-	ValueMicros    Micros `json:"Value,omitempty"`    // Account balance or asset value as calculated from quantity and price.
-	QuantityMicros Micros `json:"Quantity,omitempty"` // Number of stocks, oz of gold, nominal value of a bond
-	PriceMicros    Micros `json:"Price,omitempty"`    // Price of a single quantity of the asset. (1 * UnitValue) means 100% for prices specified in percent.
-	CostMicros     Micros `json:"Cost,omitempty"`     // Cost incurred by the transaction.
+	ValueMicros    units.Micros `json:"Value,omitempty"`    // Account balance or asset value as calculated from quantity and price.
+	QuantityMicros units.Micros `json:"Quantity,omitempty"` // Number of stocks, oz of gold, nominal value of a bond
+	PriceMicros    units.Micros `json:"Price,omitempty"`    // Price of a single quantity of the asset. (1 * UnitValue) means 100% for prices specified in percent.
+	CostMicros     units.Micros `json:"Cost,omitempty"`     // Cost incurred by the transaction.
 
 	Comment string `json:",omitempty"`
 }
 
 type LedgerHeader struct {
-	BaseCurrency Currency `json:",omitempty"`
-}
-
-type AssetGroup struct {
-	ID   string
-	Name string
+	BaseCurrency units.Currency `json:",omitempty"`
 }
 
 type Ledger struct {
 	Header  *LedgerHeader  `json:",omitempty"`
 	Assets  []*Asset       `json:",omitempty"`
 	Entries []*LedgerEntry `json:",omitempty"`
-}
-
-const (
-	Millis    = 1_000
-	UnitValue = 1_000_000
-)
-
-// Three-letter code, e.g. CHF, EUR, USD.
-type Currency string
-
-var (
-	// Regexp for ISO 3-letter currency codes.
-	currencyRegexp = regexp.MustCompile("^[A-Z]{3}$")
-	// Lists known currencies.
-	// Used in ledger validation: other currencies will not be accepted.
-	validCurrencies = map[Currency]bool{
-		"EUR": true, // Euro
-		"USD": true, // US Dollar
-		"CHF": true, // Swiss Franc
-		"GBP": true, // British Pound Sterling
-		"NOK": true, // Norwegian Krone
-		"SEK": true, // Swedish Krona
-		"DKK": true, // Danish Krone
-		"JPY": true, // Japanese Yen
-		"CAD": true, // Canadian Dollar
-		"AUD": true, // Australian Dollar
-		"CNY": true, // Chinese Yuan
-	}
-)
-
-// Reports whether c is a valid and known currency.
-func ValidCurrency(c Currency) bool {
-	return validCurrencies[c]
-}
-
-func (d Date) String() string {
-	return d.Format("2006-01-02")
-}
-
-func (d Date) Compare(other Date) int {
-	return d.Time.Compare(other.Time)
-}
-
-func (d Date) Between(start, end Date) bool {
-	return !start.After(d.Time) && !end.Before(d.Time)
-}
-
-func (d Date) AddDays(n int) Date {
-	return Date{d.AddDate(0, 0, n)}
 }
 
 func (t EntryType) NeedsAssetID() bool {

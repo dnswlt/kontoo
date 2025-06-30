@@ -1,4 +1,4 @@
-package kontoo
+package ui
 
 import (
 	"fmt"
@@ -9,6 +9,10 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 type DropdownOptions struct {
@@ -21,7 +25,7 @@ type NamedOption struct {
 	Data  map[string]any
 }
 
-func yearOptions(url url.URL, date Date, minDate, maxDate Date) DropdownOptions {
+func YearOptions(url url.URL, date civil.Date, minDate, maxDate civil.Date) DropdownOptions {
 	res := DropdownOptions{
 		Selected: &NamedOption{
 			Name:  fmt.Sprintf("%d", date.Year()),
@@ -29,7 +33,7 @@ func yearOptions(url url.URL, date Date, minDate, maxDate Date) DropdownOptions 
 		},
 	}
 	for y := maxDate.Year(); y >= minDate.Year(); y-- {
-		d := DateVal(y, date.Month(), date.Day())
+		d := civil.DateVal(y, date.Month(), date.Day())
 		q := url.Query()
 		q.Set("date", d.Format("2006-01-02"))
 		url.RawQuery = q.Encode()
@@ -44,7 +48,7 @@ func yearOptions(url url.URL, date Date, minDate, maxDate Date) DropdownOptions 
 	return res
 }
 
-func monthOptions(url url.URL, date Date, maxDate Date) DropdownOptions {
+func MonthOptions(url url.URL, date civil.Date, maxDate civil.Date) DropdownOptions {
 	months := []string{
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -60,7 +64,7 @@ func monthOptions(url url.URL, date Date, maxDate Date) DropdownOptions {
 	}
 	for i := 1; i <= 12; i++ {
 		// Get last day of the month i+1
-		d := DateVal(date.Year(), time.Month(i), 1).AddDate(0, 1, -1)
+		d := civil.DateVal(date.Year(), time.Month(i), 1).AddDate(0, 1, -1)
 		q := url.Query()
 		q.Set("date", d.Format("2006-01-02"))
 		url.RawQuery = q.Encode()
@@ -94,72 +98,72 @@ func joinAny(items any, sep string) (string, error) {
 // Parses the period from a request as a duration.
 // Valid values are "Max", "YTD", and "<N><Unit>", where <Unit> must be one of
 // "D", "W", "M", "Y".
-func parsePeriod(end Date, p string) (Date, error) {
+func ParsePeriod(end civil.Date, p string) (civil.Date, error) {
 	if p == "" {
-		return Date{}, fmt.Errorf("empty period given")
+		return civil.Date{}, fmt.Errorf("empty period given")
 	}
 	if p == "Max" {
-		return Date{}, nil
+		return civil.Date{}, nil
 	}
 	if p == "YTD" {
-		return DateVal(end.Year(), 1, 1), nil
+		return civil.DateVal(end.Year(), 1, 1), nil
 	}
 	n, err := strconv.Atoi(p[:len(p)-1])
 	if err != nil {
-		return Date{}, fmt.Errorf("invalid number in period %s", p)
+		return civil.Date{}, fmt.Errorf("invalid number in period %s", p)
 	}
 	switch p[len(p)-1] {
 	case 'D':
-		return Date{end.AddDate(0, 0, -n)}, nil
+		return end.AddDate(0, 0, -n), nil
 	case 'W':
-		return Date{end.AddDate(0, 0, -7*n)}, nil
+		return end.AddDate(0, 0, -7*n), nil
 	case 'M':
-		return Date{end.AddDate(0, -n, 0)}, nil
+		return end.AddDate(0, -n, 0), nil
 	case 'Y':
-		return Date{end.AddDate(-n, 0, 0)}, nil
+		return end.AddDate(-n, 0, 0), nil
 	default:
-		return Date{}, fmt.Errorf("invalid period: %s", p)
+		return civil.Date{}, fmt.Errorf("invalid period: %s", p)
 	}
 }
 
-func commonFuncs() template.FuncMap {
+func CommonFuncs() template.FuncMap {
 	return template.FuncMap{
 		"concat": func(s, t string) string {
 			return s + t
 		},
-		"nonzero": func(m Micros) bool {
+		"nonzero": func(m units.Micros) bool {
 			return m != 0
 		},
-		"negative": func(m Micros) bool {
+		"negative": func(m units.Micros) bool {
 			return m < 0
 		},
-		"micros": func(m Micros) int64 {
+		"micros": func(m units.Micros) int64 {
 			return int64(m)
 		},
-		"money": func(m Micros) string {
+		"money": func(m units.Micros) string {
 			return m.Format("()'.2")
 		},
-		"price": func(m Micros) string {
+		"price": func(m units.Micros) string {
 			return m.Format("'.3")
 		},
-		"quantity": func(m Micros) string {
+		"quantity": func(m units.Micros) string {
 			if _, f := m.SplitFrac(); f != 0 {
 				return m.Format("'.2")
 			}
 			return m.Format("'.0")
 		},
 		// Percent in accounting contexts (with brackets for negative values).
-		"percentAcc": func(m Micros) string {
+		"percentAcc": func(m units.Micros) string {
 			return m.Format("()'.2%")
 		},
-		"percent": func(m Micros) string {
+		"percent": func(m units.Micros) string {
 			return m.Format(".2%")
 		},
 		"yyyymmdd": func(t any) (string, error) {
 			switch d := t.(type) {
 			case time.Time:
 				return d.Format("2006-01-02"), nil
-			case Date:
+			case civil.Date:
 				return d.Time.Format("2006-01-02"), nil
 			}
 			return "", fmt.Errorf("yyyymmdd called with invalid type %t", t)
@@ -170,11 +174,11 @@ func commonFuncs() template.FuncMap {
 		"isodate": func(t time.Time) string {
 			return t.Format("2006-01-02 15:04:05-07:00")
 		},
-		"assetType": func(t AssetType) string {
+		"assetType": func(t ledger.AssetType) string {
 			return t.DisplayName()
 		},
-		"assetCategory": func(t AssetType) string {
-			return t.category().String()
+		"assetCategory": func(t ledger.AssetType) string {
+			return t.Category().String()
 		},
 		"days": func(d time.Duration) int {
 			return int(math.Round(d.Seconds() / 60 / 60 / 24))

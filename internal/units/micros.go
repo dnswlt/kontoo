@@ -1,4 +1,4 @@
-package kontoo
+package units
 
 import (
 	"fmt"
@@ -6,12 +6,19 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type Micros int64
 
 var (
 	bigMillion = big.NewInt(1_000_000)
+)
+
+const (
+	Millis    = 1_000
+	UnitValue = 1_000_000
+	One       = 1_000_000
 )
 
 // Returns the result of multiplying two values expressed in micros.
@@ -275,5 +282,81 @@ func (m *Micros) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid JSON string for Micros: %s", s)
 	}
 	*m = Micros(d)
+	return nil
+}
+
+func ParseDecimalAsMicros(decimal string, m *Micros) error {
+	l := len(decimal)
+	if l == 0 {
+		return fmt.Errorf("cannot parse empty string as micros")
+	}
+	percent := false
+	if decimal[l-1] == '%' {
+		percent = true
+		l--
+	}
+	pos := 0
+	sign := int64(1)
+	switch decimal[pos] {
+	case '-':
+		sign = -1
+		pos++
+	case '+':
+		pos++
+	}
+	intStart := pos
+	for pos < l && '0' <= decimal[pos] && decimal[pos] <= '9' {
+		pos++
+	}
+	intEnd := pos
+	if pos < l {
+		if decimal[pos] != '.' {
+			r, _ := utf8.DecodeRuneInString(decimal[pos:])
+			return fmt.Errorf("invalid character in decimal: %c", r)
+		}
+		pos++
+	}
+	fracStart := pos
+	for pos < l && '0' <= decimal[pos] && decimal[pos] <= '9' {
+		pos++
+	}
+	if pos < l {
+		r, _ := utf8.DecodeRuneInString(decimal[pos:])
+		return fmt.Errorf("invalid character in decimal: %c", r)
+	}
+	if intEnd == intStart && fracStart == l {
+		return fmt.Errorf("decimal contains neither integral nor fractional part: %q", decimal)
+	}
+	fracVal := 0
+	if fracStart < l {
+		var err error
+		fracVal, err = strconv.Atoi(decimal[fracStart:l])
+		if err != nil {
+			return fmt.Errorf("failed to parse fractional part: %w", err)
+		}
+		fz := 6 - (l - fracStart)
+		if fz < 0 {
+			return fmt.Errorf("too many fractional digits (max 6): %q", decimal)
+		}
+		for fz > 0 {
+			fracVal *= 10
+			fz--
+		}
+	}
+	var intVal int64
+	if intEnd-intStart > 0 {
+		var err error
+		intVal, err = strconv.ParseInt(decimal[intStart:intEnd], 10, 64)
+		if err != nil {
+			return fmt.Errorf("failed to parse integral part: %w", err)
+		}
+		if intVal >= math.MaxInt64/UnitValue {
+			return fmt.Errorf("decimal is too large to represent as micros: %d", intVal)
+		}
+	}
+	*m = Micros(sign * (intVal*UnitValue + int64(fracVal)))
+	if percent {
+		*m = m.Mul(10 * Millis)
+	}
 	return nil
 }

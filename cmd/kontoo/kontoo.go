@@ -10,35 +10,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/dnswlt/kontoo/pkg/kontoo"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/server"
+	"github.com/dnswlt/kontoo/internal/units"
 )
-
-func ProcessAdd(args []string) error {
-	if len(args) == 0 || strings.TrimLeft(args[0], "-") == "help" {
-		lines := []string{
-			"Usage of add:",
-			"  add <ledger-path> (-<Field> <Value>)...",
-		}
-		fmt.Fprint(os.Stderr, strings.Join(lines, "\n"))
-		return flag.ErrHelp
-	}
-	ledgerPath := args[0]
-	store, err := kontoo.LoadStore(ledgerPath)
-	if err != nil {
-		return fmt.Errorf("failed to load store: %w", err)
-	}
-	e, err := kontoo.ParseLedgerEntry(args[1:])
-	if err != nil {
-		return fmt.Errorf("could not parse ledger entry: %w", err)
-	}
-	err = store.Add(e)
-	if err != nil {
-		return fmt.Errorf("could not add entry: %w", err)
-	}
-	store.Save()
-
-	return nil
-}
 
 func ProcessCreate(args []string) error {
 	fs := flag.NewFlagSet("create", flag.ContinueOnError)
@@ -47,11 +22,11 @@ func ProcessCreate(args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return fmt.Errorf("flag parse error: %w", err)
 	}
-	ccy := kontoo.Currency(*baseCurrency)
-	if !kontoo.ValidCurrency(ccy) {
+	ccy := units.Currency(*baseCurrency)
+	if !ccy.Valid() {
 		return fmt.Errorf("invalid currency %q", *baseCurrency)
 	}
-	l := kontoo.NewLedger(ccy)
+	l := ledger.NewLedger(ccy)
 	var out io.Writer
 	if *path == "" {
 		out = os.Stdout
@@ -87,7 +62,7 @@ func ProcessServe(args []string) error {
 	if *debugMode && *baseDir == "" {
 		return fmt.Errorf("must specify -base-dir if -debug is true")
 	}
-	s, err := kontoo.NewServer(fmt.Sprintf("localhost:%d", *port), *ledgerPath, *baseDir)
+	s, err := server.NewServer(fmt.Sprintf("localhost:%d", *port), *ledgerPath, *baseDir)
 	if err != nil {
 		return err
 	}
@@ -104,8 +79,6 @@ func main() {
 	}
 	var err error
 	switch os.Args[1] {
-	case "add":
-		err = ProcessAdd(os.Args[2:])
 	case "serve":
 		err = ProcessServe(os.Args[2:])
 	case "import":

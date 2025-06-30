@@ -1,9 +1,10 @@
-package kontoo
+package ledger
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/dnswlt/kontoo/internal/civil"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -16,7 +17,7 @@ func TestParseQueryFull(t *testing.T) {
 			q: "foo=BAR !baz=_quz_",
 			want: &Query{
 				raw:       "foo=BAR !baz=_quz_",
-				untilDate: DateVal(9999, 12, 31),
+				untilDate: civil.DateVal(9999, 12, 31),
 				fieldTerms: []fieldTerm{
 					{
 						field:     "foo",
@@ -73,7 +74,7 @@ func TestParseQuery(t *testing.T) {
 			},
 		},
 		{
-			q: "f=foo !r=bar",
+			q: "f=foo r=bar",
 			wantFields: map[string]string{
 				"f": "foo",
 				"r": "bar",
@@ -139,47 +140,47 @@ func TestParseQueryEmpty(t *testing.T) {
 func TestParseQueryDates(t *testing.T) {
 	tests := []struct {
 		q         string
-		wantFrom  Date
-		wantUntil Date
+		wantFrom  civil.Date
+		wantUntil civil.Date
 	}{
 		{
 			q:        "from:2023-12-31",
-			wantFrom: DateVal(2023, 12, 31),
+			wantFrom: civil.DateVal(2023, 12, 31),
 		},
 		{
 			q:         "from:2023-12-30 until:2024-01-02",
-			wantFrom:  DateVal(2023, 12, 30),
-			wantUntil: DateVal(2024, 1, 2),
+			wantFrom:  civil.DateVal(2023, 12, 30),
+			wantUntil: civil.DateVal(2024, 1, 2),
 		},
 		{
 			q:         "year:1999",
-			wantFrom:  DateVal(1999, 1, 1),
-			wantUntil: DateVal(1999, 12, 31),
+			wantFrom:  civil.DateVal(1999, 1, 1),
+			wantUntil: civil.DateVal(1999, 12, 31),
 		},
 		{
 			q:         "date:2000",
-			wantFrom:  DateVal(2000, 1, 1),
-			wantUntil: DateVal(2000, 12, 31),
+			wantFrom:  civil.DateVal(2000, 1, 1),
+			wantUntil: civil.DateVal(2000, 12, 31),
 		},
 		{
 			q:         "date:2020-02",
-			wantFrom:  DateVal(2020, 2, 1),
-			wantUntil: DateVal(2020, 2, 29),
+			wantFrom:  civil.DateVal(2020, 2, 1),
+			wantUntil: civil.DateVal(2020, 2, 29),
 		},
 		{
 			q:         "date:2020-01",
-			wantFrom:  DateVal(2020, 1, 1),
-			wantUntil: DateVal(2020, 1, 31),
+			wantFrom:  civil.DateVal(2020, 1, 1),
+			wantUntil: civil.DateVal(2020, 1, 31),
 		},
 		{
 			q:         "date:2019-12",
-			wantFrom:  DateVal(2019, 12, 1),
-			wantUntil: DateVal(2019, 12, 31),
+			wantFrom:  civil.DateVal(2019, 12, 1),
+			wantUntil: civil.DateVal(2019, 12, 31),
 		},
 		{
 			q:         "date:2024-03-31",
-			wantFrom:  DateVal(2024, 3, 31),
-			wantUntil: DateVal(2024, 3, 31),
+			wantFrom:  civil.DateVal(2024, 3, 31),
+			wantUntil: civil.DateVal(2024, 3, 31),
 		},
 	}
 	for _, tc := range tests {
@@ -244,7 +245,7 @@ func TestQueryMatch(t *testing.T) {
 	}
 	rDate := &LedgerEntryRow{
 		E: &LedgerEntry{
-			ValueDate: DateVal(2024, 1, 1),
+			ValueDate: civil.DateVal(2024, 1, 1),
 		},
 	}
 	rType := &LedgerEntryRow{
@@ -322,15 +323,15 @@ func TestQuerySort(t *testing.T) {
 			rows: []*LedgerEntryRow{
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{SequenceNum: 0, ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{SequenceNum: 0, ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{SequenceNum: 1, ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{SequenceNum: 1, ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{SequenceNum: 2, ValueDate: DateVal(2024, 2, 1)},
+					E: &LedgerEntry{SequenceNum: 2, ValueDate: civil.DateVal(2024, 2, 1)},
 				},
 			},
 			want: []int{2, 1, 0},
@@ -340,15 +341,15 @@ func TestQuerySort(t *testing.T) {
 			rows: []*LedgerEntryRow{
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 2, 1)},
 				},
 			},
 			want: []int{2, 1, 0},
@@ -358,15 +359,15 @@ func TestQuerySort(t *testing.T) {
 			rows: []*LedgerEntryRow{
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 3, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 3, 1)},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 2, 1)},
 				},
 			},
 			want: []int{2, 1, 0},
@@ -376,15 +377,15 @@ func TestQuerySort(t *testing.T) {
 			rows: []*LedgerEntryRow{
 				{
 					A: asset("Microsoft", "MSFT"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 2, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 2, 1)},
 				},
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 3, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 3, 1)},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
 				},
 			},
 			want: []int{0, 1, 2},

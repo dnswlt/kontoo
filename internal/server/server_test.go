@@ -1,4 +1,4 @@
-package kontoo
+package server
 
 import (
 	"bytes"
@@ -13,12 +13,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/units"
 	"golang.org/x/net/html"
 )
 
 func TestLoadTemplates(t *testing.T) {
 	s := &Server{
-		baseDir: "../resources",
+		baseDir: "../../resources",
 	}
 	if err := s.reloadTemplates(); err != nil {
 		t.Fatalf("Failed to load templates: %v", err)
@@ -40,7 +43,7 @@ func countElements(n *html.Node, elem string) int {
 func TestHandleLedger(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/kontoo/ledger", nil)
 	w := httptest.NewRecorder()
-	s, err := NewServer("localhost:8080", "./testdata/testledger.json", "")
+	s, err := NewServer("localhost:8080", "../../testdata/testledger.json", "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
 	}
@@ -65,7 +68,7 @@ func TestHandleLedger(t *testing.T) {
 func TestHandlePositionsRedirect(t *testing.T) {
 	r := httptest.NewRequest(http.MethodGet, "/kontoo/positions", nil)
 	w := httptest.NewRecorder()
-	s, err := NewServer("localhost:8080", "./testdata/testledger.json", "")
+	s, err := NewServer("localhost:8080", "../../testdata/testledger.json", "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
 	}
@@ -77,7 +80,7 @@ func TestHandlePositionsRedirect(t *testing.T) {
 	if ct := h.Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Error("Wrong Content-Type:", ct)
 	}
-	wantLocation := fmt.Sprintf("/kontoo/positions?date=%s", today())
+	wantLocation := fmt.Sprintf("/kontoo/positions?date=%s", civil.Today())
 	if l := h.Get("Location"); l != wantLocation {
 		t.Error("Wrong Location:", l, "want:", wantLocation)
 	}
@@ -106,7 +109,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	// so that changes can be persisted, but only for the duration of the test.
 	tempDir := t.TempDir()
 	tempLedger := filepath.Join(tempDir, "testledger.json")
-	copyFile("./testdata/testledger.json", tempLedger)
+	copyFile("../../testdata/testledger.json", tempLedger)
 	s, err := NewServer("localhost:8080", tempLedger, "")
 	if err != nil {
 		t.Fatal("Cannot create server:", err)
@@ -180,20 +183,20 @@ func TestHandlePostJson(t *testing.T) {
 		{
 			path: "/kontoo/entries",
 			data: &UpsertLedgerEntryRequest{
-				Entry: &LedgerEntry{
-					Type:           AssetPurchase,
+				Entry: &ledger.LedgerEntry{
+					Type:           ledger.AssetPurchase,
 					AssetID:        "NESN",
-					ValueDate:      DateVal(2024, 9, 1),
-					QuantityMicros: 1 * UnitValue,
-					PriceMicros:    95 * UnitValue,
+					ValueDate:      civil.DateVal(2024, 9, 1),
+					QuantityMicros: 1 * units.One,
+					PriceMicros:    95 * units.UnitValue,
 				},
 			},
 		},
 		{
 			path: "/kontoo/assets",
 			data: &UpsertAssetRequest{
-				Asset: &Asset{
-					Type:         Stock,
+				Asset: &ledger.Asset{
+					Type:         ledger.Stock,
 					Name:         "Mercedes-Benz Group AG",
 					TickerSymbol: "MBG.DE",
 					Currency:     "EUR",
@@ -204,8 +207,8 @@ func TestHandlePostJson(t *testing.T) {
 			path: "/kontoo/assets",
 			data: &UpsertAssetRequest{
 				AssetID: "NESN",
-				Asset: &Asset{
-					Type:         Stock,
+				Asset: &ledger.Asset{
+					Type:         ledger.Stock,
 					Name:         "Nestle SA",
 					ShortName:    "Nestli",
 					TickerSymbol: "NESN",
@@ -219,7 +222,7 @@ func TestHandlePostJson(t *testing.T) {
 				AssetIDs: []string{
 					"NESN",
 				},
-				EndTimestamp: DateVal(2024, 12, 31).UnixMilli(),
+				EndTimestamp: civil.DateVal(2024, 12, 31).UnixMilli(),
 				Period:       "1Y",
 			},
 		},
@@ -264,7 +267,7 @@ func TestHandlePostCsvUpload(t *testing.T) {
 	if err != nil {
 		t.Fatal("Cannot create form file:", err)
 	}
-	csvFile, err := os.Open("./testdata/positions.csv")
+	csvFile, err := os.Open("../../testdata/positions.csv")
 	if err != nil {
 		t.Fatal("Could not open CSV file:", err)
 	}

@@ -1,9 +1,10 @@
-package kontoo
+package ledger
 
 import (
 	"encoding/json"
 	"testing"
 
+	"github.com/dnswlt/kontoo/internal/civil"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -30,10 +31,10 @@ func TestAssetTypeJsonEnum(t *testing.T) {
 
 func TestDateString(t *testing.T) {
 	tests := []struct {
-		d    Date
+		d    civil.Date
 		want string
 	}{
-		{DateVal(2024, 12, 31), "2024-12-31"},
+		{civil.DateVal(2024, 12, 31), "2024-12-31"},
 	}
 	for _, tc := range tests {
 		if got := tc.d.String(); got != tc.want {
@@ -44,13 +45,13 @@ func TestDateString(t *testing.T) {
 
 func TestDateCompare(t *testing.T) {
 	tests := []struct {
-		d1       Date
-		d2       Date
+		d1       civil.Date
+		d2       civil.Date
 		wantSign int
 	}{
-		{DateVal(2024, 12, 31), DateVal(2024, 12, 31), 0},
-		{DateVal(2024, 12, 31), DateVal(1999, 1, 1), 1},
-		{DateVal(1999, 1, 1), DateVal(2024, 12, 31), -1},
+		{civil.DateVal(2024, 12, 31), civil.DateVal(2024, 12, 31), 0},
+		{civil.DateVal(2024, 12, 31), civil.DateVal(1999, 1, 1), 1},
+		{civil.DateVal(1999, 1, 1), civil.DateVal(2024, 12, 31), -1},
 	}
 	sgn := func(i int) int {
 		if i < 0 {
@@ -70,16 +71,16 @@ func TestDateCompare(t *testing.T) {
 
 func TestDateAddDays(t *testing.T) {
 	tests := []struct {
-		d    Date
+		d    civil.Date
 		n    int
-		want Date
+		want civil.Date
 	}{
-		{DateVal(1999, 12, 31), 1, DateVal(2000, 1, 1)},
+		{civil.DateVal(1999, 12, 31), 1, civil.DateVal(2000, 1, 1)},
 		// Add/subtract a year
-		{DateVal(1999, 1, 1), -365, DateVal(1998, 1, 1)},
-		{DateVal(2004, 3, 31), 365, DateVal(2005, 3, 31)},
+		{civil.DateVal(1999, 1, 1), -365, civil.DateVal(1998, 1, 1)},
+		{civil.DateVal(2004, 3, 31), 365, civil.DateVal(2005, 3, 31)},
 		// Leap year 2004
-		{DateVal(2003, 3, 31), 365, DateVal(2004, 3, 30)},
+		{civil.DateVal(2003, 3, 31), 365, civil.DateVal(2004, 3, 30)},
 	}
 	for _, tc := range tests {
 		if got := tc.d.AddDays(tc.n); !got.Equal(tc.want) {

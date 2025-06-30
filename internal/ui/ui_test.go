@@ -1,8 +1,11 @@
-package kontoo
+package ui
 
 import (
 	"testing"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
 )
 
 func TestJoinAny(t *testing.T) {
@@ -17,9 +20,9 @@ func TestJoinAny(t *testing.T) {
 		{[]int{1, 2, 3}, ", ", "1, 2, 3", false},
 		{[]bool{true, false}, ":", "true:false", false},
 		{[]struct{}{}, " ", "", false},
-		{[]EntryType{AssetPurchase, AssetSale}, " ", "AssetPurchase AssetSale", false},
-		{[]EntryType{AssetPurchase, AssetSale}, " ", "AssetPurchase AssetSale", false},
-		{[]Date{DateVal(2000, 1, 1)}, " ", "2000-01-01", false},
+		{[]ledger.EntryType{ledger.AssetPurchase, ledger.AssetSale}, " ", "AssetPurchase AssetSale", false},
+		{[]ledger.EntryType{ledger.AssetPurchase, ledger.AssetSale}, " ", "AssetPurchase AssetSale", false},
+		{[]civil.Date{civil.DateVal(2000, 1, 1)}, " ", "2000-01-01", false},
 		{1.3, "", "", true},
 		{time.Now(), "", "", true},
 	}
@@ -39,19 +42,19 @@ func TestJoinAny(t *testing.T) {
 
 func TestParsePeriod(t *testing.T) {
 	tests := []struct {
-		end    Date
+		end    civil.Date
 		period string
-		want   Date
+		want   civil.Date
 	}{
-		{DateVal(2024, 1, 1), "1M", DateVal(2023, 12, 1)},
-		{DateVal(2024, 2, 29), "1Y", DateVal(2023, 3, 1)},
-		{DateVal(1999, 12, 1), "5D", DateVal(1999, 11, 26)},
-		{DateVal(2024, 1, 1), "Max", Date{}},
-		{DateVal(2023, 7, 31), "YTD", DateVal(2023, 1, 1)},
-		{DateVal(2023, 1, 1), "YTD", DateVal(2023, 1, 1)},
+		{civil.DateVal(2024, 1, 1), "1M", civil.DateVal(2023, 12, 1)},
+		{civil.DateVal(2024, 2, 29), "1Y", civil.DateVal(2023, 3, 1)},
+		{civil.DateVal(1999, 12, 1), "5D", civil.DateVal(1999, 11, 26)},
+		{civil.DateVal(2024, 1, 1), "Max", civil.Date{}},
+		{civil.DateVal(2023, 7, 31), "YTD", civil.DateVal(2023, 1, 1)},
+		{civil.DateVal(2023, 1, 1), "YTD", civil.DateVal(2023, 1, 1)},
 	}
 	for _, tc := range tests {
-		got, err := parsePeriod(tc.end, tc.period)
+		got, err := ParsePeriod(tc.end, tc.period)
 		if err != nil {
 			t.Fatal("Cannot parse period:", err)
 		}

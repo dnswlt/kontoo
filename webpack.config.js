@@ -4,9 +4,9 @@ const mode = process.env.NODE_ENV || 'development';
 
 module.exports = {
     mode: mode,
-    entry: './pkg/resources/src/main.js',
+    entry: './resources/src/main.js',
     output: {
-        path: path.resolve(__dirname, 'pkg/resources/dist'), // Output directory for the bundled JavaScript
+        path: path.resolve(__dirname, 'resources/dist'), // Output directory for the bundled JavaScript
         filename: 'bundle.js'
     },
     module: {

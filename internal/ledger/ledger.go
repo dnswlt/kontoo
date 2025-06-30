@@ -1,4 +1,4 @@
-package kontoo
+package ledger
 
 import (
 	"encoding/json"
@@ -13,53 +13,13 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
-func DateVal(year int, month time.Month, day int) Date {
-	return Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
-}
-func newDate(year int, month time.Month, day int) *Date {
-	return &Date{time.Date(year, month, day, 0, 0, 0, 0, time.UTC)}
-}
-func today() Date {
-	return ToDate(time.Now())
-}
-func ToDate(t time.Time) Date {
-	y, m, d := t.Date()
-	return DateVal(y, m, d)
-}
-func utcDate(date time.Time) time.Time {
-	y, m, d := date.Date()
-	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
-}
-func ParseDate(s string) (Date, error) {
-	t, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return Date{}, err
-	}
-	return Date{t}, nil
-}
-
-func (d *Date) UnmarshalJSON(data []byte) error {
-	var err error
-	s := strings.Trim(string(data), "\"")
-	*d, err = ParseDate(s)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (d Date) MarshalJSON() ([]byte, error) {
-	return []byte("\"" + d.Format("2006-01-02") + "\""), nil
-}
-
-func (d Date) Equal(e Date) bool {
-	return d.Time.Equal(e.Time)
-}
-
 // NewLedger returns an empty ledger that uses the given base currency.
-func NewLedger(baseCurrency Currency) *Ledger {
+func NewLedger(baseCurrency units.Currency) *Ledger {
 	return &Ledger{
 		Header: &LedgerHeader{
 			BaseCurrency: baseCurrency,
@@ -71,15 +31,15 @@ type LedgerEntryRow struct {
 	E *LedgerEntry
 	A *Asset
 	// Asset position values after incorporating ledger entry E.
-	totalMarketValue Micros
-	totalQuantity    Micros
-	totalCost        Micros
+	totalMarketValue units.Micros
+	totalQuantity    units.Micros
+	totalCost        units.Micros
 }
 
 func (e *LedgerEntryRow) SequenceNum() int64 {
 	return e.E.SequenceNum
 }
-func (e *LedgerEntryRow) ValueDate() Date {
+func (e *LedgerEntryRow) ValueDate() civil.Date {
 	return e.E.ValueDate
 }
 func (e *LedgerEntryRow) Created() time.Time {
@@ -123,57 +83,66 @@ func (e *LedgerEntryRow) AssetType() AssetType {
 func (e *LedgerEntryRow) Currency() string {
 	return string(e.E.Currency)
 }
-func (e *LedgerEntryRow) Value() Micros {
+func (e *LedgerEntryRow) Value() units.Micros {
 	return e.E.ValueMicros
 }
 
 // EntryMarketValue returns the market value of the ledger entry.
 // Use PositionMarketValue to obtain the position's market value.
-func (e *LedgerEntryRow) EntryMarketValue() Micros {
+func (e *LedgerEntryRow) EntryMarketValue() units.Micros {
 	if e.E.ValueMicros != 0 {
 		return e.E.ValueMicros
 	}
 	return e.E.QuantityMicros.Mul(e.E.PriceMicros)
 }
-func (e *LedgerEntryRow) Cost() Micros {
+func (e *LedgerEntryRow) Cost() units.Micros {
 	return e.E.CostMicros
 }
-func (e *LedgerEntryRow) Quantity() Micros {
+func (e *LedgerEntryRow) Quantity() units.Micros {
 	return e.E.QuantityMicros
 }
-func (e *LedgerEntryRow) Price() Micros {
+func (e *LedgerEntryRow) Price() units.Micros {
 	return e.E.PriceMicros
 }
 func (e *LedgerEntryRow) Comment() string {
 	return e.E.Comment
 }
-func (e *LedgerEntryRow) TotalMarketValue() Micros {
+func (e *LedgerEntryRow) TotalMarketValue() units.Micros {
 	return e.totalMarketValue
 }
-func (e *LedgerEntryRow) TotalQuantity() Micros {
+func (e *LedgerEntryRow) TotalQuantity() units.Micros {
 	return e.totalQuantity
 }
-func (e *LedgerEntryRow) TotalCost() Micros {
+func (e *LedgerEntryRow) TotalCost() units.Micros {
 	return e.totalCost
 }
 
 type Store struct {
 	ledger        *Ledger
-	path          string                      // Path to the ledger JSON.
-	assets        map[string]*Asset           // Maps the ledger's assets by ID.
-	entries       map[string][]*LedgerEntry   // Entries by asset ID, ordered chronologically.
-	exchangeRates map[Currency][]*LedgerEntry // Exchange rates from Base Currency to other currencies, ordered chronologically
+	path          string                            // Path to the ledger JSON.
+	assets        map[string]*Asset                 // Maps the ledger's assets by ID.
+	entries       map[string][]*LedgerEntry         // Entries by asset ID, ordered chronologically.
+	exchangeRates map[units.Currency][]*LedgerEntry // Exchange rates from Base units.Currency to other currencies, ordered chronologically
 	// Cache for already seen time zone names.
 	// Time zones are checked during ledger validation, so we don't want to re-load them from disk for each asset.
 	timezones map[string]*time.Location
 	mut       sync.Mutex
 }
 
-func (s *Store) BaseCurrency() Currency {
+func (s *Store) BaseCurrency() units.Currency {
 	return s.ledger.Header.BaseCurrency
 }
 
-func (s *Store) timezone(tz string) (*time.Location, error) {
+func (s *Store) Asset(assetID string) (*Asset, bool) {
+	a, ok := s.assets[assetID]
+	return a, ok
+}
+
+func (s *Store) AllAssets() []*Asset {
+	return s.ledger.Assets
+}
+
+func (s *Store) LookupTimezone(tz string) (*time.Location, error) {
 	s.mut.Lock()
 	defer s.mut.Unlock()
 	if tz == "" {
@@ -199,7 +168,7 @@ func (s *Store) allEntryRows() []*LedgerEntryRow {
 		pos := &AssetPosition{
 			Asset: asset,
 		}
-		var totalCost Micros
+		var totalCost units.Micros
 		for _, e := range es {
 			pos.Update(e)
 			totalCost += e.CostMicros
@@ -241,7 +210,7 @@ func (s *Store) LedgerEntryRows(query *Query) []*LedgerEntryRow {
 }
 
 // ValueDateRange returns the minimum and maximum value date of any ledger entry in the store.
-func (s *Store) ValueDateRange() (min, max Date) {
+func (s *Store) ValueDateRange() (min, max civil.Date) {
 	// We make use of the fact that all ledger entries (except exchange rates)
 	// are stored chronologically sorted.
 	for _, es := range s.entries {
@@ -272,7 +241,7 @@ func (s *Store) FindEntryBySequenceNum(sequenceNum int64) *LedgerEntry {
 
 // EntriesAround returns n ledger entries before date and n entries after date for assetID.
 // If there are less than n entries before or after, guess what, only those are returned.
-func (s *Store) EntriesAround(assetID string, date Date, n int) (before, after []*LedgerEntry) {
+func (s *Store) EntriesAround(assetID string, date civil.Date, n int) (before, after []*LedgerEntry) {
 	es := s.entries[assetID]
 	if len(es) > 0 {
 		i := sort.Search(len(es), func(i int) bool {
@@ -291,7 +260,7 @@ func (s *Store) EntriesAround(assetID string, date Date, n int) (before, after [
 	return
 }
 
-func (s *Store) PriceAt(assetID string, t Date) (Micros, Date, bool) {
+func (s *Store) PriceAt(assetID string, t civil.Date) (units.Micros, civil.Date, bool) {
 	es := s.entries[assetID]
 	// Find first entry after t.
 	i := sort.Search(len(es), func(i int) bool {
@@ -304,7 +273,7 @@ func (s *Store) PriceAt(assetID string, t Date) (Micros, Date, bool) {
 			return es[i].PriceMicros, es[i].ValueDate, true
 		}
 	}
-	return 0, Date{}, false
+	return 0, civil.Date{}, false
 }
 
 // ExchangeRateAt returns the BaseCurrency/QuoteCurrency exchange rate at the given time.
@@ -313,19 +282,19 @@ func (s *Store) PriceAt(assetID string, t Date) (Micros, Date, bool) {
 // before t is used and its date is returned as the second return value.
 // If no exchange rate between the given currency c and the base currency is known at t,
 // the result is zero and the third return value is false.
-func (s *Store) ExchangeRateAt(c Currency, t Date) (Micros, Date, bool) {
+func (s *Store) ExchangeRateAt(c units.Currency, t civil.Date) (units.Micros, civil.Date, bool) {
 	if c == s.BaseCurrency() {
-		return UnitValue, t, true
+		return units.One, t, true
 	}
 	rs, ok := s.exchangeRates[c]
 	if !ok || len(rs) == 0 {
-		return 0, Date{}, false
+		return 0, civil.Date{}, false
 	}
 	i := sort.Search(len(rs), func(i int) bool {
 		return rs[i].ValueDate.Compare(t) > 0
 	})
 	if i == 0 {
-		return 0, Date{}, false
+		return 0, civil.Date{}, false
 	}
 	return rs[i-1].PriceMicros, rs[i-1].ValueDate, true
 }
@@ -340,7 +309,7 @@ func NewStore(ledger *Ledger, path string) (*Store, error) {
 		path:          path,
 		entries:       make(map[string][]*LedgerEntry),
 		assets:        make(map[string]*Asset),
-		exchangeRates: make(map[Currency][]*LedgerEntry),
+		exchangeRates: make(map[units.Currency][]*LedgerEntry),
 		timezones:     make(map[string]*time.Location),
 	}
 	// Build asset index.
@@ -506,7 +475,7 @@ func (a *Asset) ID() string {
 }
 
 func (a *Asset) Category() AssetCategory {
-	return a.Type.category()
+	return a.Type.Category()
 }
 
 func (a *Asset) matchRef(ref string) bool {
@@ -532,7 +501,7 @@ func (s *Store) nextSequenceNum() int64 {
 
 // EntriesInRange returns all ledger entries for the given asset
 // in the (inclusive) range [start, end].
-func (s *Store) EntriesInRange(assetId string, start, end Date) []*LedgerEntry {
+func (s *Store) EntriesInRange(assetId string, start, end civil.Date) []*LedgerEntry {
 	var result []*LedgerEntry
 	es := s.entries[assetId]
 	if len(es) == 0 {
@@ -584,9 +553,9 @@ func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
 	return assets
 }
 
-func (s *Store) QuoteCurrencies() []Currency {
-	var currencies []Currency
-	seen := make(map[Currency]bool)
+func (s *Store) QuoteCurrencies() []units.Currency {
+	var currencies []units.Currency
+	seen := make(map[units.Currency]bool)
 	for _, a := range s.ledger.Assets {
 		if a.Currency == s.ledger.Header.BaseCurrency || seen[a.Currency] {
 			continue
@@ -597,7 +566,7 @@ func (s *Store) QuoteCurrencies() []Currency {
 	return currencies
 }
 
-func allZero(ms ...Micros) bool {
+func allZero(ms ...units.Micros) bool {
 	for _, m := range ms {
 		if m != 0 {
 			return false
@@ -640,10 +609,10 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 	if e.ValueDate.IsZero() {
 		return fmt.Errorf("ValueDate must be set")
 	}
-	if e.Currency != "" && !ValidCurrency(e.Currency) {
+	if e.Currency != "" && !e.Currency.Valid() {
 		return fmt.Errorf("invalid currency: %q", e.Currency)
 	}
-	if e.QuoteCurrency != "" && !ValidCurrency(e.QuoteCurrency) {
+	if e.QuoteCurrency != "" && !e.QuoteCurrency.Valid() {
 		return fmt.Errorf("invalid quote currency: %q", e.QuoteCurrency)
 	}
 	if e.Type == ExchangeRate {
@@ -741,19 +710,18 @@ func (s *Store) validateEntry(e *LedgerEntry) error {
 
 // Returns d and (months-1) dates of the following months at the same day as d.
 // If that day cannot be represented in any month, that month's last day is used.
-func repeatMonthly(d Date, months int) []Date {
-	res := make([]Date, 0, months)
+func repeatMonthly(d civil.Date, months int) []civil.Date {
+	res := make([]civil.Date, 0, months)
 	year, month, day := d.Date()
-	loc := d.Location()
 
 	for i := range months {
 		m := month + time.Month(i)
-		dt := time.Date(year, m, day, 0, 0, 0, 0, loc)
+		dt := civil.DateVal(year, m, day)
 		if dt.Month() != ((month+time.Month(i)-1)%12)+1 {
 			// Rolled over to next month, clamp to last day of desired month
-			dt = time.Date(year, m+1, 0, 0, 0, 0, 0, loc)
+			dt = civil.DateVal(year, m+1, 0)
 		}
-		res = append(res, Date{dt})
+		res = append(res, dt)
 	}
 	return res
 }
@@ -889,14 +857,14 @@ func (s *Store) validateAsset(a *Asset) error {
 	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
-	if !ValidCurrency(a.Currency) {
+	if !a.Currency.Valid() {
 		return fmt.Errorf("unknown or invalid currency %q: must use ISO code (3 uppercase letters)", a.Currency)
 	}
-	if a.IBAN != "" && !validIBAN(a.IBAN) {
+	if a.IBAN != "" && !ValidIBAN(a.IBAN) {
 		return fmt.Errorf("invalid IBAN: %q", a.IBAN)
 	}
 	if a.ExchangeTimezone != "" {
-		if _, err := s.timezone(a.ExchangeTimezone); err != nil {
+		if _, err := s.LookupTimezone(a.ExchangeTimezone); err != nil {
 			return fmt.Errorf("invalid ExchangeTimezone: %v", err)
 		}
 	}
@@ -951,10 +919,10 @@ func (s *Store) UpdateAsset(assetID string, a *Asset) error {
 // AssetPositionItem tracks an individual purchase that is part of the
 // accumulated asset position.
 type AssetPositionItem struct {
-	ValueDate      Date
-	QuantityMicros Micros
-	PriceMicros    Micros
-	CostMicros     Micros
+	ValueDate      civil.Date
+	QuantityMicros units.Micros
+	PriceMicros    units.Micros
+	CostMicros     units.Micros
 }
 
 // AssetPosition represents the "current" asset position.
@@ -962,11 +930,11 @@ type AssetPositionItem struct {
 type AssetPosition struct {
 	Asset *Asset
 	// Last value date of any ledger entry seen for this position.
-	LastUpdated    Date
-	ValueMicros    Micros
-	QuantityMicros Micros
-	PriceMicros    Micros
-	PriceDate      Date
+	LastUpdated    civil.Date
+	ValueMicros    units.Micros
+	QuantityMicros units.Micros
+	PriceMicros    units.Micros
+	PriceDate      civil.Date
 	// Items are the constituent parts of the accumulated asset position.
 	// The are stored in chronological order (latest comes last) and can
 	// be used to determine profit & loss (P&L) and to update the
@@ -984,7 +952,7 @@ func cmpLedgerEntry(a, b *LedgerEntry) int {
 
 // AssetPositionsBetween returns all asset positions for assetID
 // on days with ledger entries between start and end.
-func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetPosition {
+func (s *Store) AssetPositionsBetween(assetID string, start, end civil.Date) []*AssetPosition {
 	asset, ok := s.assets[assetID]
 	if !ok {
 		return nil
@@ -1007,12 +975,12 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end Date) []*AssetP
 }
 
 // AssetPurchases returns the difference between asset positions bought and sold in the given period.
-func (s *Store) AssetPurchases(assetId string, startDate, endDate Date) Micros {
+func (s *Store) AssetPurchases(assetId string, startDate, endDate civil.Date) units.Micros {
 	entries := s.entries[assetId]
 	i := sort.Search(len(entries), func(i int) bool {
 		return !entries[i].ValueDate.Before(startDate.Time)
 	})
-	var sum Micros
+	var sum units.Micros
 	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
 		e := entries[i]
 		switch e.Type {
@@ -1037,7 +1005,7 @@ func (s *Store) AssetPurchases(assetId string, startDate, endDate Date) Micros {
 //     sale price (minus costs).
 //   - The qty was purchased and sold during the period: P&L is the diff of
 //     purchasing price (including costs) and sale price (minus costs).
-func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate Date) (profitLoss, referenceValue Micros, err error) {
+func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date) (profitLoss, referenceValue units.Micros, err error) {
 	if startDate.After(endDate.Time) {
 		return 0, 0, fmt.Errorf("startDate %v after endDate %v", startDate, endDate)
 	}
@@ -1055,14 +1023,14 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate Date) (pro
 	i := sort.Search(len(entries), func(i int) bool {
 		return entries[i].ValueDate.After(startDate.Time)
 	})
-	var realizedPL Micros
+	var realizedPL units.Micros
 	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
 		e := entries[i]
 		switch e.Type {
 		case AssetSale:
 			// A sale realizes P&L: Realized P&L = Sale Price - Cost of sale - Price at beginning of period
 			// Calculate the purchase price of the quantity sold.
-			var purchasePrice Micros
+			var purchasePrice units.Micros
 			qty := -e.QuantityMicros // QuantityMicros is a negative value for a sale
 			for _, item := range p.Items {
 				if item.QuantityMicros < qty {
@@ -1104,7 +1072,7 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate Date) (pro
 		}
 		p.Update(e)
 	}
-	var initialValue Micros
+	var initialValue units.Micros
 	for _, item := range p.Items {
 		if item.ValueDate.After(startDate.Time) {
 			// Item was purchased after startDate, use its own purchase price.
@@ -1122,7 +1090,7 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate Date) (pro
 }
 
 // AssetPositionAt returns the given asset's position at date.
-func (s *Store) AssetPositionAt(assetId string, date Date) *AssetPosition {
+func (s *Store) AssetPositionAt(assetId string, date civil.Date) *AssetPosition {
 	asset, ok := s.assets[assetId]
 	if !ok {
 		return nil
@@ -1140,7 +1108,7 @@ func (s *Store) AssetPositionAt(assetId string, date Date) *AssetPosition {
 }
 
 // AssetPositionsAt returns the asset positions for each non-zero asset position at t.
-func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
+func (s *Store) AssetPositionsAt(date civil.Date) []*AssetPosition {
 	// Calculate position values at date.
 	var res []*AssetPosition
 	for assetId := range s.assets {
@@ -1152,7 +1120,7 @@ func (s *Store) AssetPositionsAt(date Date) []*AssetPosition {
 	return res
 }
 
-func (a *AssetPositionItem) PurchasePrice() Micros {
+func (a *AssetPositionItem) PurchasePrice() units.Micros {
 	return a.QuantityMicros.Mul(a.PriceMicros) + a.CostMicros
 }
 
@@ -1171,11 +1139,11 @@ func (p *AssetPosition) ID() string {
 func (p *AssetPosition) Name() string {
 	return p.Asset.Name
 }
-func (p *AssetPosition) Currency() Currency {
+func (p *AssetPosition) Currency() units.Currency {
 	return p.Asset.Currency
 }
 
-func (p *AssetPosition) SetPrice(price Micros, date Date) {
+func (p *AssetPosition) SetPrice(price units.Micros, date civil.Date) {
 	p.PriceMicros = price
 	p.PriceDate = date
 }
@@ -1229,7 +1197,7 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 			p.Items = append(p.Items, AssetPositionItem{
 				ValueDate:      e.ValueDate,
 				QuantityMicros: e.ValueMicros,
-				PriceMicros:    UnitValue,
+				PriceMicros:    units.One,
 			})
 		}
 	case AccountDebit:
@@ -1275,23 +1243,23 @@ func (p *AssetPosition) Update(e *LedgerEntry) {
 	}
 }
 
-func (p *AssetPosition) CostMicros() Micros {
-	var cost Micros
+func (p *AssetPosition) CostMicros() units.Micros {
+	var cost units.Micros
 	for _, item := range p.Items {
 		cost += item.CostMicros
 	}
 	return cost
 }
 
-func (p *AssetPosition) PurchasePrice() Micros {
-	var price Micros
+func (p *AssetPosition) PurchasePrice() units.Micros {
+	var price units.Micros
 	for _, item := range p.Items {
 		price += item.QuantityMicros.Mul(item.PriceMicros) + item.CostMicros
 	}
 	return price
 }
 
-func (p *AssetPosition) MarketValue() Micros {
+func (p *AssetPosition) MarketValue() units.Micros {
 	if p.QuantityMicros != 0 {
 		return p.QuantityMicros.Mul(p.PriceMicros)
 	}

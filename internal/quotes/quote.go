@@ -1,4 +1,4 @@
-package kontoo
+package quotes
 
 import (
 	"encoding/csv"
@@ -17,21 +17,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 	"golang.org/x/text/encoding/charmap"
 )
 
 type DailyExchangeRate struct {
-	BaseCurrency  Currency
-	QuoteCurrency Currency
-	Timestamp     time.Time // Timestamp for the ClosingPrice as received from the quote service.
-	ClosingPrice  Micros    // Expressed as a multiple of the QuoteCurrency: 1.30 means for 1 BaseCurrency you get 1.30 QuoteCurrency.
+	BaseCurrency  units.Currency
+	QuoteCurrency units.Currency
+	Timestamp     time.Time    // Timestamp for the ClosingPrice as received from the quote service.
+	ClosingPrice  units.Micros // Expressed as a multiple of the QuoteCurrency: 1.30 means for 1 BaseCurrency you get 1.30 QuoteCurrency.
 }
 
 type DailyQuote struct {
 	Symbol       string
-	Currency     Currency
+	Currency     units.Currency
 	Timestamp    time.Time // Timestamp for the ClosingPrice as received from the quote service.
-	ClosingPrice Micros
+	ClosingPrice units.Micros
 }
 
 type YFinance struct {
@@ -265,7 +267,7 @@ func (yf *YFinance) EnableTracing(enabled bool) {
 }
 
 // Get closing exchange rates of multiple currencies for a single day.
-func (yf *YFinance) GetDailyExchangeRate(baseCurrency Currency, quoteCurrency Currency, date time.Time) (*DailyExchangeRate, error) {
+func (yf *YFinance) GetDailyExchangeRate(baseCurrency units.Currency, quoteCurrency units.Currency, date time.Time) (*DailyExchangeRate, error) {
 	// For Y! Finance, exchange rates are just quotes, with a special ticker symbol encoding.
 	// We can use GetDailyQuote to obtain the rates, and just have to transform the output data structure.
 	symbol := fmt.Sprintf("%s%s=X", baseCurrency, quoteCurrency)
@@ -365,11 +367,11 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 		return nil, fmt.Errorf("YFChartResponse is missing expected data")
 	}
 	var hist []*DailyQuote
-	var currency Currency
+	var currency units.Currency
 	res := yresp.Chart.Result[0]
 	timezone := time.UTC
 	if res.Meta != nil {
-		currency = Currency(res.Meta.Currency)
+		currency = units.Currency(res.Meta.Currency)
 		if tz, err := time.LoadLocation(res.Meta.ExchangeTimezoneName); err == nil {
 			timezone = tz
 		}
@@ -381,7 +383,7 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 		hist = append(hist, &DailyQuote{
 			Symbol:       symbol,
 			Currency:     currency,
-			ClosingPrice: Micros(c * 1e6),
+			ClosingPrice: units.Micros(c * 1e6),
 			Timestamp:    time.Unix(int64(res.Timestamps[i]), 0).In(timezone),
 		})
 	}
@@ -468,6 +470,11 @@ func NewPriceHistoryCache() *PriceHistoryCache {
 	}
 }
 
+func truncateUTC(t time.Time) time.Time {
+	y, m, d := t.Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
 func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) error {
 	c.mut.Lock()
 	defer c.mut.Unlock()
@@ -483,10 +490,10 @@ func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) e
 		return a.Timestamp.Compare(b.Timestamp)
 	})
 	i := 0
-	d := utcDate(start)
-	end = utcDate(end)
+	d := truncateUTC(start)
+	end = truncateUTC(end)
 	// Skip dates for which no history exists (e.g. if start is a holiday).
-	first := utcDate(hist[0].Timestamp)
+	first := truncateUTC(hist[0].Timestamp)
 	for !d.After(end) && first.After(d) {
 		d = d.AddDate(0, 0, 1)
 	}
@@ -494,7 +501,7 @@ func (c *PriceHistoryCache) AddAll(quotes []*DailyQuote, start, end time.Time) e
 	for !d.After(end) {
 		// Advance i to point to the relevant hist entry
 		for i < len(hist)-1 {
-			hn := utcDate(hist[i+1].Timestamp)
+			hn := truncateUTC(hist[i+1].Timestamp)
 			if hn.After(d) {
 				break
 			}
@@ -539,15 +546,15 @@ func (c *PriceHistoryCache) Get(symbol string, date time.Time) (*DailyQuote, err
 // CSV Export
 
 type DepotExportItem struct {
-	QuantityMicros Micros   `json:"quantity"`
-	WKN            string   `json:"wkn"`
-	Currency       Currency `json:"currency"`
-	PriceMicros    Micros   `json:"price"`
-	ValueMicros    Micros   `json:"value"`
-	ValueDate      Date     `json:"valueDate"`
+	QuantityMicros units.Micros   `json:"quantity"`
+	WKN            string         `json:"wkn"`
+	Currency       units.Currency `json:"currency"`
+	PriceMicros    units.Micros   `json:"price"`
+	ValueMicros    units.Micros   `json:"value"`
+	ValueDate      civil.Date     `json:"valueDate"`
 }
 
-func parseCSVFloat(s string) (Micros, error) {
+func parseCSVFloat(s string) (units.Micros, error) {
 	s = strings.ReplaceAll(s, ".", "")
 	s = strings.ReplaceAll(s, ",", ".")
 	t := strings.TrimSuffix(s, "%")
@@ -559,7 +566,7 @@ func parseCSVFloat(s string) (Micros, error) {
 	if err != nil {
 		return 0, err
 	}
-	return FloatAsMicros(f / p), nil
+	return units.FloatAsMicros(f / p), nil
 }
 
 func ReadDepotExportCSVFile(path string) ([]*DepotExportItem, error) {
@@ -635,16 +642,16 @@ func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 			return nil, fmt.Errorf("invalid date: %w", err)
 		}
 		currency := row[colIdx["Currency"]]
-		if !currencyRegexp.MatchString(currency) {
+		if !units.ValidCurrency(currency) {
 			return nil, fmt.Errorf("invalid currency: %s", currency)
 		}
 		result = append(result, &DepotExportItem{
 			QuantityMicros: qty,
 			WKN:            row[colIdx["WKN"]],
-			Currency:       Currency(currency),
+			Currency:       units.Currency(currency),
 			PriceMicros:    price,
 			ValueMicros:    value,
-			ValueDate:      Date{valueDate},
+			ValueDate:      civil.ToDate(valueDate),
 		})
 	}
 	return result, nil

@@ -1,10 +1,12 @@
-package kontoo
+package calc
 
 import (
 	"fmt"
 	"math"
-	"math/big"
-	"strings"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/ledger"
+	"github.com/dnswlt/kontoo/internal/units"
 )
 
 // newton implements the Newton-Raphson root-finding algorithm to find the root
@@ -69,25 +71,26 @@ func bisect(y, low, high float64, f func(float64) float64) (float64, error) {
 	return 0, fmt.Errorf("bisect: failed to converge after %d iterations", maxIter)
 }
 
-// totalEarningsAtMaturity calculates the predicted earnings of a fixed-income
+// TotalEarningsAtMaturity calculates the predicted earnings of a fixed-income
 // asset position by its maturity date. These earnings include both interest
 // and capital gains (or losses) from price appreciation or depreciation.
 // It assumes the asset matures at 100% of its nominal value.
-func totalEarningsAtMaturity(p *AssetPosition) Micros {
+func TotalEarningsAtMaturity(p *ledger.AssetPosition) units.Micros {
 	md := p.Asset.MaturityDate
 	if md == nil {
 		return 0
 	}
 	interestRate := p.Asset.InterestMicros
-	var interest, gains Micros
+	var interest, gains units.Micros
 	for _, item := range p.Items {
 		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
 		gains += item.QuantityMicros - item.PurchasePrice()
 		switch p.Asset.InterestPayment {
-		case AccruedPayment:
-			interest += item.QuantityMicros.Mul(FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - item.QuantityMicros
-		case AnnualPayment:
-			interest += item.QuantityMicros.Mul(interestRate).Mul(FloatAsMicros(years))
+		case ledger.AccruedPayment:
+			interest += item.QuantityMicros.Mul(
+				units.FloatAsMicros(math.Pow(1+interestRate.Float(), years))) - item.QuantityMicros
+		case ledger.AnnualPayment:
+			interest += item.QuantityMicros.Mul(interestRate).Mul(units.FloatAsMicros(years))
 		default:
 			// If no payment schedule is specified, we can't calculate the interest
 		}
@@ -95,10 +98,10 @@ func totalEarningsAtMaturity(p *AssetPosition) Micros {
 	return interest + gains
 }
 
-// xIRR calculates the internal rate of return like Excel's XIRR function does.
+// XIRR calculates the internal rate of return like Excel's XIRR function does.
 // values and dates have to be of the same length (>= 2), and dates have to be sorted
 // in ascending order.
-func xIRR(values []Micros, dates []Date) (Micros, error) {
+func XIRR(values []units.Micros, dates []civil.Date) (units.Micros, error) {
 	if len(values) != len(dates) {
 		return 0, fmt.Errorf("values and dates are of different sizes")
 	}
@@ -142,66 +145,67 @@ func xIRR(values []Micros, dates []Date) (Micros, error) {
 			return 0, err
 		}
 	}
-	return FloatAsMicros(irr), nil
+	return units.FloatAsMicros(irr), nil
 }
 
-type irrParams struct {
-	nominalValue    Micros
-	price           Micros
-	interestRate    Micros
-	cost            Micros
-	purchaseDate    Date
-	maturityDate    Date
-	interestPayment InterestPaymentSchedule
+type IRRParams struct {
+	NominalValue    units.Micros
+	Price           units.Micros
+	InterestRate    units.Micros
+	Cost            units.Micros
+	PurchaseDate    civil.Date
+	MaturityDate    civil.Date
+	InterestPayment ledger.InterestPaymentSchedule
 }
 
 // irrWithInterest calculates the IRR for a single purchase of a fixed-income asset.
 // The price must be given in %.
 // This function is used in the Calculator UI.
-func irrWithInterest(p irrParams) (Micros, error) {
+func IRRWithInterest(p IRRParams) (units.Micros, error) {
 
-	var values []Micros
-	var dates []Date
-	values = append(values, -p.price.Mul(p.nominalValue)-p.cost)
-	dates = append(dates, p.purchaseDate)
+	var values []units.Micros
+	var dates []civil.Date
+	values = append(values, -p.Price.Mul(p.NominalValue)-p.Cost)
+	dates = append(dates, p.PurchaseDate)
 
-	if p.interestPayment == AnnualPayment {
+	switch p.InterestPayment {
+	case ledger.AnnualPayment:
 		// Append interest payments each year on the (MM/DD) day of maturity.
-		var iDates []Date
-		d := p.maturityDate
-		for d.After(p.purchaseDate.Time) {
+		var iDates []civil.Date
+		d := p.MaturityDate
+		for d.After(p.PurchaseDate.Time) {
 			iDates = append(iDates, d)
-			d = Date{d.AddDate(-1, 0, 0)}
+			d = d.AddDate(-1, 0, 0)
 		}
 		l := len(iDates)
 		for i := l - 1; i >= 0; i-- {
-			interest := p.interestRate
+			interest := p.InterestRate
 			if i == l-1 {
 				// Pro-rate interest of first year. There may be leap year anomalies (s == 366/365),
 				// but we don't account for that in accrued payments below either.
-				s := iDates[i].Sub(p.purchaseDate.Time).Hours() / 24 / 365
-				interest = interest.Mul(FloatAsMicros(s))
+				s := iDates[i].Sub(p.PurchaseDate.Time).Hours() / 24 / 365
+				interest = interest.Mul(units.FloatAsMicros(s))
 			}
-			values = append(values, p.nominalValue.Mul(interest))
+			values = append(values, p.NominalValue.Mul(interest))
 			dates = append(dates, iDates[i])
 		}
-	} else if p.interestPayment == AccruedPayment {
+	case ledger.AccruedPayment:
 		// Append a single (accrued) interest payment on the date of maturity.
-		years := p.maturityDate.Sub(p.purchaseDate.Time).Hours() / 24 / 365
-		interest := FloatAsMicros(math.Pow(1+p.interestRate.Float(), years) - 1)
-		values = append(values, p.nominalValue.Mul(interest))
-		dates = append(dates, p.maturityDate)
-	} else {
-		return 0, fmt.Errorf("unsupported payment schedule: %v", p.interestPayment)
+		years := p.MaturityDate.Sub(p.PurchaseDate.Time).Hours() / 24 / 365
+		interest := units.FloatAsMicros(math.Pow(1+p.InterestRate.Float(), years) - 1)
+		values = append(values, p.NominalValue.Mul(interest))
+		dates = append(dates, p.MaturityDate)
+	default:
+		return 0, fmt.Errorf("unsupported payment schedule: %v", p.InterestPayment)
 	}
 	// Append redemption payment.
-	values = append(values, p.nominalValue)
-	dates = append(dates, p.maturityDate)
+	values = append(values, p.NominalValue)
+	dates = append(dates, p.MaturityDate)
 
-	return xIRR(values, dates)
+	return XIRR(values, dates)
 }
 
-// internalRateOfReturn calculates the internal rate of return (IRR) of the
+// InternalRateOfReturn calculates the internal rate of return (IRR) of the
 // given asset position. Its semantics are similar to Excel's XIRR function;
 // in contrast to XIRR (and irrWithInterest above), this function does not
 // include compound interest payments for positions with annual interest
@@ -210,12 +214,12 @@ func irrWithInterest(p irrParams) (Micros, error) {
 // The intuition is that while interest from bonds with annual payments
 // are probably reinvested somehow, they are typically not reinvested in the
 // same bond and may therefore yield very different returns.
-func internalRateOfReturn(p *AssetPosition) Micros {
+func InternalRateOfReturn(p *ledger.AssetPosition) units.Micros {
 	md := p.Asset.MaturityDate
 	if md == nil || len(p.Items) == 0 {
 		return 0
 	}
-	tem := totalEarningsAtMaturity(p).Float()
+	tem := TotalEarningsAtMaturity(p).Float()
 	if tem == 0 {
 		return 0
 	}
@@ -227,7 +231,7 @@ func internalRateOfReturn(p *AssetPosition) Micros {
 		t := md.Sub(p.Items[0].ValueDate.Time).Hours() / 24 / 365
 		x := p.Items[0].PurchasePrice().Float()
 		y := x + tem
-		return FloatAsMicros(math.Pow(y/x, 1/t) - 1)
+		return units.FloatAsMicros(math.Pow(y/x, 1/t) - 1)
 	}
 	// More than one item: use bisection.
 	ts := make([]float64, len(p.Items))
@@ -260,69 +264,5 @@ func internalRateOfReturn(p *AssetPosition) Micros {
 			return 0
 		}
 	}
-	return FloatAsMicros(irr)
-}
-
-// Big ints used in IBAN validation.
-var (
-	bigInts36 [36]*big.Int
-	big100    = big.NewInt(100)
-	big97     = big.NewInt(97)
-)
-
-func init() {
-	for i := 0; i < len(bigInts36); i++ {
-		bigInts36[i] = big.NewInt(int64(i))
-	}
-}
-
-// validIBAN reports whether the given IBAN is valid according to the
-// ISO 13616:2020 validation rules. In particular, it checks whether
-// the ISO code has the right format and whether the checksum is valid.
-func validIBAN(iban string) bool {
-	if iban == "" {
-		return false
-	}
-	if iban[0] == ' ' || iban[len(iban)-1] == ' ' {
-		return false // No whitespace at the beginning or end.
-	}
-	// Ignore whitespace in the middle.
-	iban = strings.ReplaceAll(iban, " ", "")
-	// Needs to have ISO code + checksum + at least something.
-	if len(iban) < 5 {
-		return false
-	}
-	// Check ISO code and checksum.
-	for i := range 4 {
-		if !(iban[i] >= 'A' && iban[i] <= 'Z' || i >= 2 && iban[i] >= '0' && iban[i] <= '9') {
-			return false
-		}
-	}
-	// Build number for "mod 97" validation.
-	k := big.NewInt(0)
-	for _, r := range iban[4:] {
-		if r >= 'A' && r <= 'Z' {
-			k.Mul(k, big100) // Shift left by two digits.
-			k.Add(k, bigInts36[int(r-'A')+10])
-		} else if r >= '0' && r <= '9' {
-			k.Mul(k, bigInts36[10])
-			k.Add(k, bigInts36[int(r-'0')])
-		} else {
-			return false
-		}
-	}
-	// Add the first 4 characters at the end of the validation number.
-	for i := range 4 {
-		c := iban[i]
-		if c >= 'A' && c <= 'Z' {
-			k.Mul(k, big100) // Shift left by two digits.
-			k.Add(k, bigInts36[int(c-'A')+10])
-		} else {
-			// Must be a digit, was checked above.
-			k.Mul(k, bigInts36[10])
-			k.Add(k, bigInts36[int(c-'0')])
-		}
-	}
-	k.Mod(k, big97)
-	return k.Cmp(bigInts36[1]) == 0
+	return units.FloatAsMicros(irr)
 }

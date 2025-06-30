@@ -1,4 +1,4 @@
-package kontoo
+package ledger
 
 import (
 	"encoding/json"
@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -24,7 +26,7 @@ func TestStoreAdd(t *testing.T) {
 			E: &LedgerEntry{
 				Type:        AccountBalance,
 				AssetRef:    ibanDE100,
-				ValueDate:   DateVal(2023, 1, 1),
+				ValueDate:   civil.DateVal(2023, 1, 1),
 				ValueMicros: 1_000_000,
 			},
 		},
@@ -32,26 +34,26 @@ func TestStoreAdd(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetHolding,
 				AssetRef:       "NESN",
-				ValueDate:      DateVal(2023, 1, 2),
-				QuantityMicros: 20 * UnitValue,
-				PriceMicros:    5 * UnitValue,
+				ValueDate:      civil.DateVal(2023, 1, 2),
+				QuantityMicros: 20 * units.One,
+				PriceMicros:    5 * units.One,
 			},
 		},
 		{
 			E: &LedgerEntry{
 				Type:           AssetSale,
 				AssetRef:       "NESN",
-				ValueDate:      DateVal(2023, 1, 3),
-				QuantityMicros: -10 * UnitValue,
-				PriceMicros:    10 * UnitValue,
+				ValueDate:      civil.DateVal(2023, 1, 3),
+				QuantityMicros: -10 * units.One,
+				PriceMicros:    10 * units.One,
 			},
 		},
 		{
 			E: &LedgerEntry{
 				Type:        InterestPayment,
 				AssetRef:    ibanDE100,
-				ValueDate:   DateVal(2023, 1, 3),
-				ValueMicros: 150 * Millis,
+				ValueDate:   civil.DateVal(2023, 1, 3),
+				ValueMicros: 150 * units.Millis,
 			},
 		},
 	}
@@ -104,11 +106,11 @@ func TestStoreAdd(t *testing.T) {
 func TestStoreUpdate(t *testing.T) {
 	s, err := newTestStore([]*LedgerEntry{
 		{
-			ValueDate:      DateVal(2024, 1, 1),
+			ValueDate:      civil.DateVal(2024, 1, 1),
 			AssetID:        "BMW",
 			Type:           AssetPurchase,
-			QuantityMicros: 1 * UnitValue,
-			PriceMicros:    100 * UnitValue,
+			QuantityMicros: 1 * units.One,
+			PriceMicros:    100 * units.One,
 		},
 	}, Stock)
 	if err != nil {
@@ -116,11 +118,11 @@ func TestStoreUpdate(t *testing.T) {
 	}
 	u := &LedgerEntry{
 		SequenceNum:    s.ledger.Entries[0].SequenceNum,
-		ValueDate:      DateVal(2023, 1, 1),
+		ValueDate:      civil.DateVal(2023, 1, 1),
 		AssetID:        "BMW",
 		Type:           AssetSale,
-		QuantityMicros: -2 * UnitValue,
-		PriceMicros:    200 * UnitValue,
+		QuantityMicros: -2 * units.One,
+		PriceMicros:    200 * units.One,
 		Currency:       "EUR",
 	}
 	if err := s.Update(u); err != nil {
@@ -140,20 +142,20 @@ func TestStoreDelete(t *testing.T) {
 		{
 			Type:        AccountCredit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 1),
-			ValueMicros: 100 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 1),
+			ValueMicros: 100 * units.One,
 		},
 		{
 			Type:        AccountDebit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 2),
-			ValueMicros: -50 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 2),
+			ValueMicros: -50 * units.One,
 		},
 		{
 			Type:        AccountCredit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 3),
-			ValueMicros: 50 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 3),
+			ValueMicros: 50 * units.One,
 		},
 	}
 	s, err := newTestStore(entries, CheckingAccount)
@@ -163,13 +165,13 @@ func TestStoreDelete(t *testing.T) {
 	tests := []struct {
 		seq       int64
 		wantLen   int
-		wantValue Micros
+		wantValue units.Micros
 		wantErr   bool
 	}{
 		{seq: 100, wantErr: true},
-		{seq: 2, wantLen: 2, wantValue: 150 * UnitValue},
-		{seq: 1, wantLen: 1, wantValue: 50 * UnitValue},
-		{seq: 3, wantLen: 0, wantValue: 0 * UnitValue},
+		{seq: 2, wantLen: 2, wantValue: 150 * units.One},
+		{seq: 1, wantLen: 1, wantValue: 50 * units.One},
+		{seq: 3, wantLen: 0, wantValue: 0 * units.One},
 		{seq: 3, wantErr: true},
 	}
 	for i, tc := range tests {
@@ -189,7 +191,7 @@ func TestStoreDelete(t *testing.T) {
 		if len(s.entries[ibanDE100]) != tc.wantLen {
 			t.Errorf("Wrong entries index length: want %d, got %d", tc.wantLen, len(s.entries[ibanDE100]))
 		}
-		p := s.AssetPositionAt(ibanDE100, DateVal(2023, 1, 3))
+		p := s.AssetPositionAt(ibanDE100, civil.DateVal(2023, 1, 3))
 		if p == nil {
 			t.Fatal("No position returned in round", i)
 		}
@@ -203,17 +205,17 @@ func TestStoreDeleteExchangeRate(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
 			Type:          ExchangeRate,
-			ValueDate:     DateVal(2023, 1, 1),
+			ValueDate:     civil.DateVal(2023, 1, 1),
 			Currency:      "EUR",
 			QuoteCurrency: "CHF",
-			PriceMicros:   950 * Millis,
+			PriceMicros:   950 * units.Millis,
 		},
 		{
 			Type:          ExchangeRate,
-			ValueDate:     DateVal(2023, 1, 2),
+			ValueDate:     civil.DateVal(2023, 1, 2),
 			Currency:      "EUR",
 			QuoteCurrency: "CHF",
-			PriceMicros:   960 * Millis,
+			PriceMicros:   960 * units.Millis,
 		},
 	}
 	s, err := newTestStore(entries, CheckingAccount)
@@ -257,8 +259,8 @@ func TestStoreAddAsset(t *testing.T) {
 				ISIN:         "DE123",
 				Name:         "Bund123",
 				Currency:     "EUR",
-				IssueDate:    newDate(2023, 1, 1),
-				MaturityDate: newDate(2030, 1, 1),
+				IssueDate:    civil.NewDate(2023, 1, 1),
+				MaturityDate: civil.NewDate(2030, 1, 1),
 			},
 		},
 		{
@@ -305,8 +307,8 @@ func TestStoreAddAssetFail(t *testing.T) {
 				ISIN:         "DE123",
 				Name:         "Bund123",
 				Currency:     "EUR",
-				IssueDate:    newDate(2023, 1, 1),
-				MaturityDate: newDate(2021, 1, 1),
+				IssueDate:    civil.NewDate(2023, 1, 1),
+				MaturityDate: civil.NewDate(2021, 1, 1),
 			},
 		},
 		{
@@ -351,8 +353,8 @@ func TestStoreAddAssetFail(t *testing.T) {
 }
 
 func TestExchangeRatesAdd(t *testing.T) {
-	dates := func(entries []*LedgerEntry) []Date {
-		r := make([]Date, len(entries))
+	dates := func(entries []*LedgerEntry) []civil.Date {
+		r := make([]civil.Date, len(entries))
 		for i, e := range entries {
 			r[i] = e.ValueDate
 		}
@@ -369,9 +371,9 @@ func TestExchangeRatesAdd(t *testing.T) {
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   1_241_000,
-		ValueDate:     DateVal(2024, 1, 1),
+		ValueDate:     civil.DateVal(2024, 1, 1),
 	})
-	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2024, 1, 1)}) {
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []civil.Date{civil.DateVal(2024, 1, 1)}) {
 		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
 	}
 	s.Add(&LedgerEntry{
@@ -379,9 +381,9 @@ func TestExchangeRatesAdd(t *testing.T) {
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   1_243_000,
-		ValueDate:     DateVal(2024, 3, 1),
+		ValueDate:     civil.DateVal(2024, 3, 1),
 	})
-	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2024, 1, 1), DateVal(2024, 3, 1)}) {
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []civil.Date{civil.DateVal(2024, 1, 1), civil.DateVal(2024, 3, 1)}) {
 		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
 	}
 	s.Add(&LedgerEntry{
@@ -389,9 +391,9 @@ func TestExchangeRatesAdd(t *testing.T) {
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   1_231_200,
-		ValueDate:     DateVal(2023, 12, 1),
+		ValueDate:     civil.DateVal(2023, 12, 1),
 	})
-	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2023, 12, 1), DateVal(2024, 1, 1), DateVal(2024, 3, 1)}) {
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []civil.Date{civil.DateVal(2023, 12, 1), civil.DateVal(2024, 1, 1), civil.DateVal(2024, 3, 1)}) {
 		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
 	}
 	s.Add(&LedgerEntry{
@@ -399,9 +401,9 @@ func TestExchangeRatesAdd(t *testing.T) {
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   1_242_000,
-		ValueDate:     DateVal(2024, 2, 1),
+		ValueDate:     civil.DateVal(2024, 2, 1),
 	})
-	if !cmp.Equal(dates(s.exchangeRates["USD"]), []Date{DateVal(2023, 12, 1), DateVal(2024, 1, 1), DateVal(2024, 2, 1), DateVal(2024, 3, 1)}) {
+	if !cmp.Equal(dates(s.exchangeRates["USD"]), []civil.Date{civil.DateVal(2023, 12, 1), civil.DateVal(2024, 1, 1), civil.DateVal(2024, 2, 1), civil.DateVal(2024, 3, 1)}) {
 		t.Errorf("wrong date order: %v", dates(s.exchangeRates["USD"]))
 	}
 }
@@ -409,38 +411,38 @@ func TestExchangeRatesAdd(t *testing.T) {
 func TestPriceAt(t *testing.T) {
 	tests := []struct {
 		assetID   string
-		date      Date
-		wantDate  Date
-		wantPrice Micros
+		date      civil.Date
+		wantDate  civil.Date
+		wantPrice units.Micros
 		wantNOK   bool
 	}{
-		{"BMW", DateVal(2023, 1, 1), Date{}, 0, true},
-		{"BMW", DateVal(2024, 1, 1), DateVal(2024, 1, 1), 180 * UnitValue, false},
-		{"BMW", DateVal(2024, 1, 31), DateVal(2024, 1, 1), 180 * UnitValue, false},
-		{"BMW", DateVal(2024, 2, 1), DateVal(2024, 2, 1), 190 * UnitValue, false},
-		{"Mercedes", DateVal(2024, 1, 1), Date{}, 0, true},
+		{"BMW", civil.DateVal(2023, 1, 1), civil.Date{}, 0, true},
+		{"BMW", civil.DateVal(2024, 1, 1), civil.DateVal(2024, 1, 1), 180 * units.One, false},
+		{"BMW", civil.DateVal(2024, 1, 31), civil.DateVal(2024, 1, 1), 180 * units.One, false},
+		{"BMW", civil.DateVal(2024, 2, 1), civil.DateVal(2024, 2, 1), 190 * units.One, false},
+		{"Mercedes", civil.DateVal(2024, 1, 1), civil.Date{}, 0, true},
 	}
 	entries := []*LedgerEntry{
 		{
 			Type:        AssetPrice,
 			AssetID:     "BMW",
 			Currency:    "EUR",
-			PriceMicros: 180 * UnitValue,
-			ValueDate:   DateVal(2024, 1, 1),
+			PriceMicros: 180 * units.One,
+			ValueDate:   civil.DateVal(2024, 1, 1),
 		},
 		{
 			Type:        AssetPrice,
 			AssetID:     "BMW",
 			Currency:    "EUR",
-			PriceMicros: 190 * UnitValue,
-			ValueDate:   DateVal(2024, 2, 1),
+			PriceMicros: 190 * units.One,
+			ValueDate:   civil.DateVal(2024, 2, 1),
 		},
 		{
 			Type:        DividendPayment,
 			AssetID:     "Mercedes",
 			Currency:    "EUR",
-			ValueMicros: 50 * UnitValue,
-			ValueDate:   DateVal(2024, 1, 1),
+			ValueMicros: 50 * units.One,
+			ValueDate:   civil.DateVal(2024, 1, 1),
 		},
 	}
 	s, err := newTestStore(entries, Stock)
@@ -470,18 +472,18 @@ func TestPriceAt(t *testing.T) {
 
 func TestExchangeRatesAt(t *testing.T) {
 	tests := []struct {
-		date     Date
-		wantDate Date
-		wantRate Micros
+		date     civil.Date
+		wantDate civil.Date
+		wantRate units.Micros
 		wantNOK  bool
 	}{
-		{date: DateVal(2024, 1, 1), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
-		{date: DateVal(2023, 12, 31), wantNOK: true},
-		{date: DateVal(2024, 1, 15), wantDate: DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
-		{date: DateVal(2024, 2, 1), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
-		{date: DateVal(2024, 2, 15), wantDate: DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
-		{date: DateVal(2024, 3, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
-		{date: DateVal(2024, 4, 1), wantDate: DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
+		{date: civil.DateVal(2024, 1, 1), wantDate: civil.DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
+		{date: civil.DateVal(2023, 12, 31), wantNOK: true},
+		{date: civil.DateVal(2024, 1, 15), wantDate: civil.DateVal(2024, 1, 1), wantRate: 20240101, wantNOK: false},
+		{date: civil.DateVal(2024, 2, 1), wantDate: civil.DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
+		{date: civil.DateVal(2024, 2, 15), wantDate: civil.DateVal(2024, 2, 1), wantRate: 20240201, wantNOK: false},
+		{date: civil.DateVal(2024, 3, 1), wantDate: civil.DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
+		{date: civil.DateVal(2024, 4, 1), wantDate: civil.DateVal(2024, 3, 1), wantRate: 20240301, wantNOK: false},
 	}
 	l := &Ledger{
 		Header: &LedgerHeader{
@@ -494,21 +496,21 @@ func TestExchangeRatesAt(t *testing.T) {
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   20240101,
-		ValueDate:     DateVal(2024, 1, 1),
+		ValueDate:     civil.DateVal(2024, 1, 1),
 	})
 	s.Add(&LedgerEntry{
 		Type:          ExchangeRate,
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   20240201,
-		ValueDate:     DateVal(2024, 2, 1),
+		ValueDate:     civil.DateVal(2024, 2, 1),
 	})
 	s.Add(&LedgerEntry{
 		Type:          ExchangeRate,
 		Currency:      "EUR",
 		QuoteCurrency: "USD",
 		PriceMicros:   20240301,
-		ValueDate:     DateVal(2024, 3, 1),
+		ValueDate:     civil.DateVal(2024, 3, 1),
 	})
 	for _, tc := range tests {
 		rate, date, ok := s.ExchangeRateAt("USD", tc.date)
@@ -550,32 +552,32 @@ func TestPositionsAtSavingsAccount(t *testing.T) {
 		{
 			Type:        AccountBalance,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 31),
-			ValueMicros: 1000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 31),
+			ValueMicros: 1000 * units.One,
 		},
 		{
 			Type:        InterestPayment,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 2, 15),
-			ValueMicros: 10 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 2, 15),
+			ValueMicros: 10 * units.One,
 		},
 		{
 			Type:        AccountBalance,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 2, 28),
-			ValueMicros: 2000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 2, 28),
+			ValueMicros: 2000 * units.One,
 		},
 		{
 			Type:        AccountCredit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 3, 15),
-			ValueMicros: 3000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 3, 15),
+			ValueMicros: 3000 * units.One,
 		},
 		{
 			Type:        AccountDebit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 3, 31),
-			ValueMicros: -4000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 3, 31),
+			ValueMicros: -4000 * units.One,
 		},
 	}
 	for _, e := range entries {
@@ -585,14 +587,14 @@ func TestPositionsAtSavingsAccount(t *testing.T) {
 		}
 	}
 	params := []struct {
-		date  Date
-		value Micros
+		date  civil.Date
+		value units.Micros
 	}{
-		{date: DateVal(2023, 1, 31), value: 1000 * UnitValue},
-		{date: DateVal(2023, 2, 16), value: 1000 * UnitValue},
-		{date: DateVal(2023, 2, 28), value: 2000 * UnitValue},
-		{date: DateVal(2023, 3, 15), value: 5000 * UnitValue},
-		{date: DateVal(2023, 3, 31), value: 1000 * UnitValue},
+		{date: civil.DateVal(2023, 1, 31), value: 1000 * units.One},
+		{date: civil.DateVal(2023, 2, 16), value: 1000 * units.One},
+		{date: civil.DateVal(2023, 2, 28), value: 2000 * units.One},
+		{date: civil.DateVal(2023, 3, 15), value: 5000 * units.One},
+		{date: civil.DateVal(2023, 3, 31), value: 1000 * units.One},
 	}
 	for _, p := range params {
 		ps := s.AssetPositionsAt(p.date)
@@ -613,8 +615,8 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 				Name:         "Festgeld",
 				Type:         FixedDepositAccount,
 				IBAN:         ibanDE100,
-				IssueDate:    newDate(2023, 1, 1),
-				MaturityDate: newDate(2024, 1, 1),
+				IssueDate:    civil.NewDate(2023, 1, 1),
+				MaturityDate: civil.NewDate(2024, 1, 1),
 				Currency:     "EUR",
 			},
 		},
@@ -627,32 +629,32 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 		{
 			Type:        AccountCredit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 1),
-			ValueMicros: 1000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 1),
+			ValueMicros: 1000 * units.One,
 		},
 		{
 			Type:        InterestPayment,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 6, 1),
-			ValueMicros: 10 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 6, 1),
+			ValueMicros: 10 * units.One,
 		},
 		{
 			Type:        AccountBalance,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 6, 1),
-			ValueMicros: 1010 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 6, 1),
+			ValueMicros: 1010 * units.One,
 		},
 		{
 			Type:        AccountDebit,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 9, 1),
-			ValueMicros: -100 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 9, 1),
+			ValueMicros: -100 * units.One,
 		},
 		{
 			Type:        AssetMaturity,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2024, 1, 1),
-			ValueMicros: 920 * UnitValue,
+			ValueDate:   civil.DateVal(2024, 1, 1),
+			ValueMicros: 920 * units.One,
 		},
 	}
 	for _, e := range entries {
@@ -662,25 +664,25 @@ func TestPositionAtFixedDeposit(t *testing.T) {
 		}
 	}
 	tests := []struct {
-		date  Date
-		value Micros
+		date  civil.Date
+		value units.Micros
 		items []AssetPositionItem
 	}{
-		{date: DateVal(2023, 1, 1), value: 1000 * UnitValue,
+		{date: civil.DateVal(2023, 1, 1), value: 1000 * units.One,
 			items: []AssetPositionItem{
-				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 1000 * UnitValue, PriceMicros: UnitValue},
+				{ValueDate: civil.DateVal(2023, 1, 1), QuantityMicros: 1000 * units.One, PriceMicros: units.One},
 			}},
-		{date: DateVal(2023, 6, 1), value: 1010 * UnitValue,
+		{date: civil.DateVal(2023, 6, 1), value: 1010 * units.One,
 			items: []AssetPositionItem{
 				// AccountBalance should not have changed items:
-				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 1000 * UnitValue, PriceMicros: UnitValue},
+				{ValueDate: civil.DateVal(2023, 1, 1), QuantityMicros: 1000 * units.One, PriceMicros: units.One},
 			}},
-		{date: DateVal(2023, 9, 1), value: 910 * UnitValue,
+		{date: civil.DateVal(2023, 9, 1), value: 910 * units.One,
 			items: []AssetPositionItem{
 				// AccountDebit should have reduced nominal value (stored in QuantityMicros):
-				{ValueDate: DateVal(2023, 1, 1), QuantityMicros: 900 * UnitValue, PriceMicros: UnitValue},
+				{ValueDate: civil.DateVal(2023, 1, 1), QuantityMicros: 900 * units.One, PriceMicros: units.One},
 			}},
-		{date: DateVal(2024, 1, 1), value: 0},
+		{date: civil.DateVal(2024, 1, 1), value: 0},
 	}
 	for _, tc := range tests {
 		p := s.AssetPositionAt(ibanDE100, tc.date)
@@ -715,38 +717,38 @@ func TestProfitLossInPeriod(t *testing.T) {
 		{
 			Type:           AssetPurchase,
 			AssetID:        "MSFT",
-			ValueDate:      DateVal(2022, 6, 1),
-			QuantityMicros: 1000 * UnitValue,
-			PriceMicros:    270 * UnitValue,
-			CostMicros:     50 * UnitValue,
+			ValueDate:      civil.DateVal(2022, 6, 1),
+			QuantityMicros: 1000 * units.One,
+			PriceMicros:    270 * units.One,
+			CostMicros:     50 * units.One,
 		},
 		{
 			Type:           AssetPurchase,
 			AssetID:        "MSFT",
-			ValueDate:      DateVal(2023, 6, 1),
-			QuantityMicros: 500 * UnitValue,
-			PriceMicros:    330 * UnitValue,
-			CostMicros:     50 * UnitValue,
+			ValueDate:      civil.DateVal(2023, 6, 1),
+			QuantityMicros: 500 * units.One,
+			PriceMicros:    330 * units.One,
+			CostMicros:     50 * units.One,
 		},
 		{
 			Type:        AssetPrice,
 			AssetID:     "MSFT",
-			ValueDate:   DateVal(2023, 12, 31),
-			PriceMicros: 370 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 12, 31),
+			PriceMicros: 370 * units.One,
 		},
 		{
 			Type:           AssetSale,
 			AssetID:        "MSFT",
-			ValueDate:      DateVal(2024, 3, 1),
-			QuantityMicros: -500 * UnitValue,
-			PriceMicros:    425 * UnitValue,
-			CostMicros:     50 * UnitValue,
+			ValueDate:      civil.DateVal(2024, 3, 1),
+			QuantityMicros: -500 * units.One,
+			PriceMicros:    425 * units.One,
+			CostMicros:     50 * units.One,
 		},
 		{
 			Type:        AssetPrice,
 			AssetID:     "MSFT",
-			ValueDate:   DateVal(2024, 6, 30),
-			PriceMicros: 450 * UnitValue,
+			ValueDate:   civil.DateVal(2024, 6, 30),
+			PriceMicros: 450 * units.One,
 		},
 	}
 	for _, e := range entries {
@@ -756,18 +758,18 @@ func TestProfitLossInPeriod(t *testing.T) {
 		}
 	}
 	tests := []struct {
-		endDate Date
+		endDate civil.Date
 		days    int
-		wantPL  Micros
-		wantRef Micros
+		wantPL  units.Micros
+		wantRef units.Micros
 	}{
-		{endDate: DateVal(1999, 1, 1), days: 365, wantPL: 0, wantRef: 0},
+		{endDate: civil.DateVal(1999, 1, 1), days: 365, wantPL: 0, wantRef: 0},
 		// P&L: (370-270) * 1000 + (370-330) * 500 == 120000 (minus 50 cost)
 		// Ref: 1000*270 + 500*330 + 50 == 435050
-		{endDate: DateVal(2023, 12, 31), days: 365, wantPL: 119950 * UnitValue, wantRef: 435050 * UnitValue},
+		{endDate: civil.DateVal(2023, 12, 31), days: 365, wantPL: 119950 * units.One, wantRef: 435050 * units.One},
 		// P&L: (425-370) * 500 + 1000 * (450-370) == 107500 (minus 50 cost)
 		// Ref: 1500*370 == 555000
-		{endDate: DateVal(2024, 6, 30), days: 180, wantPL: 107450 * UnitValue, wantRef: 555000 * UnitValue},
+		{endDate: civil.DateVal(2024, 6, 30), days: 180, wantPL: 107450 * units.One, wantRef: 555000 * units.One},
 	}
 	for _, tc := range tests {
 		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate.AddDays(-tc.days), tc.endDate)
@@ -803,19 +805,19 @@ func TestProfitLossInPeriodBuySellSameYear(t *testing.T) {
 			// Buy 1000 in the middle of 2025...
 			Type:           AssetPurchase,
 			AssetID:        "MSFT",
-			ValueDate:      DateVal(2025, 3, 31),
-			QuantityMicros: 1000 * UnitValue,
-			PriceMicros:    450 * UnitValue,
-			CostMicros:     50 * UnitValue,
+			ValueDate:      civil.DateVal(2025, 3, 31),
+			QuantityMicros: 1000 * units.One,
+			PriceMicros:    450 * units.One,
+			CostMicros:     50 * units.One,
 		},
 		{
 			// ... and sell them in the same year.
 			Type:           AssetSale,
 			AssetID:        "MSFT",
-			ValueDate:      DateVal(2025, 6, 31),
-			QuantityMicros: -1000 * UnitValue,
-			PriceMicros:    500 * UnitValue,
-			CostMicros:     50 * UnitValue,
+			ValueDate:      civil.DateVal(2025, 6, 31),
+			QuantityMicros: -1000 * units.One,
+			PriceMicros:    500 * units.One,
+			CostMicros:     50 * units.One,
 		},
 	}
 	for _, e := range entries {
@@ -825,15 +827,15 @@ func TestProfitLossInPeriodBuySellSameYear(t *testing.T) {
 		}
 	}
 	tests := []struct {
-		endDate Date
+		endDate civil.Date
 		days    int
-		wantPL  Micros
-		wantRef Micros
+		wantPL  units.Micros
+		wantRef units.Micros
 	}{
 		// Started the year with 0, bought 1000 and sold them:
 		// P&L: 1000*(500-450) - 50 == 49950
 		// Ref: 1000*450 + 50 == 450050
-		{endDate: DateVal(2025, 12, 31), days: 365, wantPL: 49900 * UnitValue, wantRef: 450050 * UnitValue},
+		{endDate: civil.DateVal(2025, 12, 31), days: 365, wantPL: 49900 * units.One, wantRef: 450050 * units.One},
 	}
 	for _, tc := range tests {
 		pl, ref, err := s.ProfitLossInPeriod("MSFT", tc.endDate.AddDays(-tc.days), tc.endDate)
@@ -874,28 +876,28 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 		{
 			Type:        AccountBalance,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 1, 31),
-			ValueMicros: 1000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 1, 31),
+			ValueMicros: 1000 * units.One,
 		},
 		{
 			Type:           AssetPurchase,
 			AssetID:        "DE99",
-			ValueDate:      DateVal(2023, 2, 14),
-			QuantityMicros: 2000 * UnitValue,
-			PriceMicros:    950 * Millis,
+			ValueDate:      civil.DateVal(2023, 2, 14),
+			QuantityMicros: 2000 * units.One,
+			PriceMicros:    950 * units.Millis,
 		},
 		{
 			Type:           AssetSale,
 			AssetID:        "DE99",
-			ValueDate:      DateVal(2023, 2, 20),
-			QuantityMicros: -500 * UnitValue,
-			PriceMicros:    1100 * Millis,
+			ValueDate:      civil.DateVal(2023, 2, 20),
+			QuantityMicros: -500 * units.One,
+			PriceMicros:    1100 * units.Millis,
 		},
 		{
 			Type:        AccountBalance,
 			AssetID:     ibanDE100,
-			ValueDate:   DateVal(2023, 2, 28),
-			ValueMicros: 2000 * UnitValue,
+			ValueDate:   civil.DateVal(2023, 2, 28),
+			ValueMicros: 2000 * units.One,
 		},
 	}
 	for _, e := range entries {
@@ -906,38 +908,38 @@ func TestPositionsAtMultipleAssets(t *testing.T) {
 	}
 	tests := []struct {
 		name    string
-		date    Date
-		wantPos map[string]Micros
+		date    civil.Date
+		wantPos map[string]units.Micros
 	}{
 		{
 			name: "first_entry",
-			date: DateVal(2023, 1, 31),
-			wantPos: map[string]Micros{
-				ibanDE100: 1000 * UnitValue,
+			date: civil.DateVal(2023, 1, 31),
+			wantPos: map[string]units.Micros{
+				ibanDE100: 1000 * units.One,
 			},
 		},
 		{
 			name: "after_buy",
-			date: DateVal(2023, 2, 14),
-			wantPos: map[string]Micros{
-				ibanDE100: 1000 * UnitValue,
-				"DE99":    1900 * UnitValue,
+			date: civil.DateVal(2023, 2, 14),
+			wantPos: map[string]units.Micros{
+				ibanDE100: 1000 * units.One,
+				"DE99":    1900 * units.One,
 			},
 		},
 		{
 			name: "after_buy_next_day",
-			date: DateVal(2023, 2, 15),
-			wantPos: map[string]Micros{
-				ibanDE100: 1000 * UnitValue,
-				"DE99":    1900 * UnitValue,
+			date: civil.DateVal(2023, 2, 15),
+			wantPos: map[string]units.Micros{
+				ibanDE100: 1000 * units.One,
+				"DE99":    1900 * units.One,
 			},
 		},
 		{
 			name: "after_sell",
-			date: DateVal(2023, 2, 20),
-			wantPos: map[string]Micros{
-				ibanDE100: 1000 * UnitValue,
-				"DE99":    1650 * UnitValue,
+			date: civil.DateVal(2023, 2, 20),
+			wantPos: map[string]units.Micros{
+				ibanDE100: 1000 * units.One,
+				"DE99":    1650 * units.One,
 			},
 		},
 	}
@@ -965,7 +967,7 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 		TickerSymbol: "MSFT",
 		Currency:     "USD",
 	}
-	const u = UnitValue
+	const u = units.One
 	tests := []struct {
 		E *LedgerEntry
 		P *AssetPosition
@@ -974,19 +976,19 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetPurchase,
 				AssetID:        "MSFT",
-				ValueDate:      DateVal(2024, 1, 1),
+				ValueDate:      civil.DateVal(2024, 1, 1),
 				QuantityMicros: 10 * u,
 				PriceMicros:    2 * u,
 				CostMicros:     5 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 1),
+				LastUpdated:    civil.DateVal(2024, 1, 1),
 				QuantityMicros: 10 * u,
 				PriceMicros:    2 * u,
-				PriceDate:      DateVal(2024, 1, 1),
+				PriceDate:      civil.DateVal(2024, 1, 1),
 				Items: []AssetPositionItem{
-					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+					{ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
 				},
 			},
 		},
@@ -994,20 +996,20 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetPurchase,
 				AssetID:        "MSFT",
-				ValueDate:      DateVal(2024, 1, 2),
+				ValueDate:      civil.DateVal(2024, 1, 2),
 				QuantityMicros: 20 * u,
 				PriceMicros:    3 * u,
 				CostMicros:     12 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 2),
+				LastUpdated:    civil.DateVal(2024, 1, 2),
 				QuantityMicros: 30 * u,
 				PriceMicros:    3 * u,
-				PriceDate:      DateVal(2024, 1, 2),
+				PriceDate:      civil.DateVal(2024, 1, 2),
 				Items: []AssetPositionItem{
-					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
-					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
+					{ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: 10 * u, PriceMicros: 2 * u, CostMicros: 5 * u},
+					{ValueDate: civil.DateVal(2024, 1, 2), QuantityMicros: 20 * u, PriceMicros: 3 * u, CostMicros: 12 * u},
 				},
 			},
 		},
@@ -1016,19 +1018,19 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetSale,
 				AssetID:        "MSFT",
-				ValueDate:      DateVal(2024, 1, 3),
+				ValueDate:      civil.DateVal(2024, 1, 3),
 				QuantityMicros: -20 * u,
 				PriceMicros:    3 * u,
 				CostMicros:     10 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 3),
+				LastUpdated:    civil.DateVal(2024, 1, 3),
 				QuantityMicros: 10 * u,
 				PriceMicros:    3 * u,
-				PriceDate:      DateVal(2024, 1, 3),
+				PriceDate:      civil.DateVal(2024, 1, 3),
 				Items: []AssetPositionItem{
-					{ValueDate: DateVal(2024, 1, 2), QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
+					{ValueDate: civil.DateVal(2024, 1, 2), QuantityMicros: 10 * u, PriceMicros: 3 * u, CostMicros: 6 * u},
 				},
 			},
 		},
@@ -1037,17 +1039,17 @@ func TestAssetPositionUpdateStock(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetSale,
 				AssetID:        "MSFT",
-				ValueDate:      DateVal(2024, 1, 4),
+				ValueDate:      civil.DateVal(2024, 1, 4),
 				QuantityMicros: -10 * u,
 				PriceMicros:    3 * u,
 				CostMicros:     10 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 4),
+				LastUpdated:    civil.DateVal(2024, 1, 4),
 				QuantityMicros: 0 * u,
 				PriceMicros:    3 * u,
-				PriceDate:      DateVal(2024, 1, 4),
+				PriceDate:      civil.DateVal(2024, 1, 4),
 				Items:          nil,
 			},
 		},
@@ -1068,7 +1070,7 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 		TickerSymbol: "PJ30",
 		Currency:     "USD",
 	}
-	const u = UnitValue
+	const u = units.One
 	tests := []struct {
 		E *LedgerEntry
 		P *AssetPosition
@@ -1078,19 +1080,19 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetHolding,
 				AssetID:        "PJ30",
-				ValueDate:      DateVal(2024, 1, 1),
+				ValueDate:      civil.DateVal(2024, 1, 1),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    1 * u,
 				CostMicros:     50 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 1),
+				LastUpdated:    civil.DateVal(2024, 1, 1),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    1 * u,
-				PriceDate:      DateVal(2024, 1, 1),
+				PriceDate:      civil.DateVal(2024, 1, 1),
 				Items: []AssetPositionItem{
-					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
+					{ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
 				},
 			},
 		},
@@ -1100,18 +1102,18 @@ func TestAssetPositionAssetHolding(t *testing.T) {
 			E: &LedgerEntry{
 				Type:           AssetHolding,
 				AssetID:        "PJ30",
-				ValueDate:      DateVal(2024, 1, 2),
+				ValueDate:      civil.DateVal(2024, 1, 2),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    2 * u,
 			},
 			P: &AssetPosition{
 				Asset:          asset,
-				LastUpdated:    DateVal(2024, 1, 2),
+				LastUpdated:    civil.DateVal(2024, 1, 2),
 				QuantityMicros: 1000 * u,
 				PriceMicros:    2 * u,
-				PriceDate:      DateVal(2024, 1, 2),
+				PriceDate:      civil.DateVal(2024, 1, 2),
 				Items: []AssetPositionItem{
-					{ValueDate: DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
+					{ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: 1000 * u, PriceMicros: 1 * u, CostMicros: 50 * u},
 				},
 			},
 		},
@@ -1163,10 +1165,10 @@ func newTestStore(entries []*LedgerEntry, t AssetType) (*Store, error) {
 func TestAssetPositionsBetween(t *testing.T) {
 	entries := []*LedgerEntry{
 		{
-			ValueDate:      DateVal(2024, 1, 1),
+			ValueDate:      civil.DateVal(2024, 1, 1),
 			Type:           AssetPurchase,
-			QuantityMicros: 1 * UnitValue,
-			PriceMicros:    1 * UnitValue,
+			QuantityMicros: 1 * units.One,
+			PriceMicros:    1 * units.One,
 			AssetID:        "KO",
 		},
 	}
@@ -1174,15 +1176,15 @@ func TestAssetPositionsBetween(t *testing.T) {
 	if err != nil {
 		t.Fatal("Cannot create store:", err)
 	}
-	ps := s.AssetPositionsBetween("KO", DateVal(2023, 1, 1), DateVal(2025, 1, 1))
+	ps := s.AssetPositionsBetween("KO", civil.DateVal(2023, 1, 1), civil.DateVal(2025, 1, 1))
 	if len(ps) != 1 {
 		t.Fatalf("Wrong number of positions: %d", len(ps))
 	}
-	if !ps[0].LastUpdated.Equal(DateVal(2024, 1, 1)) {
-		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, DateVal(2024, 1, 1))
+	if !ps[0].LastUpdated.Equal(civil.DateVal(2024, 1, 1)) {
+		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, civil.DateVal(2024, 1, 1))
 	}
-	if ps[0].MarketValue() != 1*UnitValue {
-		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), 1*UnitValue)
+	if ps[0].MarketValue() != 1*units.One {
+		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), 1*units.One)
 	}
 }
 
@@ -1193,24 +1195,24 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 		// The first two purchases should be included in the requested
 		// position on 2024-02-01, the third one should not.
 		{
-			ValueDate:      DateVal(2024, 1, 1),
+			ValueDate:      civil.DateVal(2024, 1, 1),
 			Type:           AssetPurchase,
-			QuantityMicros: 1 * UnitValue,
-			PriceMicros:    1 * UnitValue,
+			QuantityMicros: 1 * units.One,
+			PriceMicros:    1 * units.One,
 			AssetID:        "KO",
 		},
 		{
-			ValueDate:      DateVal(2024, 2, 1),
+			ValueDate:      civil.DateVal(2024, 2, 1),
 			Type:           AssetPurchase,
-			QuantityMicros: 1 * UnitValue,
-			PriceMicros:    1 * UnitValue,
+			QuantityMicros: 1 * units.One,
+			PriceMicros:    1 * units.One,
 			AssetID:        "KO",
 		},
 		{
-			ValueDate:      DateVal(2024, 3, 1),
+			ValueDate:      civil.DateVal(2024, 3, 1),
 			Type:           AssetPurchase,
-			QuantityMicros: 1 * UnitValue,
-			PriceMicros:    1 * UnitValue,
+			QuantityMicros: 1 * units.One,
+			PriceMicros:    1 * units.One,
 			AssetID:        "KO",
 		},
 	}
@@ -1218,22 +1220,22 @@ func TestAssetPositionsBetweenPast(t *testing.T) {
 	if err != nil {
 		t.Fatal("Cannot create store:", err)
 	}
-	ps := s.AssetPositionsBetween("KO", DateVal(2024, 1, 15), DateVal(2024, 2, 15))
+	ps := s.AssetPositionsBetween("KO", civil.DateVal(2024, 1, 15), civil.DateVal(2024, 2, 15))
 	if len(ps) != 1 {
 		t.Fatalf("Wrong number of positions: %d", len(ps))
 	}
-	wantDate := DateVal(2024, 2, 1)
+	wantDate := civil.DateVal(2024, 2, 1)
 	if !ps[0].LastUpdated.Equal(wantDate) {
 		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, wantDate)
 	}
-	wantValue := Micros(2 * UnitValue)
+	wantValue := units.Micros(2 * units.One)
 	if ps[0].MarketValue() != wantValue {
 		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), wantValue)
 	}
 }
 
 func TestLoadStoreSingleRecord(t *testing.T) {
-	s, err := LoadStore("./testdata/testledger.json")
+	s, err := LoadStore("../../testdata/testledger.json")
 	if err != nil {
 		t.Fatal("Cannot load ledger:", err)
 	}
@@ -1243,7 +1245,7 @@ func TestLoadStoreSingleRecord(t *testing.T) {
 }
 
 func TestLoadStoreRecords(t *testing.T) {
-	s, err := LoadStore("./testdata/testledger.jsons")
+	s, err := LoadStore("../../testdata/testledger.jsons")
 	if err != nil {
 		t.Fatal("Cannot load ledger:", err)
 	}
@@ -1255,7 +1257,7 @@ func TestLoadStoreRecords(t *testing.T) {
 func TestLoadSaveStoreRecords(t *testing.T) {
 	// This test is only used to format the .jsons file after changes.
 	t.SkipNow()
-	s, err := LoadStore("./testdata/testledger.jsons")
+	s, err := LoadStore("../../testdata/testledger.jsons")
 	if err != nil {
 		t.Fatal("Cannot load ledger:", err)
 	}
@@ -1275,9 +1277,9 @@ func TestSaveLoadStore(t *testing.T) {
 				Created:       time.Date(2023, 1, 1, 17, 0, 0, 0, time.UTC),
 				SequenceNum:   1,
 				Type:          ExchangeRate,
-				ValueDate:     DateVal(2024, 1, 1),
+				ValueDate:     civil.DateVal(2024, 1, 1),
 				QuoteCurrency: "CHF",
-				PriceMicros:   1 * UnitValue,
+				PriceMicros:   1 * units.One,
 			},
 		},
 	}
@@ -1325,7 +1327,7 @@ func TestSaveLoadEmpty(t *testing.T) {
 
 func TestMicrosMarshalJSON(t *testing.T) {
 	tests := []struct {
-		input Micros
+		input units.Micros
 		want  string
 	}{
 		{input: 1_000_000, want: `"1"`},
@@ -1352,9 +1354,9 @@ func TestMarshalLedger(t *testing.T) {
 			{
 				Created:        time.Date(2023, 12, 31, 0, 0, 0, 0, time.UTC),
 				SequenceNum:    1,
-				ValueDate:      DateVal(2024, 12, 31),
+				ValueDate:      civil.DateVal(2024, 12, 31),
 				Type:           AssetPurchase,
-				QuantityMicros: 1 * UnitValue,
+				QuantityMicros: 1 * units.One,
 				PriceMicros:    1_500_000,
 				Currency:       "EUR",
 			},
@@ -1385,11 +1387,11 @@ func TestMarshalLedger(t *testing.T) {
 
 func TestMarshalDate(t *testing.T) {
 	tests := []struct {
-		input Date
+		input civil.Date
 		want  string
 	}{
-		{input: DateVal(2024, 10, 13), want: `"2024-10-13"`},
-		{input: Date{}, want: `"0001-01-01"`},
+		{input: civil.DateVal(2024, 10, 13), want: `"2024-10-13"`},
+		{input: civil.Date{}, want: `"0001-01-01"`},
 	}
 	for _, tc := range tests {
 		data, err := tc.input.MarshalJSON()
@@ -1404,10 +1406,10 @@ func TestMarshalDate(t *testing.T) {
 }
 
 func TestMonthlyRange(t *testing.T) {
-	d := DateVal(2025, 6, 3)
+	d := civil.DateVal(2025, 6, 3)
 	got := repeatMonthly(d, 3)
-	want := []Date{
-		DateVal(2025, 6, 3), DateVal(2025, 7, 3), DateVal(2025, 8, 3),
+	want := []civil.Date{
+		civil.DateVal(2025, 6, 3), civil.DateVal(2025, 7, 3), civil.DateVal(2025, 8, 3),
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Range differs (-want, +got): %s", diff)
@@ -1415,10 +1417,10 @@ func TestMonthlyRange(t *testing.T) {
 }
 
 func TestMonthlyRangeClamped(t *testing.T) {
-	d := DateVal(2025, 1, 31)
+	d := civil.DateVal(2025, 1, 31)
 	got := repeatMonthly(d, 4)
-	want := []Date{
-		DateVal(2025, 1, 31), DateVal(2025, 2, 28), DateVal(2025, 3, 31), DateVal(2025, 4, 30),
+	want := []civil.Date{
+		civil.DateVal(2025, 1, 31), civil.DateVal(2025, 2, 28), civil.DateVal(2025, 3, 31), civil.DateVal(2025, 4, 30),
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("Range differs (-want, +got): %s", diff)

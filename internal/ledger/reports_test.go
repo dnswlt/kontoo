@@ -1,72 +1,74 @@
-package kontoo
+package ledger
 
 import (
 	"reflect"
 	"testing"
 
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
 	"github.com/google/go-cmp/cmp"
 )
 
 func TestQuarterlyPeriods(t *testing.T) {
 	tests := []struct {
-		end  Date
+		end  civil.Date
 		n    int
 		want []*ReportingPeriod
 	}{
 		{
-			end:  DateVal(2024, 10, 3),
+			end:  civil.DateVal(2024, 10, 3),
 			n:    0,
 			want: nil,
 		},
 		{
-			end: DateVal(2024, 1, 1),
+			end: civil.DateVal(2024, 1, 1),
 			n:   1,
 			want: []*ReportingPeriod{
 				{
-					Start: DateVal(2024, 1, 1),
-					End:   DateVal(2024, 1, 1),
+					Start: civil.DateVal(2024, 1, 1),
+					End:   civil.DateVal(2024, 1, 1),
 					Label: "24Q1",
 				},
 			},
 		},
 		{
-			end: DateVal(2024, 10, 3),
+			end: civil.DateVal(2024, 10, 3),
 			n:   2,
 			want: []*ReportingPeriod{
 				{
-					Start: DateVal(2024, 7, 1),
-					End:   DateVal(2024, 9, 30),
+					Start: civil.DateVal(2024, 7, 1),
+					End:   civil.DateVal(2024, 9, 30),
 					Label: "24Q3",
 				},
 				{
-					Start: DateVal(2024, 10, 1),
-					End:   DateVal(2024, 10, 3),
+					Start: civil.DateVal(2024, 10, 1),
+					End:   civil.DateVal(2024, 10, 3),
 					Label: "24Q4",
 				},
 			},
 		},
 		{
-			end: DateVal(2024, 9, 30),
+			end: civil.DateVal(2024, 9, 30),
 			n:   4,
 			want: []*ReportingPeriod{
 				{
-					Start: DateVal(2023, 10, 1),
-					End:   DateVal(2023, 12, 31),
+					Start: civil.DateVal(2023, 10, 1),
+					End:   civil.DateVal(2023, 12, 31),
 					Label: "23Q4",
 				},
 				{
-					Start: DateVal(2024, 1, 1),
-					End:   DateVal(2024, 3, 31),
+					Start: civil.DateVal(2024, 1, 1),
+					End:   civil.DateVal(2024, 3, 31),
 					Label: "24Q1",
 				},
 				{
-					Start: DateVal(2024, 4, 1),
-					End:   DateVal(2024, 6, 30),
+					Start: civil.DateVal(2024, 4, 1),
+					End:   civil.DateVal(2024, 6, 30),
 					Label: "24Q2",
 				},
 				{
-					Start: DateVal(2024, 7, 1),
-					End:   DateVal(2024, 9, 30),
+					Start: civil.DateVal(2024, 7, 1),
+					End:   civil.DateVal(2024, 9, 30),
 					Label: "24Q3",
 				},
 			},
@@ -91,7 +93,7 @@ func TestReportEnsureLength(t *testing.T) {
 		field := value.Field(i)
 		structField := typ.Field(i)
 		// Check that all fields of type []Micros have the expected length
-		if field.Kind() == reflect.Slice && field.Type().Elem() == reflect.TypeOf(Micros(0)) {
+		if field.Kind() == reflect.Slice && field.Type().Elem() == reflect.TypeOf(units.Micros(0)) {
 			if field.Len() != 10 {
 				// If this fails, you probably forgot to include a new field in the ensureLength code.
 				t.Errorf("Unexpected length for field %s after ensureLength(10): %d", structField.Name, field.Len())

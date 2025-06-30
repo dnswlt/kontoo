@@ -1,4 +1,4 @@
-package kontoo
+package quotes
 
 import (
 	"encoding/json"
@@ -15,7 +15,7 @@ var (
 )
 
 func TestUnmarshalChart(t *testing.T) {
-	data, err := os.ReadFile(path.Join("testdata", "chart.json"))
+	data, err := os.ReadFile(path.Join("..", "..", "testdata", "chart.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +32,7 @@ func TestUnmarshalChart(t *testing.T) {
 }
 
 func TestUnmarshalChartError(t *testing.T) {
-	data, err := os.ReadFile(path.Join("testdata", "chart_error.json"))
+	data, err := os.ReadFile(path.Join("..", "..", "testdata", "chart_error.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestRequestChartNotFound(t *testing.T) {
 }
 
 func TestGetDailyQuotesFuture(t *testing.T) {
-	os.Setenv(cookieJarEnvVar, path.Join("./testdata", "yfcookiejar.json"))
+	os.Setenv(cookieJarEnvVar, path.Join("..", "..", "testdata", "yfcookiejar.json"))
 	yf, err := NewYFinance()
 	if err != nil {
 		t.Fatalf("Failed to create YFinance: %v", err)
