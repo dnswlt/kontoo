@@ -296,10 +296,10 @@ type PositionTableRow struct {
 	// Notes about the position to be displayed to the user
 	// (e.g. about old data being shown).
 	Notes []string
-	// Maximum age of the data on which the Value and ValueBaseCurrency
+	// Maximum age (in days) of the data on which the Value and ValueBaseCurrency
 	// are calculated. Used to display warnings in the UI if the age is
 	// above a threshold.
-	DataAge time.Duration
+	DataAgeDays int
 
 	PurchasePrice units.Micros
 
@@ -386,7 +386,7 @@ func maturingPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTabl
 			MaturityDate:            a.MaturityDate,
 			TotalEarningsAtMaturity: calc.TotalEarningsAtMaturity(p),
 			InternalRateOfReturn:    calc.InternalRateOfReturn(p),
-			YearsToMaturity:         a.MaturityDate.Sub(date.Time).Hours() / 24 / 365,
+			YearsToMaturity:         float64(a.MaturityDate.DaysSince(date)) / 365,
 		}
 		res = append(res, row)
 	}
@@ -464,7 +464,7 @@ func positionTableRows(s *ledger.Store, date civil.Date) []*PositionTableRow {
 			ExchangeRate: rate,
 			Value:        p.MarketValue(),
 			Notes:        notes,
-			DataAge:      date.Sub(p.LastUpdated.Time),
+			DataAgeDays:  date.DaysSince(p.LastUpdated),
 		}
 	}
 	return res
@@ -647,7 +647,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 		ClosingPrice units.Micros
 		Date         time.Time
 		LatestDate   civil.Date
-		DataAge      time.Duration
+		DataAgeDays  int
 	}
 	if s.yFinance == nil {
 		// No quotes service, can't show quotes.
@@ -684,7 +684,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 			ClosingPrice: h.ClosingPrice,
 			Date:         h.Timestamp,
 			LatestDate:   priceDate,
-			DataAge:      h.Timestamp.Sub(priceDate.Time),
+			DataAgeDays:  civil.ToDate(h.Timestamp).DaysSince(priceDate),
 		})
 	}
 	quoteCurrencies := s.Store().QuoteCurrencies()
@@ -692,7 +692,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 	if errorMessage == "" {
 		for _, qc := range quoteCurrencies {
 			// Use UTC here on purpose: exchange rates in Y! are Europe/London based anyway.
-			rate, err := s.yFinance.GetDailyExchangeRate(s.Store().BaseCurrency(), qc, date.Time)
+			rate, err := s.yFinance.GetDailyExchangeRate(s.Store().BaseCurrency(), qc, date.In(time.UTC).Add(18*time.Hour))
 			if err != nil {
 				log.Printf("Failed to get exchange rate: %v", err)
 				var connErr *url.Error
@@ -837,7 +837,7 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*quotes.DepotExpor
 		QuantityCurrentMicros units.Micros
 		Preselect             bool
 		PriceDate             civil.Date
-		DataAge               time.Duration
+		DataAgeDays           int
 	}
 	var rows []*Row
 	for _, item := range items {
@@ -854,9 +854,9 @@ func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*quotes.DepotExpor
 			Currency:              asset.Currency,
 			QuantityImportMicros:  item.QuantityMicros,
 			QuantityCurrentMicros: p.QuantityMicros,
-			Preselect:             p.PriceDate.Before(item.ValueDate.Time),
+			Preselect:             p.PriceDate.Before(item.ValueDate),
 			PriceDate:             p.PriceDate,
-			DataAge:               item.ValueDate.Sub(p.PriceDate.Time),
+			DataAgeDays:           item.ValueDate.DaysSince(p.PriceDate),
 		})
 	}
 	return s.templates.ExecuteTemplate(w, "snip_upload_csv_data.html", map[string]any{
@@ -998,7 +998,7 @@ func ensureDateParam(w http.ResponseWriter, r *http.Request) (civil.Date, bool) 
 	if d == "" {
 		now := civil.Today()
 		q := r.URL.Query()
-		q.Set("date", now.Format("2006-01-02"))
+		q.Set("date", now.String())
 		r.URL.RawQuery = q.Encode()
 		http.Redirect(w, r, r.URL.String(), http.StatusSeeOther)
 		return civil.Date{}, false

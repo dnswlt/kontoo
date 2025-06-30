@@ -264,17 +264,17 @@ func ParseQuery(rawQuery string) (*Query, error) {
 				q.fromDate = civil.DateVal(y, 1, 1)
 				q.untilDate = civil.DateVal(y, 12, 31)
 			case "from":
-				from, err := time.Parse("2006-01-02", t)
+				from, err := civil.ParseDate(t)
 				if err != nil {
 					return nil, fmt.Errorf("invalid from: %q", t)
 				}
-				q.fromDate = civil.Date{from}
+				q.fromDate = from
 			case "until":
-				until, err := time.Parse("2006-01-02", t)
+				until, err := civil.ParseDate(t)
 				if err != nil {
 					return nil, fmt.Errorf("invalid until: %q", t)
 				}
-				q.untilDate = civil.Date{until}
+				q.untilDate = until
 			}
 		default:
 			// Search term for a specific entry field.
@@ -372,10 +372,10 @@ func (q *Query) Match(e *LedgerEntryRow) bool {
 		}
 	}
 	// Time range
-	if !q.fromDate.IsZero() && q.fromDate.After(e.ValueDate().Time) {
+	if !q.fromDate.IsZero() && q.fromDate.After(e.ValueDate()) {
 		return false
 	}
-	if !q.untilDate.IsZero() && q.untilDate.Before(e.ValueDate().Time) {
+	if !q.untilDate.IsZero() && q.untilDate.Before(e.ValueDate()) {
 		return false
 	}
 	// Sequence number
@@ -404,7 +404,7 @@ func (q *Query) Sort(rows []*LedgerEntryRow) {
 		}
 		// No fields specified => order by (ValueDate, SequenceNum).
 		cmp = func(a, b *LedgerEntryRow) int {
-			c := a.E.ValueDate.Time.Compare(b.E.ValueDate.Time)
+			c := a.E.ValueDate.Compare(b.E.ValueDate)
 			if c != 0 {
 				return sgn * c
 			}

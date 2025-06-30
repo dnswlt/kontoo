@@ -50,7 +50,8 @@ const (
 	Debt
 )
 
-func (ac AssetCategory) String() string {
+// DisplayName returns a human-readable name of the asset category.
+func (ac AssetCategory) DisplayName() string {
 	switch ac {
 	case UnspecfiedAssetCategory:
 		return "Unspecified"

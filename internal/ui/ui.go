@@ -3,7 +3,6 @@ package ui
 import (
 	"fmt"
 	"html/template"
-	"math"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -35,7 +34,7 @@ func YearOptions(url url.URL, date civil.Date, minDate, maxDate civil.Date) Drop
 	for y := maxDate.Year(); y >= minDate.Year(); y-- {
 		d := civil.DateVal(y, date.Month(), date.Day())
 		q := url.Query()
-		q.Set("date", d.Format("2006-01-02"))
+		q.Set("date", d.String())
 		url.RawQuery = q.Encode()
 		res.Options = append(res.Options, NamedOption{
 			Name:  fmt.Sprintf("%d", y),
@@ -66,7 +65,7 @@ func MonthOptions(url url.URL, date civil.Date, maxDate civil.Date) DropdownOpti
 		// Get last day of the month i+1
 		d := civil.DateVal(date.Year(), time.Month(i), 1).AddDate(0, 1, -1)
 		q := url.Query()
-		q.Set("date", d.Format("2006-01-02"))
+		q.Set("date", d.String())
 		url.RawQuery = q.Encode()
 		res.Options = append(res.Options, NamedOption{
 			Name:  months[i-1],
@@ -164,7 +163,7 @@ func CommonFuncs() template.FuncMap {
 			case time.Time:
 				return d.Format("2006-01-02"), nil
 			case civil.Date:
-				return d.Time.Format("2006-01-02"), nil
+				return d.String(), nil
 			}
 			return "", fmt.Errorf("yyyymmdd called with invalid type %t", t)
 		},
@@ -178,10 +177,7 @@ func CommonFuncs() template.FuncMap {
 			return t.DisplayName()
 		},
 		"assetCategory": func(t ledger.AssetType) string {
-			return t.Category().String()
-		},
-		"days": func(d time.Duration) int {
-			return int(math.Round(d.Seconds() / 60 / 60 / 24))
+			return t.Category().DisplayName()
 		},
 		"setp": func(rawURL, param, value string) (string, error) {
 			u, err := url.Parse(rawURL)

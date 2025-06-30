@@ -9,6 +9,12 @@ import (
 	"github.com/dnswlt/kontoo/internal/units"
 )
 
+// diffYears returns the difference d1-d2, expressed in years.
+// It assumes a year has 365 days.
+func diffYears(d1, d2 civil.Date) float64 {
+	return float64(d1.DaysSince(d2)) / 365
+}
+
 // newton implements the Newton-Raphson root-finding algorithm to find the root
 // of f(x)-y.
 // ffp must return the tuple (f(x), f'(x)).
@@ -83,7 +89,7 @@ func TotalEarningsAtMaturity(p *ledger.AssetPosition) units.Micros {
 	interestRate := p.Asset.InterestMicros
 	var interest, gains units.Micros
 	for _, item := range p.Items {
-		years := md.Sub(item.ValueDate.Time).Hours() / 24 / 365
+		years := diffYears(*md, item.ValueDate)
 		gains += item.QuantityMicros - item.PurchasePrice()
 		switch p.Asset.InterestPayment {
 		case ledger.AccruedPayment:
@@ -110,7 +116,7 @@ func XIRR(values []units.Micros, dates []civil.Date) (units.Micros, error) {
 		return 0, fmt.Errorf("too few values")
 	}
 	for i := 1; i < l; i++ {
-		if dates[i-1].After(dates[i].Time) {
+		if dates[i-1].After(dates[i]) {
 			return 0, fmt.Errorf("dates are not sorted")
 		}
 	}
@@ -119,7 +125,7 @@ func XIRR(values []units.Micros, dates []civil.Date) (units.Micros, error) {
 	xs := make([]float64, l)
 	endDate := dates[l-1]
 	for i := 0; i < l; i++ {
-		ts[i] = endDate.Sub(dates[i].Time).Hours() / 24 / 365
+		ts[i] = diffYears(endDate, dates[i])
 		xs[i] = values[i].Float()
 	}
 
@@ -173,7 +179,7 @@ func IRRWithInterest(p IRRParams) (units.Micros, error) {
 		// Append interest payments each year on the (MM/DD) day of maturity.
 		var iDates []civil.Date
 		d := p.MaturityDate
-		for d.After(p.PurchaseDate.Time) {
+		for d.After(p.PurchaseDate) {
 			iDates = append(iDates, d)
 			d = d.AddDate(-1, 0, 0)
 		}
@@ -183,7 +189,7 @@ func IRRWithInterest(p IRRParams) (units.Micros, error) {
 			if i == l-1 {
 				// Pro-rate interest of first year. There may be leap year anomalies (s == 366/365),
 				// but we don't account for that in accrued payments below either.
-				s := iDates[i].Sub(p.PurchaseDate.Time).Hours() / 24 / 365
+				s := diffYears(iDates[i], p.PurchaseDate)
 				interest = interest.Mul(units.FloatAsMicros(s))
 			}
 			values = append(values, p.NominalValue.Mul(interest))
@@ -191,7 +197,7 @@ func IRRWithInterest(p IRRParams) (units.Micros, error) {
 		}
 	case ledger.AccruedPayment:
 		// Append a single (accrued) interest payment on the date of maturity.
-		years := p.MaturityDate.Sub(p.PurchaseDate.Time).Hours() / 24 / 365
+		years := diffYears(p.MaturityDate, p.PurchaseDate)
 		interest := units.FloatAsMicros(math.Pow(1+p.InterestRate.Float(), years) - 1)
 		values = append(values, p.NominalValue.Mul(interest))
 		dates = append(dates, p.MaturityDate)
@@ -228,7 +234,7 @@ func InternalRateOfReturn(p *ledger.AssetPosition) units.Micros {
 		// y = x * (1+irr)^t
 		// ==>
 		// irr = (y/x)^(1/t) - 1
-		t := md.Sub(p.Items[0].ValueDate.Time).Hours() / 24 / 365
+		t := diffYears(*md, p.Items[0].ValueDate)
 		x := p.Items[0].PurchasePrice().Float()
 		y := x + tem
 		return units.FloatAsMicros(math.Pow(y/x, 1/t) - 1)
@@ -238,7 +244,7 @@ func InternalRateOfReturn(p *ledger.AssetPosition) units.Micros {
 	xs := make([]float64, len(p.Items))
 	var xsSum float64
 	for i, item := range p.Items {
-		ts[i] = md.Sub(item.ValueDate.Time).Hours() / 24 / 365
+		ts[i] = diffYears(*md, item.ValueDate)
 		xs[i] = item.PurchasePrice().Float()
 		xsSum += xs[i]
 	}

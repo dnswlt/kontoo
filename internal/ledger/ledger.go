@@ -218,10 +218,10 @@ func (s *Store) ValueDateRange() (min, max civil.Date) {
 		if l == 0 {
 			continue
 		}
-		if es[l-1].ValueDate.After(max.Time) {
+		if es[l-1].ValueDate.After(max) {
 			max = es[l-1].ValueDate
 		}
-		if min.IsZero() || es[0].ValueDate.Before(min.Time) {
+		if min.IsZero() || es[0].ValueDate.Before(min) {
 			min = es[0].ValueDate
 		}
 	}
@@ -245,7 +245,7 @@ func (s *Store) EntriesAround(assetID string, date civil.Date, n int) (before, a
 	es := s.entries[assetID]
 	if len(es) > 0 {
 		i := sort.Search(len(es), func(i int) bool {
-			return es[i].ValueDate.After(date.Time)
+			return es[i].ValueDate.After(date)
 		})
 		a, b := 0, len(es)
 		if i-n > 0 {
@@ -264,7 +264,7 @@ func (s *Store) PriceAt(assetID string, t civil.Date) (units.Micros, civil.Date,
 	es := s.entries[assetID]
 	// Find first entry after t.
 	i := sort.Search(len(es), func(i int) bool {
-		return es[i].ValueDate.After(t.Time)
+		return es[i].ValueDate.After(t)
 	})
 	// Scan backwards until first entry containing a price is found.
 	i--
@@ -510,7 +510,7 @@ func (s *Store) EntriesInRange(assetId string, start, end civil.Date) []*LedgerE
 	i := sort.Search(len(es), func(i int) bool {
 		return es[i].ValueDate.Compare(start) >= 0
 	})
-	for ; i < len(es) && !es[i].ValueDate.After(end.Time); i++ {
+	for ; i < len(es) && !es[i].ValueDate.After(end); i++ {
 		result = append(result, es[i])
 	}
 	return result
@@ -836,7 +836,7 @@ func (s *Store) validateAsset(a *Asset) error {
 	}
 	cat := a.Category()
 	if (a.InterestMicros != 0 || a.InterestPayment != "") && (cat == Equity || cat == Commodities) {
-		return fmt.Errorf("interest must not be specified for asset category %s", cat)
+		return fmt.Errorf("interest must not be specified for asset category %v", cat)
 	}
 	if a.MaturityDate != nil {
 		if a.MaturityDate.IsZero() {
@@ -854,7 +854,7 @@ func (s *Store) validateAsset(a *Asset) error {
 			return fmt.Errorf("IssueDate must only be specified for fixed-income assets")
 		}
 	}
-	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(a.IssueDate.Time) {
+	if a.MaturityDate != nil && a.IssueDate != nil && a.MaturityDate.Before(*a.IssueDate) {
 		return fmt.Errorf("MaturityDate must not be before IssueDate")
 	}
 	if !a.Currency.Valid() {
@@ -902,7 +902,7 @@ func (s *Store) UpdateAsset(assetID string, a *Asset) error {
 	// Check that immutable fields do not change:
 	hasEntries := len(s.entries[id]) > 0
 	if hasEntries && old.Category() != a.Category() {
-		return fmt.Errorf("cannot modify asset category (%s => %s): asset has ledger entries",
+		return fmt.Errorf("cannot modify asset category (%v => %v): asset has ledger entries",
 			old.Category(), a.Category())
 	}
 	if hasEntries && old.Currency != a.Currency {
@@ -963,11 +963,11 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end civil.Date) []*
 		Asset: asset,
 	}
 	for _, e := range entries {
-		if e.ValueDate.After(end.Time) {
+		if e.ValueDate.After(end) {
 			break
 		}
 		pos.Update(e)
-		if !e.ValueDate.Before(start.Time) {
+		if !e.ValueDate.Before(start) {
 			res = append(res, pos.Copy())
 		}
 	}
@@ -978,10 +978,10 @@ func (s *Store) AssetPositionsBetween(assetID string, start, end civil.Date) []*
 func (s *Store) AssetPurchases(assetId string, startDate, endDate civil.Date) units.Micros {
 	entries := s.entries[assetId]
 	i := sort.Search(len(entries), func(i int) bool {
-		return !entries[i].ValueDate.Before(startDate.Time)
+		return !entries[i].ValueDate.Before(startDate)
 	})
 	var sum units.Micros
-	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
+	for ; i < len(entries) && !entries[i].ValueDate.After(endDate); i++ {
 		e := entries[i]
 		switch e.Type {
 		case AssetPurchase, AssetSale:
@@ -1006,7 +1006,7 @@ func (s *Store) AssetPurchases(assetId string, startDate, endDate civil.Date) un
 //   - The qty was purchased and sold during the period: P&L is the diff of
 //     purchasing price (including costs) and sale price (minus costs).
 func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date) (profitLoss, referenceValue units.Micros, err error) {
-	if startDate.After(endDate.Time) {
+	if startDate.After(endDate) {
 		return 0, 0, fmt.Errorf("startDate %v after endDate %v", startDate, endDate)
 	}
 	p := s.AssetPositionAt(assetId, startDate)
@@ -1021,10 +1021,10 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date
 	startPrice := p.PriceMicros
 	entries := s.entries[assetId]
 	i := sort.Search(len(entries), func(i int) bool {
-		return entries[i].ValueDate.After(startDate.Time)
+		return entries[i].ValueDate.After(startDate)
 	})
 	var realizedPL units.Micros
-	for ; i < len(entries) && !entries[i].ValueDate.After(endDate.Time); i++ {
+	for ; i < len(entries) && !entries[i].ValueDate.After(endDate); i++ {
 		e := entries[i]
 		switch e.Type {
 		case AssetSale:
@@ -1035,7 +1035,7 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date
 			for _, item := range p.Items {
 				if item.QuantityMicros < qty {
 					// Fully incorporate the item's quantity and continue.
-					if item.ValueDate.After(startDate.Time) {
+					if item.ValueDate.After(startDate) {
 						// Item was purchased after startDate: use price at purchase date incl. cost.
 						purchasePrice += item.PurchasePrice()
 					} else {
@@ -1046,7 +1046,7 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date
 					qty -= item.QuantityMicros
 				} else {
 					// Pro-rate the item's quantity and end the iteration (qty has been fully processed).
-					if item.ValueDate.After(startDate.Time) {
+					if item.ValueDate.After(startDate) {
 						// Item was purchased after startDate: use price at purchase date and include cost.
 						purchasePrice += qty.Mul(item.PriceMicros) + item.CostMicros
 					} else {
@@ -1074,7 +1074,7 @@ func (s *Store) ProfitLossInPeriod(assetId string, startDate, endDate civil.Date
 	}
 	var initialValue units.Micros
 	for _, item := range p.Items {
-		if item.ValueDate.After(startDate.Time) {
+		if item.ValueDate.After(startDate) {
 			// Item was purchased after startDate, use its own purchase price.
 			// Include cost in the baselineValue: to make a profit,
 			// the price must go above the price at purchase time plus incurred cost.
@@ -1099,7 +1099,7 @@ func (s *Store) AssetPositionAt(assetId string, date civil.Date) *AssetPosition 
 		Asset: asset,
 	}
 	for _, e := range s.entries[assetId] {
-		if e.ValueDate.After(date.Time) {
+		if e.ValueDate.After(date) {
 			break
 		}
 		pos.Update(e)

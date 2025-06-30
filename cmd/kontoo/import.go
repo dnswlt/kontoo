@@ -110,7 +110,7 @@ func ProcessImport(args []string) error {
 				return fmt.Errorf("price*qty != value in row %d: %.2f %v %v %v", i, eps, qty, val, price)
 			}
 		}
-		vdate := civil.Date{Time: valueDate}
+		vdate := civil.ToDate(valueDate)
 		if entries := store.EntriesInRange(assetId, vdate, vdate); len(entries) > 0 {
 			fmt.Printf("WARNING: Skipping potential %d duplicate(s) for %s on %v (%v)\n", len(entries), assetId, vdate, entries[0].Type)
 			continue

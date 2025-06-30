@@ -37,7 +37,7 @@
                 <td>{{money .ClosingPrice}}</td>
                 <td>{{isodate .Date}}</td>
                 <td>{{if not .LatestDate.IsZero}}{{yyyymmdd .LatestDate}}{{else}}n/a{{end}}</td>
-                <td>{{if not .LatestDate.IsZero}}{{days .DataAge}}{{end}}</td>
+                <td>{{if not .LatestDate.IsZero}}{{.DataAgeDays}}{{end}}</td>
             </tr>
             {{end}}
         </tbody>

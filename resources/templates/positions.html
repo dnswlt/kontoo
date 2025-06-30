@@ -71,11 +71,11 @@
                     {{end}}
                 </td>
                 <td class="no-print low-key">
-                    {{if gt (days .DataAge) 7}}
-                    {{days .DataAge}}
+                    {{if gt .DataAgeDays 7}}
+                    {{.DataAgeDays}}
                     {{end}}
 
-                    {{if gt (days .DataAge) 35}}
+                    {{if gt .DataAgeDays 35}}
                     <i class="emoji emoji-warning"></i>
                     {{end}}
                 </td>
