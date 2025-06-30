@@ -341,18 +341,22 @@ func TestQuerySort(t *testing.T) {
 			rows: []*LedgerEntryRow{
 				{
 					A: asset("Google", "GOOG"),
-					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1), SequenceNum: 1},
+				},
+				{
+					A: asset("Google", "GOOG"),
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1), SequenceNum: 2},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 1, 1), SequenceNum: 3},
 				},
 				{
 					A: asset("Apple", "AAPL"),
-					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 2, 1)},
+					E: &LedgerEntry{ValueDate: civil.DateVal(2024, 2, 1), SequenceNum: 4},
 				},
 			},
-			want: []int{2, 1, 0},
+			want: []int{3, 2, 1, 0},
 		},
 		{
 			q: "order:assetname,-valuedate",

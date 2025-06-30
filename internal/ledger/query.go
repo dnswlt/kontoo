@@ -73,7 +73,7 @@ var (
 			if c != 0 {
 				return c
 			}
-			return int(a.SequenceNum() - b.SequenceNum())
+			return int(b.SequenceNum() - a.SequenceNum())
 		},
 		"num": func(a, b *LedgerEntryRow) int {
 			return int(a.SequenceNum() - b.SequenceNum())
