@@ -256,19 +256,14 @@ func (t AssetType) IsAccountType() bool {
 	return assetTypeInfos[t].isAccountType
 }
 
-type InterestPaymentSchedule string
+//go:generate go-enum -type=InterestPaymentSchedule -string -json -all=false
+type InterestPaymentSchedule int32
 
 const (
-	UnspecifiedPayment InterestPaymentSchedule = ""
-	AccruedPayment     InterestPaymentSchedule = "accrued" // Interest paid at maturity
-	AnnualPayment      InterestPaymentSchedule = "annual"  // Interest paid yearly
+	UnspecifiedPayment InterestPaymentSchedule = iota
+	AccruedPayment                             // Interest paid at maturity
+	AnnualPayment                              // Interest paid yearly
 )
-
-var AllInterestPaymentSchedules = []InterestPaymentSchedule{
-	UnspecifiedPayment,
-	AccruedPayment,
-	AnnualPayment,
-}
 
 type Asset struct {
 	Created         time.Time

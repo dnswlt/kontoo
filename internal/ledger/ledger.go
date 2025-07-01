@@ -835,7 +835,7 @@ func (s *Store) validateAsset(a *Asset) error {
 		return fmt.Errorf("Asset name must not be empty")
 	}
 	cat := a.Category()
-	if (a.InterestMicros != 0 || a.InterestPayment != "") && (cat == Equity || cat == Commodities) {
+	if (a.InterestMicros != 0 || a.InterestPayment != UnspecifiedPayment) && (cat == Equity || cat == Commodities) {
 		return fmt.Errorf("interest must not be specified for asset category %v", cat)
 	}
 	if a.MaturityDate != nil {

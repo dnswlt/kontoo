@@ -632,7 +632,7 @@ func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *ledger
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"AssetTypes":           assetTypes,
-		"InterestPaymentTypes": ledger.AllInterestPaymentSchedules,
+		"InterestPaymentTypes": ledger.InterestPaymentScheduleValues(),
 		"Asset":                asset,
 	})
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
@@ -1589,8 +1589,26 @@ func jsonHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+func (s *Server) handleV1ListEntries(w http.ResponseWriter, r *http.Request) {
+}
+func (s *Server) handleV1GetEntry(w http.ResponseWriter, r *http.Request) {
+}
+func (s *Server) handleV1ListAssets(w http.ResponseWriter, r *http.Request) {
+}
+func (s *Server) handleV1GetAsset(w http.ResponseWriter, r *http.Request) {
+}
+
+func (s *Server) apiV1Handler() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /kontoo/v1/entries", s.handleV1ListEntries)
+	mux.HandleFunc("GET /kontoo/v1/entries/{entryID}", s.handleV1GetEntry)
+	mux.HandleFunc("GET /kontoo/v1/assets", s.handleV1ListAssets)
+	mux.HandleFunc("GET /kontoo/v1/assets/{assetID}", s.handleV1GetAsset)
+	return mux
+}
+
 func (s *Server) createMux() *http.ServeMux {
-	mux := &http.ServeMux{}
+	mux := http.NewServeMux()
 	// Serve static resources like CSS from resources/ and dist/ dirs.
 	if s.useEmbedded() {
 		mux.Handle("/kontoo/images/", http.StripPrefix("/kontoo",
@@ -1607,6 +1625,8 @@ func (s *Server) createMux() *http.ServeMux {
 		mux.Handle("/kontoo/css/", http.StripPrefix("/kontoo/css",
 			http.FileServer(http.Dir(path.Join(s.baseDir, "css")))))
 	}
+
+	mux.Handle("/kontoo/v1/", s.apiV1Handler())
 
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
