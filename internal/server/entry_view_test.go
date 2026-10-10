@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"slices"
 	"testing"
 
 	"github.com/dnswlt/kontoo/internal/civil"
@@ -52,32 +51,6 @@ func TestEntryNavigationPreservesOrigin(t *testing.T) {
 	if reentry.Query().Get("return_to") != origin {
 		t.Fatal("entry navigation should not return to another entry page")
 	}
-}
-
-// findElement returns the first <tag> element in n with attribute key=val.
-func findElement(n *html.Node, tag, key, val string) *html.Node {
-	if n.Type == html.ElementNode && n.Data == tag && htmlAttr(n, key) == val {
-		return n
-	}
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		if e := findElement(c, tag, key, val); e != nil {
-			return e
-		}
-	}
-	return nil
-}
-
-func hasAttr(n *html.Node, key string) bool {
-	return slices.ContainsFunc(n.Attr, func(a html.Attribute) bool { return a.Key == key })
-}
-
-func htmlAttr(n *html.Node, key string) string {
-	for _, a := range n.Attr {
-		if a.Key == key {
-			return a.Val
-		}
-	}
-	return ""
 }
 
 func TestEntryFormActionsAndTypeNames(t *testing.T) {

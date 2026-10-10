@@ -716,6 +716,26 @@ func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *ledger
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
 
+type exchangeRateQuoteEntry struct {
+	*quotes.DailyExchangeRate
+	LatestDate  civil.Date
+	DataAgeDays int
+}
+
+func (s *Server) exchangeRateQuoteEntries(rates []*quotes.DailyExchangeRate) []*exchangeRateQuoteEntry {
+	entries := make([]*exchangeRateQuoteEntry, 0, len(rates))
+	for _, rate := range rates {
+		quoteDate := civil.ToDate(rate.Timestamp)
+		_, latestDate, found := s.Store().ExchangeRateAt(rate.QuoteCurrency, quoteDate)
+		entry := &exchangeRateQuoteEntry{DailyExchangeRate: rate, LatestDate: latestDate}
+		if found {
+			entry.DataAgeDays = quoteDate.DaysSince(latestDate)
+		}
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
 func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	type QuoteEntry struct {
 		AssetID      string
@@ -737,7 +757,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 			"Error":     "There are no quotes for future dates.",
 		}))
 	}
-	assets := s.Store().FindAssetsForQuoteService("YF")
+	assets := s.Store().FindAssetsForQuoteService("YF", date)
 	entries := make([]*QuoteEntry, 0, len(assets))
 	var errorMessage string
 	for _, asset := range assets {
@@ -792,8 +812,12 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 	ctx := s.addCommonCtx(r, map[string]any{
 		"QuoteDate":     date,
 		"Entries":       entries,
-		"ExchangeRates": exchangeRates,
+		"ExchangeRates": s.exchangeRateQuoteEntries(exchangeRates),
 		"Error":         errorMessage,
+		// Without any YF symbols, the page suggests adding some.
+		"HasQuoteSymbols": slices.ContainsFunc(s.Store().AllAssets(), func(a *ledger.Asset) bool {
+			return a.QuoteServiceSymbols["YF"] != ""
+		}),
 	})
 	return s.templates.ExecuteTemplate(w, "quotes.html", ctx)
 }

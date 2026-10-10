@@ -18,6 +18,57 @@ var (
 	ibanDE999 = "DE29999"
 )
 
+func TestFindAssetsForQuoteServiceAtDate(t *testing.T) {
+	s, err := NewStore(&Ledger{
+		Header: &LedgerHeader{BaseCurrency: "CHF"},
+		Assets: []*Asset{
+			{CustomID: "traded", Name: "Traded", Type: Stock, Currency: "CHF", QuoteServiceSymbols: map[string]string{"YF": "TRD"}},
+			{CustomID: "unowned", Name: "Unowned", Type: Stock, Currency: "CHF", QuoteServiceSymbols: map[string]string{"YF": "UNO"}},
+			{CustomID: "prices-only", Name: "Prices only", Type: Stock, Currency: "CHF", QuoteServiceSymbols: map[string]string{"YF": "PRC"}},
+			{CustomID: "manual", Name: "Manual", Type: Stock, Currency: "CHF"},
+			{CustomID: "other-service", Name: "Other service", Type: Stock, Currency: "CHF", QuoteServiceSymbols: map[string]string{"Other": "OTH"}},
+		},
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range []*LedgerEntry{
+		{AssetID: "manual", Type: AssetPurchase, ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: units.One, PriceMicros: units.One},
+		{AssetID: "other-service", Type: AssetPurchase, ValueDate: civil.DateVal(2024, 1, 1), QuantityMicros: units.One, PriceMicros: units.One},
+		{AssetID: "prices-only", Type: AssetPrice, ValueDate: civil.DateVal(2024, 1, 2), PriceMicros: units.One},
+		{AssetID: "traded", Type: AssetPurchase, ValueDate: civil.DateVal(2024, 1, 10), QuantityMicros: 10 * units.One, PriceMicros: units.One},
+		{AssetID: "traded", Type: AssetSale, ValueDate: civil.DateVal(2024, 1, 15), QuantityMicros: -5 * units.One, PriceMicros: units.One},
+		{AssetID: "traded", Type: AssetSale, ValueDate: civil.DateVal(2024, 2, 10), QuantityMicros: -5 * units.One, PriceMicros: units.One},
+		{AssetID: "traded", Type: AssetPurchase, ValueDate: civil.DateVal(2024, 3, 10), QuantityMicros: units.One, PriceMicros: units.One},
+	} {
+		if err := s.Add(e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		date    civil.Date
+		service string
+		want    []string
+	}{
+		{civil.DateVal(2024, 1, 9), "YF", nil}, // Not yet purchased.
+		{civil.DateVal(2024, 1, 10), "YF", []string{"traded"}},
+		{civil.DateVal(2024, 1, 15), "YF", []string{"traded"}}, // Partial sale.
+		{civil.DateVal(2024, 2, 9), "YF", []string{"traded"}},
+		{civil.DateVal(2024, 2, 10), "YF", nil}, // Fully sold on this date.
+		{civil.DateVal(2024, 3, 9), "YF", nil},
+		{civil.DateVal(2024, 3, 10), "YF", []string{"traded"}}, // Repurchased.
+		{civil.DateVal(2024, 3, 10), "Other", []string{"other-service"}},
+	} {
+		var got []string
+		for _, asset := range s.FindAssetsForQuoteService(tc.service, tc.date) {
+			got = append(got, asset.ID())
+		}
+		if diff := cmp.Diff(tc.want, got); diff != "" {
+			t.Errorf("%s at %v (-want +got):\n%s", tc.service, tc.date, diff)
+		}
+	}
+}
+
 func TestStoreAdd(t *testing.T) {
 	tests := []struct {
 		E *LedgerEntry

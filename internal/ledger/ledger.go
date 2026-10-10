@@ -547,12 +547,16 @@ func (s *Store) FindAssetByRef(ref string) *Asset {
 	return res
 }
 
-func (s *Store) FindAssetsForQuoteService(quoteService string) []*Asset {
-	// TODO: only return assets still in possession at a given date.
+// FindAssetsForQuoteService returns assets with a symbol for quoteService and
+// a non-zero position at date.
+func (s *Store) FindAssetsForQuoteService(quoteService string, date civil.Date) []*Asset {
 	var assets []*Asset
 	for _, a := range s.ledger.Assets {
 		if _, ok := a.QuoteServiceSymbols[quoteService]; ok {
-			assets = append(assets, a)
+			pos := s.AssetPositionAt(a.ID(), date)
+			if pos.QuantityMicros != 0 || pos.ValueMicros != 0 {
+				assets = append(assets, a)
+			}
 		}
 	}
 	return assets
