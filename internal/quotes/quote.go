@@ -592,12 +592,12 @@ func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 	firstRow := true
 	colIdx := make(map[string]int)
 	knownHdr := map[string]string{
-		"Stück/Nom.":  "Quantity",
-		"WKN":         "WKN",
-		"Währung":     "Currency",
-		"Akt. Kurs":   "Price",
-		"Wert in EUR": "Value",
-		"Datum":       "ValueDate",
+		"Stück / Nominale": "Quantity",
+		"WKN":              "WKN",
+		"Währung":          "Currency",
+		"Aktueller Kurs":   "Price",
+		"Wert in EUR":      "Value",
+		"Datum":            "ValueDate",
 	}
 	var result []*DepotExportItem
 	for {
@@ -615,12 +615,13 @@ func ReadDepotExportCSV(reader io.Reader) ([]*DepotExportItem, error) {
 				}
 			}
 			if len(colIdx) != len(knownHdr) {
-				missing := make([]string, 0, len(knownHdr))
-				for k := range knownHdr {
-					if _, ok := colIdx[k]; !ok {
-						missing = append(missing, k)
+				var missing []string
+				for h, field := range knownHdr {
+					if _, ok := colIdx[field]; !ok {
+						missing = append(missing, h)
 					}
 				}
+				slices.Sort(missing)
 				return nil, fmt.Errorf("not all expected headers present: missing: %v",
 					strings.Join(missing, ";"))
 			}

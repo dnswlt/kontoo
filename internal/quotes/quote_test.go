@@ -6,8 +6,13 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/dnswlt/kontoo/internal/civil"
+	"github.com/dnswlt/kontoo/internal/units"
+	"github.com/google/go-cmp/cmp"
 )
 
 var (
@@ -230,5 +235,32 @@ func TestPriceHistoryCacheAddAll_Timezones(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestReadDepotExportCSVFile(t *testing.T) {
+	items, err := ReadDepotExportCSVFile("../../testdata/positions.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []*DepotExportItem{{
+		QuantityMicros: 1000 * units.One,
+		WKN:            "710000",
+		Currency:       "EUR",
+		PriceMicros:    58_740_000,
+		ValueMicros:    10_000 * units.One,
+		ValueDate:      civil.DateVal(2024, 3, 17),
+	}}
+	if diff := cmp.Diff(want, items); diff != "" {
+		t.Errorf("ReadDepotExportCSVFile() mismatch (-want, +got): %s", diff)
+	}
+}
+
+func TestReadDepotExportCSVMissingHeaders(t *testing.T) {
+	// Headers of the previous export format.
+	csv := "\"Stück/Nom.\";\"WKN\";\"Währung\";\"Akt. Kurs\";\"Wert in EUR\";\"Datum\"\n"
+	_, err := ReadDepotExportCSV(strings.NewReader(csv))
+	if err == nil || !strings.HasSuffix(err.Error(), "missing: Aktueller Kurs;Stück / Nominale") {
+		t.Errorf("want error listing the missing headers, got %v", err)
 	}
 }
