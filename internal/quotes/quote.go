@@ -23,6 +23,7 @@ import (
 )
 
 type DailyExchangeRate struct {
+	Symbol        string // Ticker symbol at the quote service, e.g. "EURCHF=X".
 	BaseCurrency  units.Currency
 	QuoteCurrency units.Currency
 	Timestamp     time.Time    // Timestamp for the ClosingPrice as received from the quote service.
@@ -276,6 +277,7 @@ func (yf *YFinance) GetDailyExchangeRate(baseCurrency units.Currency, quoteCurre
 		return nil, err
 	}
 	return &DailyExchangeRate{
+		Symbol:        q.Symbol,
 		BaseCurrency:  baseCurrency,
 		QuoteCurrency: q.Currency,
 		Timestamp:     q.Timestamp,

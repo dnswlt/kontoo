@@ -7,14 +7,19 @@
 
 <body id="quotes-page">
     {{template "nav.html" .}}
-    <div id="status-callout" class="callout hidden"></div>
-
+    <main class="page-content">
     <h1>Stock quotes</h1>
+    <div id="status-callout" class="callout hidden"></div>
+    <form class="quotes-date-form no-print" method="get" action="/kontoo/quotes" autocomplete="off">
+        <label for="QuoteDate">Date</label>
+        <input id="QuoteDate" name="date" type="text" class="datepicker" value="{{.QuoteDate}}" required>
+        <button type="submit">Fetch quotes</button>
+    </form>
     {{if .Entries }}
     <table>
         <thead>
             <tr>
-                <th></th>
+                <th><input type="checkbox" class="select-all" aria-label="Select all stock quotes"></th>
                 <th>Code</th>
                 <th>Name</th>
                 <th>Ticker symbol</th>
@@ -26,11 +31,11 @@
             </tr>
         </thead>
         <tbody>
-            {{range .Entries}}
+            {{range $i, $_ := .Entries}}
             <tr>
-                <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .Date}}" data-price="{{micros .ClosingPrice}}"
+                <td><input id="quote-{{$i}}" data-asset="{{.AssetID}}" data-date="{{yyyymmdd .Date}}" data-price="{{micros .ClosingPrice}}"
                         class="selector" type="checkbox" name="quote" checked></td>
-                <td>{{.AssetID}}</td>
+                <td><label class="row-select" for="quote-{{$i}}">{{.AssetID}}</label></td>
                 <td>{{.AssetName}}</td>
                 <td><a href="https://finance.yahoo.com/quote/{{.Symbol}}" target="_blank">{{.Symbol}}</a></td>
                 <td>{{.Currency}}</td>
@@ -45,7 +50,6 @@
     {{else}}
     <div>
     {{if .Error}}
-        <p>There was a problem getting prices from the quote service:</p>
         <p>{{.Error}}</p>
     {{else}}
         No assets have a y!finance (YF) ticker symbol.
@@ -55,39 +59,38 @@
     {{end}}
 
     {{if .ExchangeRates }}
-    <h1>Exchange rates</h1>
+    <h2 class="section-heading">Exchange rates</h2>
     <table>
         <thead>
             <tr>
-                <th></th>
+                <th><input type="checkbox" class="select-all" aria-label="Select all exchange rates"></th>
                 <th>Base currency</th>
                 <th>Quote currency</th>
+                <th>Ticker symbol</th>
                 <th>Closing price</th>
                 <th>Quote Timestamp</th>
             </tr>
         </thead>
         <tbody>
-            {{range .ExchangeRates}}
+            {{range $i, $_ := .ExchangeRates}}
             <tr>
-                <td><input data-quotecurrency="{{.QuoteCurrency}}" data-basecurrency="{{.BaseCurrency}}" data-date="{{yyyymmdd .Timestamp}}"
+                <td><input id="rate-{{$i}}" data-quotecurrency="{{.QuoteCurrency}}" data-basecurrency="{{.BaseCurrency}}" data-date="{{yyyymmdd .Timestamp}}"
                         data-price="{{micros .ClosingPrice}}" class="selector" type="checkbox" name="exchangerate" checked>
                 </td>
-                <td>{{.BaseCurrency}}</td>
+                <td><label class="row-select" for="rate-{{$i}}">{{.BaseCurrency}}</label></td>
                 <td>{{.QuoteCurrency}}</td>
+                <td><a href="https://finance.yahoo.com/quote/{{.Symbol}}" target="_blank">{{.Symbol}}</a></td>
                 <td>{{price .ClosingPrice}}</td>
                 <td>{{isodate .Timestamp}}</td>
             </tr>
             {{end}}
-            <tr>
-                <td><input type="checkbox" id="select-all" checked></td>
-                <td colspan="4"><label for="select-all">Check/uncheck all</label></td>
-            </tr>
         </tbody>
     </table>
     {{end}}
-    <div class="topsep">
-        <button class="click-button" type="button" id="submit">Import to ledger</button>
+    <div class="form-actions topsep">
+        <button class="form-save" type="button" id="submit">Import to ledger</button>
     </div>
+    </main>
 
 </body>
 

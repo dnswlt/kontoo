@@ -621,6 +621,15 @@ input.filter {
 .page-content h1 { margin: 0 0 24px; font-size: 1.65em; font-weight: 600; }
 .page-content #status-callout { max-width: 48rem; margin: 0 0 20px; box-sizing: border-box; }
 .page-content :focus-visible { outline: 2px solid #2457a7; outline-offset: 2px; }
+.section-heading { margin: 32px 0 12px; font-size: 1.15em; font-weight: 600; }
+label.row-select { cursor: pointer; user-select: none; }
+
+/* Quotes */
+.quotes-date-form { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+.quotes-date-form label { color: #566171; font-size: 0.9em; margin-right: 4px; }
+.quotes-date-form input { box-sizing: border-box; width: 9rem; min-height: 36px; padding: 6px 10px; border: 1px solid #ccd5e0; border-radius: 8px; font: inherit; }
+.quotes-date-form button { min-height: 36px; padding: 0 12px; border: 1px solid #2457a7; border-radius: 8px; background: #2457a7; color: white; font: inherit; cursor: pointer; }
+.quotes-date-form button:hover { background: #1d488b; border-color: #1d488b; }
 
 /* Entry and asset forms */
 #entry-page .horizontal-container { align-items: flex-start; gap: 32px; }
@@ -641,7 +650,7 @@ input.filter {
 .form-actions button:hover, .form-actions .form-cancel:hover { background: #f4f7fb; border-color: #aab7c7; }
 .form-actions .form-save { background: #2457a7; border-color: #2457a7; color: white; }
 .form-actions .form-save:hover { background: #1d488b; border-color: #1d488b; }
-.form-actions button:disabled { opacity: 0.6; cursor: wait; }
+.form-actions button:disabled { opacity: 0.6; cursor: default; }
 #entry-page #asset-info { margin: 0; padding: 16px; border: 1px solid #e3e8ee; border-radius: 8px; background: #f8fafc; min-width: 24rem; max-width: 38rem; box-sizing: border-box; }
 #entry-page #asset-info .main { margin: 0 0 12px; font-weight: 600; }
 #entry-page #asset-info .bsep { margin-bottom: 18px; }

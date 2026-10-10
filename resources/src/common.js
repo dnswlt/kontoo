@@ -64,7 +64,7 @@ export function preventEnterSubmit(form) {
 }
 
 // Used as part of registerQuotesSubmit() below.
-export async function handleQuotesSubmit(e) {
+async function handleQuotesSubmit() {
     const inputs = document.querySelectorAll("input.selector:checked");
     const request = {
         quotes: [],
@@ -113,23 +113,39 @@ export async function handleQuotesSubmit(e) {
 // Registers event listeners for quotes upload functionality:
 //
 // Expects the following elements to be present in the DOM:
-// * <checkbox id="select-all">
 // * <input type="checkbox" class="selector" name="quote|exchangerate" data-*>
 //   * These are the data-carrying input checkboxes from which the request JSON is built.
-// * <button id="submit">
+// * (optional) <input type="checkbox" class="select-all"> in a table header,
+//   to select or clear all rows of that table.
+// * <button id="submit">, labelled with the number of selected rows.
 // * (optional) <div id="status-callout"> to display success/error messages in.
 export function registerQuotesSubmit() {
-    const selectAll = document.getElementById("select-all");
-    if (selectAll) {
-        selectAll.addEventListener("change", function (e) {
-            // Get state of clicked selectAll here, to set inputs all to this value.
-            const isChecked = e.target.checked;
-            const inputs = document.querySelectorAll("input.selector");
-            inputs.forEach(inp => inp.checked = isChecked);
-        });
-    }
     const submit = document.getElementById("submit");
-    if (submit) {
-        submit.addEventListener("click", handleQuotesSubmit);
+    if (!submit) {
+        return;
     }
+    const update = () => {
+        for (const selectAll of document.querySelectorAll("input.select-all")) {
+            const rows = [...selectAll.closest("table").querySelectorAll("input.selector")];
+            const checked = rows.filter(row => row.checked).length;
+            selectAll.checked = checked > 0 && checked === rows.length;
+            selectAll.indeterminate = checked > 0 && checked < rows.length;
+        }
+        const n = document.querySelectorAll("input.selector:checked").length;
+        submit.textContent = `Import ${n} ${n === 1 ? "price" : "prices"}`;
+        submit.disabled = n === 0;
+    };
+    document.querySelectorAll("input.select-all").forEach(selectAll => {
+        selectAll.addEventListener("change", () => {
+            selectAll.closest("table").querySelectorAll("input.selector").forEach(row => { row.checked = selectAll.checked; });
+            update();
+        });
+    });
+    document.querySelectorAll("input.selector").forEach(row => row.addEventListener("change", update));
+    submit.addEventListener("click", async () => {
+        submit.disabled = true; // Until update() below: prevents importing twice.
+        await handleQuotesSubmit();
+        update();
+    });
+    update();
 }

@@ -2,25 +2,26 @@
 <p>Rows with prices not yet stored in the ledger are preselected.</p>
 <table id="results">
     <thead>
-        <th></th>
-        <th>Value date</th>
-        <th>Code</th>
-        <th>Name</th>
-        <th>Currency</th>
-        <th>Price</th>
-        <th>Qty (CSV)</th>
-        <th>Qty (Ledger)</th>
-        <th>Latest avail.</th>
-        <th>&Delta;d</th>
+        <tr>
+            <th><input type="checkbox" class="select-all" aria-label="Select all rows"></th>
+            <th>Value date</th>
+            <th>Code</th>
+            <th>Name</th>
+            <th>Currency</th>
+            <th>Price</th>
+            <th>Qty (CSV)</th>
+            <th>Qty (Ledger)</th>
+            <th>Latest avail.</th>
+            <th>&Delta;d</th>
+        </tr>
     </thead>
     <tbody>
-        {{$checkAll := true}}
-        {{range .Entries}}
+        {{range $i, $_ := .Entries}}
         <tr>
-            <td><input data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{micros .PriceMicros}}"
+            <td><input id="quote-{{$i}}" data-asset="{{.AssetID}}" data-date="{{yyyymmdd .ValueDate}}" data-price="{{micros .PriceMicros}}"
                     class="selector" type="checkbox" name="quote" {{if .Preselect}}checked{{end}}></td>
             <td>{{yyyymmdd .ValueDate}}</td>
-            <td>{{.AssetID}}</td>
+            <td><label class="row-select" for="quote-{{$i}}">{{.AssetID}}</label></td>
             <td>{{.AssetName}}</td>
             <td>{{.Currency}}</td>
             <td>{{price .PriceMicros}}</td>
@@ -33,16 +34,11 @@
             </td>
             <td>{{if not .PriceDate.IsZero}}{{yyyymmdd .PriceDate}}{{else}}n/a{{end}}</td>
             <td>{{if not .PriceDate.IsZero}}{{.DataAgeDays}}{{end}}</td>
-            {{$checkAll = and $checkAll .Preselect}}
         </tr>
         {{end}}
-        <tr>
-            <td><input type="checkbox" id="select-all" {{if $checkAll}}checked{{end}}></td>
-            <td colspan="5"><label for="select-all">Check/uncheck all</label></td>
-        </tr>
     </tbody>
 </table>
-<div class="topsep">
-    <button class="click-button" id="submit">Submit price data</button>
+<div class="form-actions topsep">
+    <button class="form-save" type="button" id="submit">Import to ledger</button>
 </div>
 {{end}}

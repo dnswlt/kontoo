@@ -716,7 +716,13 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 	}
 	if s.yFinance == nil {
 		// No quotes service, can't show quotes.
-		return s.templates.ExecuteTemplate(w, "quotes.html", s.addCommonCtx(r, map[string]any{}))
+		return s.templates.ExecuteTemplate(w, "quotes.html", s.addCommonCtx(r, map[string]any{"QuoteDate": date}))
+	}
+	if date.After(civil.Today()) {
+		return s.templates.ExecuteTemplate(w, "quotes.html", s.addCommonCtx(r, map[string]any{
+			"QuoteDate": date,
+			"Error":     "There are no quotes for future dates.",
+		}))
 	}
 	assets := s.Store().FindAssetsForQuoteService("YF")
 	entries := make([]*QuoteEntry, 0, len(assets))
@@ -735,7 +741,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 			log.Printf("Failed to get price history: %v", err)
 			var connErr *url.Error
 			if errors.As(err, &connErr) {
-				errorMessage = err.Error()
+				errorMessage = "There was a problem getting prices from the quote service: " + err.Error()
 				break // Give up on network issues
 			}
 			continue
@@ -762,7 +768,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 				log.Printf("Failed to get exchange rate: %v", err)
 				var connErr *url.Error
 				if errors.As(err, &connErr) {
-					errorMessage = err.Error()
+					errorMessage = "There was a problem getting prices from the quote service: " + err.Error()
 					break // Give up on network issues
 				}
 				continue
@@ -771,6 +777,7 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 		}
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
+		"QuoteDate":     date,
 		"Entries":       entries,
 		"ExchangeRates": exchangeRates,
 		"Error":         errorMessage,
