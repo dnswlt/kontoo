@@ -955,26 +955,73 @@ func cmpLedgerEntry(a, b *LedgerEntry) int {
 	return int(a.SequenceNum - b.SequenceNum)
 }
 
-// AssetPositionsBetween returns all asset positions for assetID
-// on days with ledger entries between start and end.
-func (s *Store) AssetPositionsBetween(assetID string, start, end civil.Date) []*AssetPosition {
-	asset, ok := s.assets[assetID]
-	if !ok {
+// ValuePoint is the combined value of asset positions on a date, in the base currency.
+type ValuePoint struct {
+	Date        civil.Date
+	ValueMicros units.Micros
+}
+
+// ValueTimeline returns the combined market value of the given assets in the
+// base currency between start and end: on start, on every later date on which a
+// ledger entry of the assets or an exchange rate of their currencies changes, and
+// on end. The timeline starts no earlier than the first such change. Assets
+// without an exchange rate on a date don't contribute to that date's value.
+func (s *Store) ValueTimeline(assetIDs []string, start, end civil.Date) []ValuePoint {
+	positions := make(map[string]*AssetPosition)
+	var events []*LedgerEntry
+	currencies := make(map[units.Currency]bool)
+	for _, id := range assetIDs {
+		a, ok := s.assets[id]
+		if _, dup := positions[id]; !ok || dup {
+			continue
+		}
+		positions[id] = &AssetPosition{Asset: a}
+		events = append(events, s.entries[id]...)
+		currencies[a.Currency] = true
+	}
+	for c := range currencies {
+		events = append(events, s.exchangeRates[c]...)
+	}
+	if len(events) == 0 {
 		return nil
 	}
-	entries := s.entries[assetID]
-	var res []*AssetPosition
-	pos := &AssetPosition{
-		Asset: asset,
+	slices.SortFunc(events, cmpLedgerEntry)
+	if first := events[0].ValueDate; start.Before(first) {
+		start = first
 	}
-	for _, e := range entries {
-		if e.ValueDate.After(end) {
-			break
+	if start.After(end) {
+		return nil
+	}
+	rates := map[units.Currency]units.Micros{s.BaseCurrency(): units.One}
+	i := 0
+	// advance applies all events up to and including date d.
+	advance := func(d civil.Date) {
+		for ; i < len(events) && !events[i].ValueDate.After(d); i++ {
+			if e := events[i]; e.Type == ExchangeRate {
+				rates[e.QuoteCurrency] = e.PriceMicros
+			} else {
+				positions[e.AssetID].Update(e)
+			}
 		}
-		pos.Update(e)
-		if !e.ValueDate.Before(start) {
-			res = append(res, pos.Copy())
+	}
+	value := func(d civil.Date) ValuePoint {
+		var sum units.Micros
+		for _, p := range positions {
+			if rate := rates[p.Asset.Currency]; rate != 0 {
+				sum += p.MarketValue().Div(rate)
+			}
 		}
+		return ValuePoint{Date: d, ValueMicros: sum}
+	}
+	advance(start)
+	res := []ValuePoint{value(start)}
+	for i < len(events) && !events[i].ValueDate.After(end) {
+		d := events[i].ValueDate
+		advance(d)
+		res = append(res, value(d))
+	}
+	if res[len(res)-1].Date.Before(end) {
+		res = append(res, value(end))
 	}
 	return res
 }
@@ -1127,15 +1174,6 @@ func (s *Store) AssetPositionsAt(date civil.Date) []*AssetPosition {
 
 func (a *AssetPositionItem) PurchasePrice() units.Micros {
 	return a.QuantityMicros.Mul(a.PriceMicros) + a.CostMicros
-}
-
-// Copy returns a semi-deep copy of p: It shares the pointer to the asset,
-// but all position-specific values (including Items) are copied.
-func (p *AssetPosition) Copy() *AssetPosition {
-	q := *p
-	q.Items = make([]AssetPositionItem, len(p.Items))
-	copy(q.Items, p.Items)
-	return &q
 }
 
 func (p *AssetPosition) ID() string {

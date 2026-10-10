@@ -94,25 +94,27 @@ type AddQuotesResponse struct {
 	ItemsImported int        `json:"itemsImported"`
 }
 
+// PositionTimelineRequest asks for the value over time of each given asset,
+// or of all assets combined if AssetIDs is empty.
 type PositionTimelineRequest struct {
 	AssetIDs     []string `json:"assetIds"`
 	EndTimestamp int64    `json:"endTimestamp"`
 	Period       string   `json:"period"`
 }
 
-// PositionTimeline contains time series data about an asset position.
+// PositionTimeline contains the value over time of one asset or of all assets.
 type PositionTimeline struct {
-	AssetID    string  `json:"assetId"`
-	AssetName  string  `json:"assetName"`
+	AssetID    string  `json:"assetId,omitempty"` // Empty for the total of all assets.
+	Label      string  `json:"label"`
 	Timestamps []int64 `json:"timestamps"`
-	// Send values as int64 micros: the JSON marshalling of units.Micros
-	// would send them as strings (e.g. "12.3").
-	QuantityMicros []int64 `json:"quantityMicros"`
-	ValueMicros    []int64 `json:"valueMicros"`
+	// Values in the base currency. Sent as int64 micros: the JSON marshalling
+	// of units.Micros would send them as strings (e.g. "12.3").
+	ValueMicros []int64 `json:"valueMicros"`
 }
 type PositionTimelineResponse struct {
 	Status    StatusCode          `json:"status"`
 	Error     string              `json:"error,omitempty"`
+	Currency  units.Currency      `json:"currency,omitempty"`
 	Timelines []*PositionTimeline `json:"timelines,omitempty"`
 }
 type PositionsMaturitiesRequest struct {
@@ -1087,23 +1089,26 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 		http.Error(w, "invalid period: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+	timeline := func(assetID, label string, assetIDs []string) *PositionTimeline {
+		t := &PositionTimeline{AssetID: assetID, Label: label}
+		for _, p := range s.Store().ValueTimeline(assetIDs, start, end) {
+			t.Timestamps = append(t.Timestamps, p.Date.UnixMilli())
+			t.ValueMicros = append(t.ValueMicros, int64(p.ValueMicros))
+		}
+		return t
+	}
 	var timelines []*PositionTimeline
-	for _, assetId := range req.AssetIDs {
-		a, ok := s.Store().Asset(assetId)
-		if !ok {
-			continue
+	if len(req.AssetIDs) == 0 {
+		var all []string
+		for _, a := range s.Store().AllAssets() {
+			all = append(all, a.ID())
 		}
-		positions := s.Store().AssetPositionsBetween(a.ID(), start, end)
-		t := &PositionTimeline{
-			AssetID:   a.ID(),
-			AssetName: a.Name,
+		timelines = append(timelines, timeline("", "Total", all))
+	}
+	for _, assetID := range req.AssetIDs {
+		if a, ok := s.Store().Asset(assetID); ok {
+			timelines = append(timelines, timeline(a.ID(), a.Name, []string{a.ID()}))
 		}
-		for _, p := range positions {
-			t.Timestamps = append(t.Timestamps, p.LastUpdated.UnixMilli())
-			t.QuantityMicros = append(t.QuantityMicros, int64(p.QuantityMicros))
-			t.ValueMicros = append(t.ValueMicros, int64(p.MarketValue()))
-		}
-		timelines = append(timelines, t)
 	}
 	if len(timelines) == 0 {
 		s.jsonResponse(w, PositionTimelineResponse{
@@ -1114,6 +1119,7 @@ func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request)
 	}
 	s.jsonResponse(w, PositionTimelineResponse{
 		Status:    StatusOK,
+		Currency:  s.Store().BaseCurrency(),
 		Timelines: timelines,
 	})
 }

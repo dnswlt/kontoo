@@ -699,30 +699,26 @@ input.filter {
     color: inherit;
 }
 
-.chart-container .chart-period {
-    display: flex;
-    gap: 0;
-}
-
-.chart-container .chart-period button {
-    font: inherit;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 3px 6px;
-    margin: 0;
-    color: inherit;
-    font-size: 90%;
-    min-width: 3em;
-}
-
-.chart-container .chart-period button:hover {
-    background-color: var(--gray-passive);
-}
-
-.chart-container .chart-period button.selected {
-    background-color: var(--gray-active);
-}
+/* Positions value chart */
+.positions-chart { max-width: 60rem; margin-bottom: 24px; }
+.positions-chart-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
+.positions-chart-series { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.positions-chart-title { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.positions-chart-canvas { position: relative; height: 260px; }
+.chart-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--series-color); }
+td.position-name .chart-dot { margin-right: 6px; }
+.chart-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border: 1px solid #ccd5e0; border-radius: 999px; background: white; color: #263548; font: inherit; font-size: 0.9em; cursor: pointer; }
+.chart-chip:hover { background: #f4f7fb; border-color: #91a7c4; }
+.chart-show-total { padding: 3px 4px; border: 0; background: none; color: #2457a7; font: inherit; font-size: 0.9em; cursor: pointer; }
+.chart-show-total:hover { text-decoration: underline; }
+.positions-chart-periods { display: inline-flex; border: 1px solid #ccd5e0; border-radius: 8px; overflow: hidden; }
+.positions-chart-periods button { padding: 5px 10px; border: 0; border-left: 1px solid #e3e8ee; background: white; color: #566171; font: inherit; font-size: 0.85em; cursor: pointer; }
+.positions-chart-periods button:first-child { border-left: 0; }
+.positions-chart-periods button:hover { background: #f4f7fb; }
+.positions-chart-periods button[aria-pressed="true"] { background: #edf3fc; color: #2457a7; font-weight: 600; }
+.positions-chart-toggle { padding: 5px 10px; border: 1px solid #ccd5e0; border-radius: 8px; background: white; color: #566171; font: inherit; font-size: 0.85em; cursor: pointer; }
+.positions-chart-toggle:hover { background: #f4f7fb; border-color: #91a7c4; }
+#positions-chart-show { margin-bottom: 16px; }
 
 /* Ledger filters and table */
 .visually-hidden,

@@ -1162,75 +1162,96 @@ func newTestStore(entries []*LedgerEntry, t AssetType) (*Store, error) {
 	return s, nil
 }
 
-func TestAssetPositionsBetween(t *testing.T) {
-	entries := []*LedgerEntry{
-		{
-			ValueDate:      civil.DateVal(2024, 1, 1),
-			Type:           AssetPurchase,
-			QuantityMicros: 1 * units.One,
-			PriceMicros:    1 * units.One,
-			AssetID:        "KO",
-		},
+func TestValueTimeline(t *testing.T) {
+	purchase := func(d civil.Date) *LedgerEntry {
+		return &LedgerEntry{ValueDate: d, Type: AssetPurchase, QuantityMicros: units.One, PriceMicros: units.One, AssetID: "KO"}
 	}
-	s, err := newTestStore(entries, Stock)
+	s, err := newTestStore([]*LedgerEntry{
+		purchase(civil.DateVal(2024, 1, 1)),
+		purchase(civil.DateVal(2024, 2, 1)),
+		purchase(civil.DateVal(2024, 3, 1)),
+	}, Stock)
 	if err != nil {
 		t.Fatal("Cannot create store:", err)
 	}
-	ps := s.AssetPositionsBetween("KO", civil.DateVal(2023, 1, 1), civil.DateVal(2025, 1, 1))
-	if len(ps) != 1 {
-		t.Fatalf("Wrong number of positions: %d", len(ps))
+	tests := []struct {
+		name       string
+		start, end civil.Date
+		want       []ValuePoint
+	}{
+		{
+			// Entries before start count towards the value on start.
+			name:  "within",
+			start: civil.DateVal(2024, 1, 15),
+			end:   civil.DateVal(2024, 2, 15),
+			want: []ValuePoint{
+				{civil.DateVal(2024, 1, 15), units.One},
+				{civil.DateVal(2024, 2, 1), 2 * units.One},
+				{civil.DateVal(2024, 2, 15), 2 * units.One},
+			},
+		},
+		{
+			name:  "starts at first entry",
+			start: civil.Date{},
+			end:   civil.DateVal(2024, 3, 1),
+			want: []ValuePoint{
+				{civil.DateVal(2024, 1, 1), units.One},
+				{civil.DateVal(2024, 2, 1), 2 * units.One},
+				{civil.DateVal(2024, 3, 1), 3 * units.One},
+			},
+		},
+		{
+			name:  "before first entry",
+			start: civil.DateVal(2023, 1, 1),
+			end:   civil.DateVal(2023, 12, 31),
+			want:  nil,
+		},
 	}
-	if !ps[0].LastUpdated.Equal(civil.DateVal(2024, 1, 1)) {
-		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, civil.DateVal(2024, 1, 1))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := s.ValueTimeline([]string{"KO"}, tc.start, tc.end)
+			if diff := cmp.Diff(tc.want, got); diff != "" {
+				t.Errorf("ValueTimeline() mismatch (-want, +got): %s", diff)
+			}
+		})
 	}
-	if ps[0].MarketValue() != 1*units.One {
-		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), 1*units.One)
+	// Duplicate IDs must not count an asset twice.
+	single := s.ValueTimeline([]string{"KO"}, civil.Date{}, civil.DateVal(2024, 3, 1))
+	if diff := cmp.Diff(single, s.ValueTimeline([]string{"KO", "KO"}, civil.Date{}, civil.DateVal(2024, 3, 1))); diff != "" {
+		t.Errorf("ValueTimeline() with duplicate IDs mismatch (-want, +got): %s", diff)
 	}
 }
 
-func TestAssetPositionsBetweenPast(t *testing.T) {
-	// Previous entries outside the requested period need to be
-	// included in the calculation of position values.
-	entries := []*LedgerEntry{
-		// The first two purchases should be included in the requested
-		// position on 2024-02-01, the third one should not.
-		{
-			ValueDate:      civil.DateVal(2024, 1, 1),
-			Type:           AssetPurchase,
-			QuantityMicros: 1 * units.One,
-			PriceMicros:    1 * units.One,
-			AssetID:        "KO",
+func TestValueTimelineExchangeRates(t *testing.T) {
+	s, err := NewStore(&Ledger{
+		Header: &LedgerHeader{BaseCurrency: "EUR"},
+		Assets: []*Asset{
+			{Type: CheckingAccount, Name: "EUR account", CustomID: "eur", Currency: "EUR"},
+			{Type: CheckingAccount, Name: "USD account", CustomID: "usd", Currency: "USD"},
 		},
-		{
-			ValueDate:      civil.DateVal(2024, 2, 1),
-			Type:           AssetPurchase,
-			QuantityMicros: 1 * units.One,
-			PriceMicros:    1 * units.One,
-			AssetID:        "KO",
-		},
-		{
-			ValueDate:      civil.DateVal(2024, 3, 1),
-			Type:           AssetPurchase,
-			QuantityMicros: 1 * units.One,
-			PriceMicros:    1 * units.One,
-			AssetID:        "KO",
-		},
-	}
-	s, err := newTestStore(entries, Stock)
+	}, "")
 	if err != nil {
-		t.Fatal("Cannot create store:", err)
+		t.Fatal(err)
 	}
-	ps := s.AssetPositionsBetween("KO", civil.DateVal(2024, 1, 15), civil.DateVal(2024, 2, 15))
-	if len(ps) != 1 {
-		t.Fatalf("Wrong number of positions: %d", len(ps))
+	for _, e := range []*LedgerEntry{
+		{ValueDate: civil.DateVal(2024, 1, 1), Type: AccountBalance, AssetID: "eur", ValueMicros: 100 * units.One},
+		{ValueDate: civil.DateVal(2024, 1, 1), Type: AccountBalance, AssetID: "usd", ValueMicros: 110 * units.One},
+		{ValueDate: civil.DateVal(2024, 2, 1), Type: ExchangeRate, Currency: "EUR", QuoteCurrency: "USD", PriceMicros: 1_100_000},
+		{ValueDate: civil.DateVal(2024, 3, 1), Type: ExchangeRate, Currency: "EUR", QuoteCurrency: "USD", PriceMicros: units.One},
+	} {
+		if err := s.Add(e); err != nil {
+			t.Fatal(err)
+		}
 	}
-	wantDate := civil.DateVal(2024, 2, 1)
-	if !ps[0].LastUpdated.Equal(wantDate) {
-		t.Errorf("Wrong date: got: %v, want: %v", ps[0].LastUpdated, wantDate)
+	got := s.ValueTimeline([]string{"eur", "usd"}, civil.Date{}, civil.DateVal(2024, 3, 31))
+	want := []ValuePoint{
+		{civil.DateVal(2024, 1, 1), 100 * units.One}, // No USD rate yet: USD account doesn't count.
+		{civil.DateVal(2024, 2, 1), 200 * units.One},
+		{civil.DateVal(2024, 3, 1), 210 * units.One},
+		{civil.DateVal(2024, 3, 31), 210 * units.One},
 	}
-	wantValue := units.Micros(2 * units.One)
-	if ps[0].MarketValue() != wantValue {
-		t.Errorf("Wrong value: got: %v, want: %v", ps[0].MarketValue(), wantValue)
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ValueTimeline() mismatch (-want, +got): %s", diff)
 	}
 }
 
