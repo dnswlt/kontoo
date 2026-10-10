@@ -521,6 +521,20 @@ func newURL(path string, queryParams url.Values) *url.URL {
 	return u
 }
 
+func safeEntryReturnURL(raw, fallback string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(raw, "\\") ||
+		!strings.HasPrefix(path.Clean(u.Path), "/kontoo/") || strings.HasPrefix(path.Clean(u.Path), "/kontoo/entries/") {
+		return fallback
+	}
+	// Return to the full page, not the table snippet a page may have been fetched as.
+	if q := u.Query(); q.Has("snippet") {
+		q.Del("snippet")
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
 func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]any {
 	addP := func(q url.Values, key, value string) url.Values {
 		r := make(url.Values)
@@ -541,12 +555,17 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		ctx["Date"] = date
 		ctxQ.Set("date", date)
 	}
+	returnURL := safeEntryReturnURL(r.URL.RequestURI(), newURL("/kontoo/ledger", ctxQ).String())
+	if strings.HasPrefix(r.URL.Path, "/kontoo/entries/") {
+		returnURL = safeEntryReturnURL(q.Get("return_to"), newURL("/kontoo/ledger", ctxQ).String())
+	}
+	ctx["EntryReturnURL"] = returnURL
+	entryQ := addP(ctxQ, "return_to", returnURL)
 	ctx["Nav"] = map[string]string{
-		// Default filter for ledger view: no prices and exchange rates.
 		"ledger":        newURL("/kontoo/ledger", ctxQ).String(),
 		"positions":     newURL("/kontoo/positions", ctxQ).String(),
-		"addEntry":      newURL("/kontoo/entries/new", ctxQ).String(),
-		"updateBalance": newURL("/kontoo/entries/new", addP(ctxQ, "prefill", "balance")).String(),
+		"addEntry":      newURL("/kontoo/entries/new", entryQ).String(),
+		"updateBalance": newURL("/kontoo/entries/new", addP(entryQ, "prefill", "balance")).String(),
 		"addAsset":      newURL("/kontoo/assets/new", ctxQ).String(),
 		"editAsset":     newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
 		"uploadCSV":     newURL("/kontoo/csv/upload", ctxQ).String(),
@@ -1332,6 +1351,7 @@ func (s *Server) handleEntriesPost(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.RepeatForMonths > 1 && req.UpdateExisting {
 		http.Error(w, "cannot update multiple entries", http.StatusBadRequest)
+		return
 	}
 	if req.UpdateExisting {
 		// Update

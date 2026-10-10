@@ -1,223 +1,190 @@
-import { callout, calloutStatus } from "./common";
+import { callout, calloutError, hideCallout } from './common';
+import { initCombobox } from './combobox';
 
+let assetInfoRequest;
+let assetInfoFor = null; // { assetId, date } of the asset info shown or loading.
+let typeCombobox;
 
-function inputAutocomplete(event, callback) {
-    const input = event.target;
-    if (event.inputType && event.inputType.startsWith("deleteContent")) {
-        // Don't auto-complete if Backspace or Del were hit.
-        return;
-    }
-    const token = input.value.toLowerCase();
-    if (token.length < 3) {
-        return;  // Require at least 3 characters before trying to match.
-    }
-    const datalistId = input.getAttribute('list');
-    const options = document.querySelectorAll(`#${datalistId} option`);
-    let id = null;
-    for (const opt of options) {
-        const searchText = (opt.value + " " + opt.textContent).toLowerCase();
-        if (opt.value === input.value) {
-            id = opt.value;
-            break;
-        }
-        if (searchText.includes(token)) {
-            if (id) {
-                // no unique match
-                return;
-            }
-            id = opt.value;
-        }
-    }
-    if (!id) {
-        return; // No match
-    }
-    input.value = id;
-    callback(id);
+function selectedAsset() {
+    const id = document.getElementById('AssetID').value;
+    return [...document.getElementById('AssetList').options].find(option => option.value === id);
 }
 
-async function fetchAssetInfo(assetId) {
-    if (!assetId) {
-        assetId = document.querySelector("#AssetID").value;
-        if (!assetId) {
-            return;
-        }
-    }
-    const date = document.querySelector("#ValueDate").value;
-    try {
-        const response = await fetch("/kontoo/entries/assetinfo", {
-            method: "POST",
-            body: JSON.stringify({
-                assetId: assetId,
-                date: date
-            }),
-            headers: {
-                "Content-Type": "application/json"
-            }
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.status !== "OK") {
-            showAssetInfo(false);
-            return;
-        }
-        showAssetInfo(true, data.innerHTML);
-    }
-    catch (error) {
-        console.error("Error fetching asset info:", error);
-    }
+function showAssetInfo(show, html = '') {
+    const info = document.getElementById('asset-info');
+    info.classList.toggle('hidden', !show);
+    info.innerHTML = show ? html : '';
 }
 
-function assetIdChange(assetId) {
-    if (!assetId) {
-        return;
-    }
-    const assetList = document.getElementById("AssetList");
-    // All IDs are prefixed with OptionID_ b/c numeric IDs otherwise don't yield a valid DOM ID.
-    const asset = assetList.options["OptionID_" + assetId];
-    if (asset == null) {
-        // Unknown asset: enable all types
-        document.querySelectorAll("#TypeList option").forEach((opt) => {
-            opt.disabled = false
-        });
-        document.querySelector("#AssetName").textContent = "Unknown asset";
-        return;
-    }
-    document.querySelector("#AssetName").textContent = asset.textContent;
-    const entryTypes = asset.dataset.entryTypes.split(" ");
-    document.querySelectorAll("#TypeList option").forEach((opt) => {
-        opt.disabled = !entryTypes.includes(opt.value);
-    });
-    // Move focus to the next input field.
-    document.querySelector("#Type").focus();
-    fetchAssetInfo(assetId);
-}
-
-function showAssetInfo(show = true, innerHTML = null) {
-    const assetInfo = document.querySelector("#asset-info");
-    if (show) {
-        assetInfo.innerHTML = innerHTML;
-        assetInfo.classList.remove("hidden");
-    } else {
-        assetInfo.classList.add("hidden")
-    }
-}
-
-function entryTypeChange(typ) {
-    if (typ === "ExchangeRate") {
+async function fetchAssetInfo({ force = false } = {}) {
+    const asset = selectedAsset();
+    const date = document.getElementById('ValueDate').value.trim();
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(`${date}T00:00:00Z`) : null;
+    const validDate = parsedDate && !Number.isNaN(parsedDate.valueOf()) && parsedDate.toISOString().slice(0, 10) === date;
+    if (!asset || !validDate || document.getElementById('Type').value === 'ExchangeRate') {
+        assetInfoRequest?.abort();
+        assetInfoFor = null;
         showAssetInfo(false);
-        showFields(["QuoteCurrency", "Price"]);
-    } else if (typ === "AccountBalance") {
-        showFields(["AssetID", "Value"]);
-    } else if (typ == "AccountDebit" || typ === "AccountCredit") {
-        const fields = ["AssetID", "Value"];
-        // Add "Repeat for N months" if asset type supports it:
-        const assetId = document.querySelector("#AssetID").value;
-        if (assetId) {
-            const assetList = document.querySelector("#AssetList");
-            // All IDs are prefixed with OptionID_ b/c numeric IDs otherwise don't yield a valid DOM ID.
-            const asset = assetList.options["OptionID_" + assetId];
-            const supportsRepeat = asset.dataset.supportsRepeat === "true";
-            if (supportsRepeat) {
-                fields.push("RepeatForMonths");
-            }
+        return;
+    }
+    if (!force && assetInfoFor?.assetId === asset.value && assetInfoFor.date === date) return;
+    // Info for another asset is misleading; for another date it is fine until replaced.
+    if (assetInfoFor?.assetId !== asset.value) showAssetInfo(false);
+    assetInfoRequest?.abort();
+    assetInfoFor = { assetId: asset.value, date };
+    assetInfoRequest = new AbortController();
+    try {
+        const response = await fetch('/kontoo/entries/assetinfo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assetId: asset.value, date }),
+            signal: assetInfoRequest.signal
+        });
+        if (!response.ok) throw new Error(`Could not load asset information (${response.status}).`);
+        const data = await response.json();
+        showAssetInfo(data.status === 'OK', data.innerHTML);
+    } catch (error) {
+        if (error.name !== 'AbortError') {
+            assetInfoFor = null;
+            showAssetInfo(false);
+            console.error(error);
         }
-        showFields(fields);
-    } else if (typ === "AssetHolding") {
-        showFields(["AssetID", "Value", "Quantity", "Price"]);
-    } else if (typ === "InterestPayment" || typ == "DividendPayment") {
-        showFields(["AssetID", "Value"]);
-    } else if (typ === "AssetPrice") {
-        showFields(["AssetID", "Price"]);
-    } else if (typ === "AssetMaturity") {
-        showFields(["AssetID", "Value"]);
-    } else {
-        showFields(["AssetID", "Value", "Quantity", "Price", "Cost"]);
     }
 }
 
-function showFields(fieldNames) {
-    const allFieldNames = [
-        "AssetID", "Value", "Quantity", "Price", "Cost", "QuoteCurrency", "RepeatForMonths"
-    ];
-    for (const fieldName of allFieldNames) {
-        if (fieldNames.includes(fieldName)) {
-            document.querySelector(`#${fieldName}Field`).classList.remove("hidden");
-        } else {
-            document.querySelector(`#${fieldName}Field`).classList.add("hidden");
-        }
+function updateAsset() {
+    const asset = selectedAsset();
+    const input = document.getElementById('AssetID');
+    const name = document.getElementById('AssetName');
+    name.textContent = asset ? asset.textContent.trim() : '';
+    name.classList.toggle('hidden', !name.textContent);
+    input.setCustomValidity(asset || !input.value ? '' : 'Choose an asset from the list.');
+    const type = document.getElementById('Type');
+    const validTypes = asset?.dataset.entryTypes.split(' ');
+    const options = [...document.getElementById('TypeList').options];
+    for (const option of options) {
+        const valid = !validTypes || !option.value || validTypes.includes(option.value);
+        option.disabled = !valid;
+        option.hidden = !valid;
+    }
+    if (options.some(option => option.value === type.value && option.disabled)) type.value = '';
+    typeCombobox?.refresh();
+    const currency = document.querySelector('input[name="Currency"]');
+    if (currency && asset) currency.value = asset.dataset.currency;
+    updateFields();
+    fetchAssetInfo();
+}
+
+function updateFields() {
+    const typeInput = document.getElementById('Type');
+    const value = typeInput.value;
+    const validType = [...document.getElementById('TypeList').options].some(option => option.value === value && !option.disabled);
+    typeInput.setCustomValidity(!value || validType ? '' : 'Choose a valid entry type.');
+    const type = validType ? value : '';
+    let fields;
+    switch (type) {
+        case 'ExchangeRate': fields = ['QuoteCurrency', 'Price']; break;
+        case 'AccountBalance':
+        case 'InterestPayment':
+        case 'DividendPayment':
+        case 'AssetMaturity': fields = ['AssetID', 'Value']; break;
+        case 'AccountDebit':
+        case 'AccountCredit':
+            fields = ['AssetID', 'Value'];
+            if (!document.querySelector('[name="SequenceNum"]') && selectedAsset()?.dataset.supportsRepeat === 'true') {
+                fields.push('RepeatForMonths');
+            }
+            break;
+        case 'AssetHolding': fields = ['AssetID', 'Value', 'Quantity', 'Price']; break;
+        case 'AssetPrice': fields = ['AssetID', 'Price']; break;
+        case 'AssetPurchase':
+        case 'AssetSale': fields = ['AssetID', 'Value', 'Quantity', 'Price', 'Cost']; break;
+        default: fields = ['AssetID'];
+    }
+    for (const name of ['AssetID', 'Value', 'Quantity', 'Price', 'Cost', 'QuoteCurrency', 'RepeatForMonths']) {
+        const field = document.getElementById(`${name}Field`);
+        const visible = fields.includes(name);
+        field.classList.toggle('hidden', !visible);
+        field.querySelectorAll('input, select').forEach(input => { input.disabled = !visible; });
+    }
+    document.getElementById('AssetID').required = type !== 'ExchangeRate';
+    const currency = document.querySelector('input[name="Currency"]');
+    if (currency && type === 'ExchangeRate') {
+        currency.value = document.getElementById('ExchangeRateLabel')?.dataset.baseCurrency || currency.value;
     }
 }
 
 async function submitForm(event) {
-    event.preventDefault(); // Prevent the default form submission
-    const formData = new FormData(this);
-    const clickedButton = event.submitter;
-    const entry = {}
-    formData.forEach((value, key) => {
-        if (!value) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    if (form.getAttribute('aria-busy') === 'true') return;
+    const addAnother = event.submitter?.value === 'next';
+    const formData = new FormData(form);
+    const entry = {};
+    for (const [name, value] of formData) {
+        if (value && name !== 'RepeatForMonths') entry[name] = name === 'SequenceNum' ? Number(value) : value;
+    }
+    const update = formData.has('SequenceNum');
+    const buttons = form.querySelectorAll('button[type="submit"]');
+    form.setAttribute('aria-busy', 'true');
+    buttons.forEach(button => { button.disabled = true; });
+    hideCallout();
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ updateExisting: update, repeatForMonths: Number(formData.get('RepeatForMonths') || 0), entry })
+        });
+        if (!response.ok) throw new Error((await response.text()) || `Save failed (${response.status}).`);
+        const data = await response.json();
+        if (data.status !== 'OK') throw new Error(data.error || 'Could not save the entry.');
+        if (!addAnother || update) {
+            window.location.assign(form.dataset.returnUrl);
             return;
         }
-        if (key === "SequenceNum") {
-            entry[key] = parseInt(value);
-        } else {
-            entry[key] = value;
-        }
-    })
-    try {
-        const update = formData.has("SequenceNum");
-        const repeatForMonths = Number(formData.get("RepeatForMonths") || 0);
-        const response = await fetch(this.action, {
-            method: "POST",
-            body: JSON.stringify({
-                updateExisting: update,
-                repeatForMonths: repeatForMonths,
-                entry: entry
-            }),
-            headers: {
-                "Content-Type": "application/json"
-            }
-        });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        if (data.status === "OK") {
-            const tm = new Date().toLocaleTimeString('en-GB');
-            callout(`${tm} - ${update ? "Updated" : "Added"} ledger entry with sequence number ${data.sequenceNum}.`);
-            // this.reset();
-            fetchAssetInfo();
-        } else {
-            calloutStatus(data.status, data.error);
-        }
-    }
-    catch (error) {
-        console.error("Error on submit:", error);
+        callout(`Added entry #${data.sequenceNum}. Ready for another entry.`);
+        // Keep the asset, date and type for batch entry; clear transaction-specific values.
+        for (const name of ['Value', 'Quantity', 'Price', 'Cost', 'Comment']) document.getElementById(name).value = '';
+        document.getElementById('RepeatForMonths').value = '0';
+        fetchAssetInfo({ force: true });
+        form.querySelector('#ValueField:not(.hidden) input, #QuantityField:not(.hidden) input, #PriceField:not(.hidden) input')?.focus();
+    } catch (error) {
+        calloutError(error.message);
+    } finally {
+        form.removeAttribute('aria-busy');
+        buttons.forEach(button => { button.disabled = false; });
     }
 }
 
 export function init() {
-    const entryForm = document.querySelector("#entry-form");
-    entryForm.addEventListener("submit", submitForm);
-    document.querySelector("#AssetID").addEventListener("input", function (event) {
-        inputAutocomplete(event, assetIdChange);
+    const form = document.getElementById('entry-form');
+    form.addEventListener('submit', submitForm);
+    // Saving is always an explicit button press: Enter in a field never submits.
+    form.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
     });
-    document.querySelector("#Type").addEventListener("input", function (event) {
-        inputAutocomplete(event, entryTypeChange);
+    initCombobox(document.getElementById('AssetID'), { assetNames: true, autocomplete: true });
+    typeCombobox = initCombobox(document.getElementById('Type'), { autocomplete: true });
+    document.getElementById('AssetID').addEventListener('input', updateAsset);
+    document.getElementById('Type').addEventListener('input', () => {
+        updateFields();
+        fetchAssetInfo();
     });
-    const quoteCurrency = document.querySelector("#QuoteCurrency")
+    const quoteCurrency = document.getElementById('QuoteCurrency');
     if (quoteCurrency) {
-        // Might be missing, if ledger only has entries for base currency.
-        quoteCurrency.addEventListener("change", function (event) {
-            const ccy = event.target.value;
-            const label = document.querySelector("#ExchangeRateLabel")
-            label.textContent = label.dataset.baseCurrency + "/" + ccy;
-        });
+        const updateLabel = () => {
+            const label = document.getElementById('ExchangeRateLabel');
+            label.textContent = `${label.dataset.baseCurrency}/${quoteCurrency.value}`;
+        };
+        quoteCurrency.addEventListener('input', updateLabel);
+        updateLabel();
     }
-    // Adjust UI to preselected AssetID:
-    assetIdChange(document.querySelector("#AssetID").value);
-    // Update asset info on date change, too:
-    document.querySelector("#ValueDate")._flatpickr.config.onValueUpdate.push(() => fetchAssetInfo());
-
+    updateAsset();
+    // fetchAssetInfo() skips the request unless asset or date changed.
+    const date = document.getElementById('ValueDate');
+    const dateChanged = () => fetchAssetInfo();
+    date.addEventListener('input', dateChanged);
+    date.addEventListener('change', dateChanged);
+    date.addEventListener('blur', dateChanged);
+    date._flatpickr.config.onValueUpdate.push(dateChanged);
 }

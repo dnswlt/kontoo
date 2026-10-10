@@ -7,12 +7,13 @@
 
 <body id="entry-page">
     {{template "nav.html" .}}
+    <main class="entry-content">
     {{ $update := ne .Entry.SequenceNum 0 }}
     <h1>{{if $update}}Update entry{{else}}Add entry{{end}}</h1>
-    <div id="status-callout" class="callout hidden"></div>
+    <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>
     <div class="horizontal-container">
         <div class="columnar">
-            <form class="columnar" id="entry-form" method="post" action="/kontoo/entries" autocomplete="off">
+            <form class="columnar" id="entry-form" method="post" action="/kontoo/entries" autocomplete="off" data-return-url="{{.EntryReturnURL}}">
                 {{if $update }}
                 <input type="hidden" name="SequenceNum" value="{{.Entry.SequenceNum}}">
                 <input type="hidden" name="Currency" value="{{.Entry.Currency}}">
@@ -29,11 +30,16 @@
                     <div class="field-label">
                         <label for="AssetID">Asset</label>
                     </div>
-                    <div class="field-value">
+                    <div class="field-value entry-combobox">
                         <input id="AssetID" type="text" name="AssetID" list="AssetList" value="{{.Entry.AssetID}}">
+                        <button class="entry-combobox-toggle" type="button" tabindex="-1" aria-label="Show assets"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+                        <div class="entry-combobox-popup" popover="manual">
+                            <div id="AssetChoices" role="listbox" aria-label="Assets"></div>
+                            <p class="entry-combobox-empty" role="status" hidden>No matching assets.</p>
+                        </div>
                         <datalist id="AssetList">
                             {{range .Assets}}
-                            <option id="OptionID_{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}'
+                            <option id="OptionID_{{.ID}}" data-entry-types='{{join .Type.ValidEntryTypes " "}}' data-currency="{{.Currency}}"
                                 data-supports-repeat="{{.Type.SupportsRepeatedLedgerEntries}}"
                                 value="{{.ID}}">
                                 {{.Name}}</option>
@@ -46,9 +52,13 @@
                     <div class="field-label">
                         <label for="Type">Type</label>
                     </div>
-                    <div class="field-value">
-                        <input id="Type" type="text" name="Type" list="TypeList"
-                            value="{{if .Entry.Type}}{{.Entry.Type}}{{end}}" required>
+                    <div class="field-value entry-combobox">
+                        <input id="Type" name="Type" type="text" list="TypeList" value="{{if .Entry.Type}}{{.Entry.Type}}{{end}}" required>
+                        <button class="entry-combobox-toggle" type="button" tabindex="-1" aria-label="Show entry types"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+                        <div class="entry-combobox-popup" popover="manual">
+                            <div id="TypeChoices" role="listbox" aria-label="Entry types"></div>
+                            <p class="entry-combobox-empty" role="status" hidden>No matching entry types.</p>
+                        </div>
                         <datalist id="TypeList">
                             {{range .EntryTypes}}
                             <option value="{{.}}"></option>
@@ -127,14 +137,17 @@
                         <textarea rows="3" id="Comment" name="Comment">{{.Entry.Comment}}</textarea>
                     </div>
                 </div>
-                <div class="button-field">
-                    <input class="click-button" id="submit" type="submit" name="Submit" value="Save &amp; enter next">
+                <div class="entry-form-actions">
+                    <button class="entry-save" id="submit" type="submit" value="save">Save</button>
+                    {{if not $update}}<button type="submit" value="next">Save &amp; add another</button>{{end}}
+                    <a class="entry-cancel" href="{{.EntryReturnURL}}">Cancel</a>
                 </div>
             </form>
         </div>
         <div id="asset-info" class="hidden">
         </div>
     </div>
+    </main>
 </body>
 
 </html>

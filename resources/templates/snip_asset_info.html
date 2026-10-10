@@ -14,7 +14,7 @@
 {{end}}
 <div>
     <p class="main bsep">{{.Asset.Name}}</p>
-    <table class="bsep">
+    <table class="bsep asset-info-details">
         <tbody>
             <tr>
                 <td class="label">Type</td>
@@ -91,7 +91,8 @@
         </tbody>
     </table>
     {{if or .EntriesBefore .EntriesAfter}}
-    <table>
+    <h2 class="asset-info-heading">Entries around value date</h2>
+    <table class="asset-info-entries">
         <thead>
             <tr>
                 <th>#</th>
@@ -107,7 +108,7 @@
             {{template "_AssetInfoLedgerRow" .}}
             {{end}}
             <tr class="highlight">
-                <td colspan="6">&laquo;New entry&raquo;</td>
+                <td colspan="6">Selected date</td>
             </tr>
             {{range .EntriesAfter}}
             {{template "_AssetInfoLedgerRow" .}}
