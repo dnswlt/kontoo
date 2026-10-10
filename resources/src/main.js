@@ -3,6 +3,7 @@ import flatpickr from 'flatpickr';
 // that you have to import the CSS, too?!?
 // See https://github.com/flatpickr/flatpickr/issues/141
 import 'flatpickr/dist/flatpickr.min.css';
+import { init as initReportDate } from './report_date';
 
 //
 // Global definitions
@@ -67,6 +68,7 @@ function validateMicros(input) {
 //
 
 // Set up date pickers.
+initReportDate();
 document.querySelectorAll('.datepicker').forEach(input => {
     flatpickr(input, {
         allowInput: true

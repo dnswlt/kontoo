@@ -1,38 +1,45 @@
-<div class="no-print">
-    <div>
-        <ul class="filter-chips">
-            <li {{if .ActiveChips.all }}class="active-chip" {{end}}><a href="/kontoo/positions?date={{.Date}}">All</a>
-            </li>
-            <li {{if .ActiveChips.maturing }}class="active-chip" {{end}}><a
-                    href="/kontoo/positions/maturing?date={{.Date}}">Maturing</a></li>
-            <li {{if .ActiveChips.equity }}class="active-chip" {{end}}><a
-                    href="/kontoo/positions/equity?date={{.Date}}">Equity</a></li>
-        </ul>
-    </div>
+<div class="positions-controls no-print">
+    <nav class="report-tabs" aria-label="Position reports">
+        <a class="report-tab" href="/kontoo/positions?date={{.Date}}" {{if .ActiveChips.all}}aria-current="page"{{end}}>All</a>
+        <a class="report-tab" href="/kontoo/positions/maturing?date={{.Date}}" {{if .ActiveChips.maturing}}aria-current="page"{{end}}>Maturing</a>
+        <a class="report-tab" href="/kontoo/positions/equity?date={{.Date}}" {{if .ActiveChips.equity}}aria-current="page"{{end}}>Equity</a>
+    </nav>
 
-    {{if .YearOptions }}
-    <div id="years-dropdown" class="combo-box">
-        <button data-value="{{.YearOptions.Selected.Value}}"
-            class="combo-button">{{.YearOptions.Selected.Name}}</button>
-        <div class="combo-options">
-            {{range .YearOptions.Options }}
-            <div class="combo-option" data-url="{{.Data.URL}}" data-value="{{.Value}}">{{.Name}}</div>
-            {{end}}
+    <div class="report-date-controls" role="group" aria-label="Report date">
+        <span class="report-date-label">As of</span>
+        {{if .YearOptions}}
+        <button type="button" class="report-date-button" popovertarget="report-years"
+            aria-label="Choose year, current year {{.YearOptions.Selected.Name}}">
+            {{.YearOptions.Selected.Name}}
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
+        </button>
+        <div id="report-years" class="report-date-popover" popover="auto" aria-labelledby="report-years-title">
+            <p id="report-years-title" class="report-date-popover-title">Choose year</p>
+            <div class="report-date-grid report-year-grid">
+                {{$selected := .YearOptions.Selected.Value}}
+                {{range .YearOptions.Options}}
+                <a class="report-date-option" href="{{.Data.URL}}" {{if eq .Value $selected}}aria-current="date"{{end}}>{{.Name}}</a>
+                {{end}}
+            </div>
         </div>
-    </div>
-    {{end}}
-    {{if .MonthOptions }}
-    <div id="months-dropdown" class="combo-box">
-        <button data-value="{{.MonthOptions.Selected.Value}}"
-            class="combo-button">{{.MonthOptions.Selected.Name}}</button>
-        <div class="combo-options">
-            {{range .MonthOptions.Options }}
-            <div class="combo-option" data-url="{{.Data.URL}}" data-value="{{.Value}}">{{.Name}}</div>
-            {{end}}
+        {{end}}
+        {{if .MonthOptions}}
+        <button type="button" class="report-date-button" popovertarget="report-months"
+            aria-label="Choose month, current month {{.MonthOptions.Selected.Name}}">
+            {{.MonthOptions.Selected.Name}}
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
+        </button>
+        <div id="report-months" class="report-date-popover" popover="auto" aria-labelledby="report-months-title">
+            <p id="report-months-title" class="report-date-popover-title">Choose month</p>
+            <div class="report-date-grid report-month-grid">
+                {{$selected := .MonthOptions.Selected.Value}}
+                {{range .MonthOptions.Options}}
+                <a class="report-date-option" href="{{.Data.URL}}" {{if eq .Value $selected}}aria-current="date"{{end}}>{{.Name}}</a>
+                {{end}}
+            </div>
+            <p class="report-date-hint">Month-end snapshots</p>
         </div>
+        {{end}}
+        <a class="report-today" href='{{setp .ThisPage "date" .Today}}' {{if .ActiveChips.today}}aria-current="date"{{end}}>Today</a>
     </div>
-    {{end}}
-    <ul class="filter-chips">
-        <li {{if .ActiveChips.today }}class="active-chip" {{end}}><a href='{{setp .ThisPage "date" .Today}}'>Today</a></li>
-    </ul>
 </div>

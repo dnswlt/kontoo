@@ -1,4 +1,4 @@
-import { registerDropdown, registerContextMenu, base64ToString, stringToBase64 } from "./common";
+import { registerContextMenu, base64ToString, stringToBase64 } from "./common";
 import Chart from 'chart.js/auto'
 import 'chartjs-adapter-date-fns'
 import { enGB } from 'date-fns/locale'
@@ -155,8 +155,6 @@ async function fetchAndDrawTimelines() {
 }
 
 export function init() {
-    registerDropdown("months-dropdown", followUrl);
-    registerDropdown("years-dropdown", followUrl);
     document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
         registerContextMenu(td, contextMenuSelected);
     });

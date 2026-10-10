@@ -127,49 +127,6 @@ export function registerQuotesSubmit() {
     }
 }
 
-// Registers a dropdown widget. callback will be called with the
-// clicked option div as the only argument.
-export function registerDropdown(id, callback) {
-    const dropdown = document.getElementById(id);
-    if (!dropdown) {
-        console.error("Trying to register a dropdown that does not exist:", id);
-        return;
-    }
-    const button = dropdown.querySelector(".combo-button");
-    // Make the dropdown focusable with tab.
-    dropdown.setAttribute("tabindex", "0");
-    // Open/close the dropdown when gaining/losing focus.
-    dropdown.addEventListener("focus", function () {
-        dropdown.classList.add("open");
-    });
-    dropdown.addEventListener("blur", function () {
-        dropdown.classList.remove("open");
-    });
-    // Toggle the dropdown menu when clicking the button.
-    // Use "mousedown" instead of "click" to handle the event
-    // before the dropdown loses its focus.
-    button.addEventListener("mousedown", function (event) {
-        // Prevent dropdown from losing focus:
-        event.preventDefault();
-        if (document.activeElement === dropdown) {
-            dropdown.blur();
-        } else {
-            dropdown.focus();
-        }
-    });
-    // Set the dropdown value on select and hide the dropdown options.
-    dropdown.addEventListener("click", (event) => {
-        const option = event.target;
-        if (!option.classList.contains("combo-option")) {
-            return;
-        }
-        button.textContent = option.textContent;
-        button.dataset.value = option.dataset.value;
-        dropdown.classList.remove("open");
-        callback(option);
-    });
-}
-
 export function registerContextMenu(element, callback) {
     if (!element.classList.contains("contextmenu")) {
         console.error("Context menu must have class contextmenu");

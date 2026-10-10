@@ -1,12 +1,87 @@
 package ui
 
 import (
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/dnswlt/kontoo/internal/civil"
 	"github.com/dnswlt/kontoo/internal/ledger"
 )
+
+func TestReportYearDates(t *testing.T) {
+	tests := []struct {
+		name string
+		date civil.Date
+		year int
+		want string
+	}{
+		{"leap month end", civil.DateVal(2024, 2, 29), 2023, "2023-02-28"},
+		{"month end into leap year", civil.DateVal(2023, 2, 28), 2024, "2024-02-29"},
+		{"ordinary day", civil.DateVal(2024, 10, 10), 2023, "2023-10-10"},
+		{"January month end", civil.DateVal(2024, 1, 31), 2023, "2023-01-31"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := url.Parse("/kontoo/positions/maturing?date=2024-02-29&custom=keep")
+			opts := YearOptions(*u, tc.date, civil.DateVal(2023, 1, 1), civil.DateVal(2024, 12, 31))
+			for _, opt := range opts.Options {
+				if opt.Value != tc.year {
+					continue
+				}
+				got, err := url.Parse(opt.Data["URL"].(string))
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.Query().Get("date") != tc.want || got.Query().Get("custom") != "keep" || got.Path != u.Path {
+					t.Fatalf("year navigation lost date or report context: %s", got)
+				}
+				return
+			}
+			t.Fatalf("year %d missing", tc.year)
+		})
+	}
+}
+
+func TestReportYearsWithoutEntries(t *testing.T) {
+	u, _ := url.Parse("/kontoo/positions?date=2026-10-10")
+	date := civil.DateVal(2026, 10, 10)
+	opts := YearOptions(*u, date, civil.Date{}, civil.Date{})
+	if len(opts.Options) != 1 || opts.Options[0].Value != 2026 {
+		t.Fatalf("empty ledger should offer the report year: %+v", opts.Options)
+	}
+	opts = YearOptions(*u, date, civil.DateVal(2023, 1, 1), civil.DateVal(2024, 12, 31))
+	if len(opts.Options) != 4 || opts.Options[0].Value != 2026 {
+		t.Fatalf("report year must remain available beyond the last ledger entry: %+v", opts.Options)
+	}
+}
+
+func TestReportMonthDates(t *testing.T) {
+	for _, year := range []int{2023, 2024, 2026} {
+		date := civil.DateVal(year, 10, 10)
+		u, _ := url.Parse("/kontoo/positions/equity?custom=keep")
+		opts := MonthOptions(*u, date)
+		if len(opts.Options) != 12 {
+			t.Fatalf("want all twelve months, got %d", len(opts.Options))
+		}
+		for _, opt := range opts.Options {
+			got, err := url.Parse(opt.Data["URL"].(string))
+			if err != nil {
+				t.Fatal(err)
+			}
+			d, err := civil.ParseDate(got.Query().Get("date"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if d.Year() != year || int(d.Month()) != opt.Value || d.AddDays(1).Day() != 1 {
+				t.Errorf("month option must navigate to its month end: %s", got)
+			}
+			if got.Path != u.Path || got.Query().Get("custom") != "keep" {
+				t.Errorf("month navigation lost report context: %s", got)
+			}
+		}
+	}
+}
 
 func TestJoinAny(t *testing.T) {
 	tests := []struct {

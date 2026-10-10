@@ -731,7 +731,7 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 			"all":   true,
 			"today": date.Equal(civil.Today()),
 		},
-		"MonthOptions": ui.MonthOptions(*r.URL, date, maxDate),
+		"MonthOptions": ui.MonthOptions(*r.URL, date),
 		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions.html", ctx)
@@ -765,7 +765,7 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 			"EarningsAtMaturity":   totalEarnings,
 			"InternalRateOfReturn": totalIRR,
 		},
-		"MonthOptions": ui.MonthOptions(*r.URL, date, maxDate),
+		"MonthOptions": ui.MonthOptions(*r.URL, date),
 		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
@@ -809,7 +809,7 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 			"ProfitLoss1Y":      totalPL1Y,
 			"ProfitLoss1YRatio": totalProfitLoss1YRatio,
 		},
-		"MonthOptions":    ui.MonthOptions(*r.URL, date, maxDate),
+		"MonthOptions":    ui.MonthOptions(*r.URL, date),
 		"YearOptions":     ui.YearOptions(*r.URL, date, minDate, maxDate),
 		"QuarterlyReport": s.Store().QuarterlyReport(date, 5),
 	})

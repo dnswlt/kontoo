@@ -31,8 +31,21 @@ func YearOptions(url url.URL, date civil.Date, minDate, maxDate civil.Date) Drop
 			Value: date.Year(),
 		},
 	}
-	for y := maxDate.Year(); y >= minDate.Year(); y-- {
-		d := civil.DateVal(y, date.Month(), date.Day())
+	minYear, maxYear := date.Year(), date.Year()
+	if !minDate.IsZero() {
+		minYear = min(minYear, minDate.Year())
+	}
+	if !maxDate.IsZero() {
+		maxYear = max(maxYear, maxDate.Year())
+	}
+	monthEnd := date.Equal(civil.DateVal(date.Year(), date.Month(), 1).AddDate(0, 1, -1))
+	for y := maxYear; y >= minYear; y-- {
+		lastDay := civil.DateVal(y, date.Month(), 1).AddDate(0, 1, -1)
+		day := min(date.Day(), lastDay.Day())
+		if monthEnd {
+			day = lastDay.Day()
+		}
+		d := civil.DateVal(y, date.Month(), day)
 		q := url.Query()
 		q.Set("date", d.String())
 		url.RawQuery = q.Encode()
@@ -47,7 +60,7 @@ func YearOptions(url url.URL, date civil.Date, minDate, maxDate civil.Date) Drop
 	return res
 }
 
-func MonthOptions(url url.URL, date civil.Date, maxDate civil.Date) DropdownOptions {
+func MonthOptions(url url.URL, date civil.Date) DropdownOptions {
 	months := []string{
 		"Jan", "Feb", "Mar", "Apr", "May", "Jun",
 		"Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -58,11 +71,8 @@ func MonthOptions(url url.URL, date civil.Date, maxDate civil.Date) DropdownOpti
 			Value: int(date.Month()),
 		},
 	}
-	if date.Year() > maxDate.Year() {
-		return res // No options if no data
-	}
 	for i := 1; i <= 12; i++ {
-		// Get last day of the month i+1
+		// Reports are snapshots at the last day of the selected month.
 		d := civil.DateVal(date.Year(), time.Month(i), 1).AddDate(0, 1, -1)
 		q := url.Query()
 		q.Set("date", d.String())

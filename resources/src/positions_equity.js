@@ -1,4 +1,4 @@
-import { registerDropdown, registerContextMenu } from "./common";
+import { registerContextMenu } from "./common";
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 
@@ -94,8 +94,6 @@ async function fetchAndDrawEquity() {
 }
 
 export function init() {
-    registerDropdown("months-dropdown", followUrl);
-    registerDropdown("years-dropdown", followUrl);
     document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
         registerContextMenu(td, contextMenuSelected);
     });
