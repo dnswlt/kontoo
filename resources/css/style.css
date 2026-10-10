@@ -616,15 +616,13 @@ input.filter {
     font-size: 0.8em;
 }
 
-.positions-controls :focus-visible {
-    outline: 2px solid #2457a7;
-    outline-offset: 3px;
-}
+/* Page layout */
+.page-content { margin: 24px 16px; color: #263548; }
+.page-content h1 { margin: 0 0 24px; font-size: 1.65em; font-weight: 600; }
+.page-content #status-callout { max-width: 48rem; margin: 0 0 20px; box-sizing: border-box; }
+.page-content :focus-visible { outline: 2px solid #2457a7; outline-offset: 2px; }
 
 /* Entry and asset forms */
-.form-content { margin: 24px 16px; max-width: 68rem; color: #263548; }
-.form-content h1 { margin: 0 0 24px; font-size: 1.65em; font-weight: 600; }
-.form-content #status-callout { max-width: 48rem; margin: 0 0 20px; box-sizing: border-box; }
 #entry-page .horizontal-container { align-items: flex-start; gap: 32px; }
 #entry-page .horizontal-container > .columnar { width: 20rem; flex: none; }
 .edit-form .field { width: 100%; margin-bottom: 12px; }
@@ -668,7 +666,6 @@ input.filter {
 .combobox-value { color: #566171; font-size: 0.85em; font-weight: normal; }
 .combobox-empty { margin: 0; padding: 8px 10px; color: #566171; }
 @media print { .combobox-toggle, .combobox-popup { display: none; } }
-.form-content :focus-visible { outline: 2px solid #2457a7; outline-offset: 2px; }
 
 /* Position actions */
 .position-name { white-space: nowrap; }

@@ -7,6 +7,7 @@
 
 <body id="positions-page">
     {{template "nav.html" .}}
+    <main class="page-content">
     <h1>Positions &middot; {{.Date}}</h1>
     {{template "positions_subnav.html" .}}
     {{ $nav := .Nav }}
@@ -103,6 +104,7 @@
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
+    </main>
 </body>
 
 </html>

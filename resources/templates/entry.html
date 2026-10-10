@@ -7,7 +7,7 @@
 
 <body id="entry-page">
     {{template "nav.html" .}}
-    <main class="form-content">
+    <main class="page-content">
     {{ $update := ne .Entry.SequenceNum 0 }}
     <h1>{{if $update}}Update entry{{else}}Add entry{{end}}</h1>
     <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>

@@ -7,7 +7,7 @@
 
 <body id="asset-page">
     {{template "nav.html" .}}
-    <main class="form-content">
+    <main class="page-content">
     {{ $update := ne .AssetID "" }}
     <h1>{{if $update}}Edit asset{{else}}Add asset{{end}}</h1>
     <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>
