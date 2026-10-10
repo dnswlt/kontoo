@@ -7,13 +7,15 @@
 
 <body id="upload-csv-page">
     {{template "nav.html" .}}
+    <main class="page-content">
     <h1>Upload CSV</h1>
     <div id="status-callout" class="callout hidden"></div>
-    <div id="upload-drop-area">Put your money on me!</div>
-    <div>
-        <ul id="filelist"></ul>
-    </div>
+    <label id="upload-drop-area" class="upload-drop-area">
+        <input id="upload-file" class="visually-hidden" type="file" accept=".csv,text/csv">
+        Drop a CSV file here or click to choose one
+    </label>
     <div id="results-section" class="hidden"></div>
+    </main>
 
 </body>
 

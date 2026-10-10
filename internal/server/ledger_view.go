@@ -24,7 +24,7 @@ type ledgerView struct {
 	Assets                                                  []ledgerFilterOption
 	Chips                                                   []ledgerFilterChip
 	SortHeaders                                             map[string]ledgerSortHeader
-	ClearURL                                                string
+	ClearURL, AssetClearURL, DateClearURL                   string
 	EntryCount                                              int
 	Page, PageCount, FirstEntry, LastEntry                  int
 	FirstPageURL, PreviousPageURL, NextPageURL, LastPageURL string
@@ -46,6 +46,16 @@ func removeFilter(params url.Values, key, value string) string {
 	copy := copyParams(params)
 	copy.Del("page")
 	copy[key] = slices.DeleteFunc(copy[key], func(v string) bool { return v == value })
+	return ledgerURL(copy)
+}
+
+// withoutFilter returns the URL of the first ledger page without the given filter params.
+func withoutFilter(params url.Values, keys ...string) string {
+	copy := copyParams(params)
+	copy.Del("page")
+	for _, key := range keys {
+		copy.Del(key)
+	}
 	return ledgerURL(copy)
 }
 
@@ -160,6 +170,8 @@ func (s *Server) ledgerViewContext(r *http.Request) (map[string]any, error) {
 		base.Set("date", v.Date)
 	}
 	v.ClearURL = ledgerURL(base)
+	v.AssetClearURL = withoutFilter(params, "asset")
+	v.DateClearURL = withoutFilter(params, "from", "until")
 	if v.Search != "" {
 		v.Chips = append(v.Chips, ledgerFilterChip{"Search: " + v.Search, removeFilter(params, "search", v.Search)})
 	}

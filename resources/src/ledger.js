@@ -1,3 +1,4 @@
+import flatpickr from 'flatpickr';
 import { calloutError } from './common';
 
 async function deleteLedgerEntry(button) {
@@ -35,9 +36,6 @@ async function reloadLedger(button) {
 export function init() {
     document.querySelectorAll('#ledger-page form').forEach(form => {
         form.addEventListener('formdata', event => {
-            if (event.formData.has('include_market')) {
-                event.formData.set('include_market', event.formData.getAll('include_market').includes('1') ? '1' : '0');
-            }
             for (const [name, value] of [...event.formData]) {
                 if (value === '') event.formData.delete(name);
             }
@@ -50,7 +48,11 @@ export function init() {
     reload.addEventListener('click', () => reloadLedger(reload));
     const form = document.getElementById('ledger-filters');
     if (form) {
-        form.querySelector('[name="include_market"]').addEventListener('change', () => form.requestSubmit());
+        const includeMarket = document.getElementById('include-market');
+        includeMarket.addEventListener('click', () => {
+            form.elements.include_market.value = includeMarket.getAttribute('aria-pressed') === 'true' ? '0' : '1';
+            form.requestSubmit();
+        });
         const search = form.querySelector('.ledger-asset-search');
         search.addEventListener('input', () => {
             const term = search.value.trim().toLowerCase();
@@ -65,6 +67,9 @@ export function init() {
         search.addEventListener('keydown', event => {
             if (event.key === 'Enter') event.preventDefault();
         });
+        // Render the calendars inside the date popover: clicks on a calendar
+        // appended to the body would light-dismiss the popover.
+        form.querySelectorAll('.ledger-date-input').forEach(input => flatpickr(input, { allowInput: true, static: true }));
     }
     document.addEventListener('keydown', event => {
         const target = event.target;

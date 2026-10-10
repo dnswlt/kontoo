@@ -1,75 +1,53 @@
-import { callout, calloutError, calloutStatus, registerQuotesSubmit } from "./common";
+import { callout, calloutError, calloutStatus, registerQuotesSubmit } from './common';
 
-export function init() {
-    const dropArea = document.getElementById("upload-drop-area");
-
-    // Prevent default drag behaviors
-    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, preventDefaults, false);
-        document.body.addEventListener(eventName, preventDefaults, false);
-    });
-
-    // Highlight drop area when item is dragged over it
-    ['dragenter', 'dragover'].forEach(eventName => {
-        dropArea.addEventListener(eventName, highlight, false);
-    });
-
-    ['dragleave', 'drop'].forEach(eventName => {
-        dropArea.addEventListener(eventName, unhighlight, false);
-    });
-
-    // Handle dropped files
-    dropArea.addEventListener('drop', handleDrop, false);
-
-    async function uploadFiles(files) {
-        const formData = new FormData();
-        files.forEach(file => formData.append("file", file));
-        try {
-            const resp = await fetch("/kontoo/csv", {
-                method: "POST",
-                body: formData,
-            });
-            if (!resp.ok) {
-                const text = await resp.text();
-                throw new Error(`Upload failed with status ${resp.status}: ${text}`);
-            }
-            const data = await resp.json();
-            handleUploadReponse(data);
+async function uploadFiles(files) {
+    const formData = new FormData();
+    files.forEach(file => formData.append('file', file));
+    try {
+        const resp = await fetch('/kontoo/csv', {
+            method: 'POST',
+            body: formData,
+        });
+        if (!resp.ok) {
+            const text = await resp.text();
+            throw new Error(`Upload failed with status ${resp.status}: ${text}`);
         }
-        catch (error) {
-            calloutError(`Error during upload: ${error}`);
-        }
-    }
-
-    function handleUploadReponse(data) {
+        const data = await resp.json();
         if (data.innerHTML) {
-            const div = document.getElementById("results-section");
-            div.classList.remove("hidden");
-            div.innerHTML = data.innerHTML;
+            const results = document.getElementById('results-section');
+            results.classList.remove('hidden');
+            results.innerHTML = data.innerHTML;
             registerQuotesSubmit();
         }
-        if (data.status === "OK") {
+        if (data.status === 'OK') {
             callout(`Successfully read ${data.numEntries} rows.`);
         } else {
             calloutStatus(data.status, data.error);
         }
+    } catch (error) {
+        calloutError(`Error during upload: ${error}`);
     }
+}
 
-    function preventDefaults(e) {
-        e.preventDefault();
-        e.stopPropagation();
-    }
+export function init() {
+    const dropArea = document.getElementById('upload-drop-area');
+    const fileInput = document.getElementById('upload-file');
 
-    function highlight(e) {
-        dropArea.classList.add('highlight');
-    }
+    // Dropping a file anywhere else must not make the browser navigate to it.
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        document.body.addEventListener(eventName, event => event.preventDefault());
+    });
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => dropArea.classList.add('highlight'));
+    });
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, () => dropArea.classList.remove('highlight'));
+    });
+    dropArea.addEventListener('drop', event => uploadFiles([...event.dataTransfer.files]));
 
-    function unhighlight(e) {
-        dropArea.classList.remove('highlight');
-    }
-
-    function handleDrop(e) {
-        const files = [...e.dataTransfer.files];
-        uploadFiles(files);
-    }
+    // The drop area is the file input's label: clicking it opens the file picker.
+    fileInput.addEventListener('change', () => {
+        uploadFiles([...fileInput.files]);
+        fileInput.value = ''; // Allow choosing the same file again.
+    });
 }

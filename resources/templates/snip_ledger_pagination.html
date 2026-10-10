@@ -1,9 +1,13 @@
+{{define "_LedgerPageFirstIcon"}}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M7 6v12M17 6l-6 6 6 6"/></svg>{{end}}
+{{define "_LedgerPagePreviousIcon"}}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg>{{end}}
+{{define "_LedgerPageNextIcon"}}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>{{end}}
+{{define "_LedgerPageLastIcon"}}<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"><path d="M17 6v12M7 6l6 6-6 6"/></svg>{{end}}
 {{if gt .PageCount 1}}
 <nav class="ledger-pagination" aria-label="Ledger pages">
-    {{if .FirstPageURL}}<a class="ledger-page-link" href="{{.FirstPageURL}}" aria-label="First ledger page">« First</a>{{else}}<span class="ledger-page-link" aria-disabled="true">« First</span>{{end}}
-    {{if .PreviousPageURL}}<a class="ledger-page-link" href="{{.PreviousPageURL}}" rel="prev" aria-label="Previous ledger page">‹ Previous</a>{{else}}<span class="ledger-page-link" aria-disabled="true">‹ Previous</span>{{end}}
+    {{if .FirstPageURL}}<a class="ledger-page-link" href="{{.FirstPageURL}}" title="First page" aria-label="First ledger page">{{template "_LedgerPageFirstIcon"}}</a>{{else}}<span class="ledger-page-link" role="link" aria-disabled="true" aria-label="First ledger page">{{template "_LedgerPageFirstIcon"}}</span>{{end}}
+    {{if .PreviousPageURL}}<a class="ledger-page-link" href="{{.PreviousPageURL}}" rel="prev" title="Previous page" aria-label="Previous ledger page">{{template "_LedgerPagePreviousIcon"}}</a>{{else}}<span class="ledger-page-link" role="link" aria-disabled="true" aria-label="Previous ledger page">{{template "_LedgerPagePreviousIcon"}}</span>{{end}}
     <span class="ledger-page-number">Page {{.Page}} of {{.PageCount}}</span>
-    {{if .NextPageURL}}<a class="ledger-page-link" href="{{.NextPageURL}}" rel="next" aria-label="Next ledger page">Next ›</a>{{else}}<span class="ledger-page-link" aria-disabled="true">Next ›</span>{{end}}
-    {{if .LastPageURL}}<a class="ledger-page-link" href="{{.LastPageURL}}" aria-label="Last ledger page">Last »</a>{{else}}<span class="ledger-page-link" aria-disabled="true">Last »</span>{{end}}
+    {{if .NextPageURL}}<a class="ledger-page-link" href="{{.NextPageURL}}" rel="next" title="Next page" aria-label="Next ledger page">{{template "_LedgerPageNextIcon"}}</a>{{else}}<span class="ledger-page-link" role="link" aria-disabled="true" aria-label="Next ledger page">{{template "_LedgerPageNextIcon"}}</span>{{end}}
+    {{if .LastPageURL}}<a class="ledger-page-link" href="{{.LastPageURL}}" title="Last page" aria-label="Last ledger page">{{template "_LedgerPageLastIcon"}}</a>{{else}}<span class="ledger-page-link" role="link" aria-disabled="true" aria-label="Last ledger page">{{template "_LedgerPageLastIcon"}}</span>{{end}}
 </nav>
 {{end}}

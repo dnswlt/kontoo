@@ -146,7 +146,7 @@ func TestLedgerPageLinks(t *testing.T) {
 			t.Fatalf("page navigation lost context: %s", link)
 		}
 	}
-	for _, link := range []string{v.ClearURL, v.SortHeaders["value"].URL, v.Chips[0].URL, v.Chips[1].URL} {
+	for _, link := range []string{v.ClearURL, v.SortHeaders["value"].URL, v.Chips[0].URL, v.Chips[1].URL, v.AssetClearURL, v.DateClearURL} {
 		u, _ := url.Parse(link)
 		if u.Query().Has("page") {
 			t.Fatalf("changing filters or sorting must reset page: %s", link)
@@ -211,6 +211,15 @@ func TestLedgerFiltersPreserveContext(t *testing.T) {
 		if u.Query().Get("asset") != "stock" || u.Query().Get("search") != "note:" || u.Query().Get("date") != "2024-02-29" || u.Query().Get("sort") != "-value" {
 			t.Fatalf("removing one chip lost context: %s", u)
 		}
+	}
+	for _, link := range []string{v.AssetClearURL, v.DateClearURL} {
+		u, _ := url.Parse(link)
+		if u.Query().Get("search") != "note:" || u.Query().Get("date") != "2024-02-29" || u.Query().Get("sort") != "-value" {
+			t.Fatalf("clearing one filter lost context: %s", u)
+		}
+	}
+	if u, _ := url.Parse(v.AssetClearURL); u.Query().Has("asset") {
+		t.Fatalf("clearing the asset filter kept assets: %s", u)
 	}
 	u, _ := url.Parse(v.SortHeaders["value"].URL)
 	if u.Query().Get("sort") != "value" || len(u.Query()["asset"]) != 2 || u.Query().Get("date") != "2024-02-29" {
