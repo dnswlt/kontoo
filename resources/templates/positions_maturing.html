@@ -15,7 +15,7 @@
     {{end}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
-    <table>
+    <table class="report-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -90,12 +90,12 @@
     </table>
     {{if not .MissingRates}}
     <div class="topsep no-print">
-        <section id="maturities-chart" class="positions-chart" aria-labelledby="maturities-heading" hidden>
+        <section id="maturities-chart" class="positions-chart chart-block" aria-labelledby="maturities-heading" hidden>
             <div class="positions-chart-header">
                 <h2 id="maturities-heading" class="section-heading">Value by time to maturity (years)</h2>
                 <button type="button" id="maturities-chart-hide" class="positions-chart-toggle">Hide chart</button>
             </div>
-            <div class="positions-chart-canvas"><canvas id="maturities-canvas"></canvas></div>
+            <div class="bar-chart-canvas"><canvas id="maturities-canvas"></canvas></div>
         </section>
         <button type="button" id="maturities-chart-show" class="positions-chart-toggle" hidden>Show chart</button>
     </div>

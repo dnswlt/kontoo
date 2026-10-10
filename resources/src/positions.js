@@ -1,5 +1,5 @@
 import { base64ToString, chartColor, loadPref, savePref, stringToBase64 } from './common';
-import Chart from 'chart.js/auto';
+import Chart from './charts';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
 

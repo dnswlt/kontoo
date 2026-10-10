@@ -30,7 +30,7 @@
         <div class="positions-chart-canvas"><canvas id="positions-canvas"></canvas></div>
     </section>
     <button type="button" id="positions-chart-show" class="positions-chart-toggle no-print" hidden>Show chart</button>
-    <table id="positions-table">
+    <table id="positions-table" class="report-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -89,6 +89,7 @@
                         .ValueBaseCurrency}}</span>
                     <span class="tooltiptext">{{percent .FractionOfTotal}} of Total</span>
                 </td>
+                <td class="no-print"></td>
             </tr>
             {{end}}
             {{end}}
@@ -102,6 +103,7 @@
                     <span class="{{if negative .TotalValueBaseCurrency}}negative-amount{{end}}">{{money
                         .TotalValueBaseCurrency}}</span>
                 </td>
+                <td class="no-print"></td>
             </tr>
         </tbody>
     </table>

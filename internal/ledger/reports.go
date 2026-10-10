@@ -34,6 +34,22 @@ type Report struct {
 	Data   []*ReportingPeriodData
 }
 
+// StartDate returns the first reporting period's start, or zero for an empty report.
+func (r *Report) StartDate() civil.Date {
+	if len(r.Data) == 0 {
+		return civil.Date{}
+	}
+	return r.Data[0].Period.Start
+}
+
+// EndDate returns the last reporting period's end, or zero for an empty report.
+func (r *Report) EndDate() civil.Date {
+	if len(r.Data) == 0 {
+		return civil.Date{}
+	}
+	return r.Data[len(r.Data)-1].Period.End
+}
+
 // AssetsWithPurchases returns indices into Assets of assets that had any non-zero purchase.
 func (r *Report) AssetsWithPurchases() []int {
 	var res []int

@@ -12,7 +12,7 @@
     {{template "positions_subnav.html" .}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
-    <table>
+    <table class="report-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -105,9 +105,26 @@
         </tbody>
     </table>
 
+    <div class="topsep no-print">
+        <section id="equity-chart" class="positions-chart chart-block" aria-labelledby="equity-heading" hidden>
+            <div class="positions-chart-header">
+                <h2 id="equity-heading" class="section-heading">Equity asset allocation</h2>
+                <button type="button" id="equity-chart-hide" class="positions-chart-toggle">Hide chart</button>
+            </div>
+            <div class="equity-chart-canvas"><canvas id="equity-canvas"></canvas></div>
+        </section>
+        <button type="button" id="equity-chart-show" class="positions-chart-toggle" hidden>Show chart</button>
+    </div>
+
     {{ if .QuarterlyReport }}
-    <h2>Quarterly Purchases</h2>
-    <table>
+    <script id="quarterly-chart-data" type="application/json">{{.QuarterlyChart}}</script>
+    <section class="quarterly-section">
+    {{ if .QuarterlyReport.AssetsWithPurchases }}
+    <div class="positions-chart-header chart-block">
+        <h2 class="section-heading">Quarterly Purchases</h2>
+        <button type="button" class="positions-chart-toggle no-print" data-chart-toggle="quarterly-purchases-chart">Hide chart</button>
+    </div>
+    <table class="report-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -156,11 +173,24 @@
             {{ end }}
         </tbody>
     </table>
+    <div id="quarterly-purchases-chart" class="chart-block bar-chart-canvas quarterly-chart no-print"><canvas id="quarterly-purchases-canvas"></canvas></div>
+    {{ else }}
+    <div class="positions-chart-header chart-block">
+        <h2 class="section-heading">Quarterly Purchases</h2>
+    </div>
+    <p class="section-empty">No purchases between {{.QuarterlyReport.StartDate}} and {{.QuarterlyReport.EndDate}}.</p>
+    {{ end }}
+    </section>
     {{ end }}
 
     {{ if .QuarterlyReport }}
-    <h2>Quarterly Profit & Loss</h2>
-    <table>
+    <section class="quarterly-section">
+    {{ if .QuarterlyReport.Assets }}
+    <div class="positions-chart-header chart-block">
+        <h2 class="section-heading">Quarterly Profit & Loss</h2>
+        {{ if .QuarterlyChart.HasProfitLoss }}<button type="button" class="positions-chart-toggle no-print" data-chart-toggle="quarterly-pl-chart">Hide chart</button>{{ end }}
+    </div>
+    <table class="report-table">
         <thead>
             <tr>
                 <th>Name</th>
@@ -213,18 +243,17 @@
             {{ end }}
         </tbody>
     </table>
+    {{ if .QuarterlyChart.HasProfitLoss }}
+    <div id="quarterly-pl-chart" class="chart-block bar-chart-canvas quarterly-chart no-print"><canvas id="quarterly-pl-canvas"></canvas></div>
     {{ end }}
-
-    <div class="topsep no-print">
-        <section id="equity-chart" class="positions-chart" aria-labelledby="equity-heading" hidden>
-            <div class="positions-chart-header">
-                <h2 id="equity-heading" class="section-heading">Equity asset allocation</h2>
-                <button type="button" id="equity-chart-hide" class="positions-chart-toggle">Hide chart</button>
-            </div>
-            <div class="equity-chart-canvas"><canvas id="equity-canvas"></canvas></div>
-        </section>
-        <button type="button" id="equity-chart-show" class="positions-chart-toggle" hidden>Show chart</button>
+    {{ else }}
+    <div class="positions-chart-header chart-block">
+        <h2 class="section-heading">Quarterly Profit & Loss</h2>
     </div>
+    <p class="section-empty">No equity positions since {{ (index .QuarterlyReport.Data 0).Period.Start }}.</p>
+    {{ end }}
+    </section>
+    {{ end }}
 
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})

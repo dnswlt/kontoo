@@ -1,8 +1,10 @@
-import Chart from 'chart.js/auto';
+import Chart, { barChartOptions, barStyle } from './charts';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { chartColor, loadPref, savePref } from './common';
 
 const hiddenKey = 'kontoo.positions.equityChartHidden';
+const profitColor = '#2f9e6e';
+const lossColor = 'rgb(219, 18, 34)'; // --red-number
 let chart = null;
 
 function share(ctx) {
@@ -21,7 +23,7 @@ function drawDoughnutChart(chartData) {
                 animation: false,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: { position: 'right' },
+                    legend: { position: 'right', labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 10 } },
                     tooltip: {
                         callbacks: {
                             label: ctx => `${ctx.formattedValue} ${chartData.currency} (${share(ctx).toFixed(1)}%)`,
@@ -76,7 +78,48 @@ function setHidden(hidden) {
     render();
 }
 
+function drawBarChart(canvasId, labels, valueMicros, color, currency) {
+    const values = valueMicros.map(v => v / 1e6);
+    new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: { labels, datasets: [{ ...barStyle, data: values, backgroundColor: values.map(color) }] },
+        options: barChartOptions(currency),
+    });
+}
+
+// The quarterly charts sit below their tables; the button in the heading row
+// hides or shows the chart, remembered per browser. Charts are drawn once visible.
+function initQuarterlyChart(name, draw) {
+    const chartDiv = document.getElementById(`${name}-chart`);
+    if (!chartDiv) return; // Section without data.
+    const button = document.querySelector(`[data-chart-toggle="${name}-chart"]`);
+    const key = `kontoo.positions.${name}ChartHidden`;
+    let drawn = false;
+    const render = () => {
+        const hidden = loadPref(key) === 'true';
+        chartDiv.hidden = hidden;
+        button.textContent = hidden ? 'Show chart' : 'Hide chart';
+        if (!hidden && !drawn) {
+            draw();
+            drawn = true;
+        }
+    };
+    button.addEventListener('click', () => {
+        savePref(key, String(!chartDiv.hidden));
+        render();
+    });
+    render();
+}
+
 export function init() {
+    const quarterly = document.getElementById('quarterly-chart-data');
+    if (quarterly) {
+        const data = JSON.parse(quarterly.textContent);
+        initQuarterlyChart('quarterly-purchases', () =>
+            drawBarChart('quarterly-purchases-canvas', data.labels, data.purchases, () => chartColor(0), data.currency));
+        initQuarterlyChart('quarterly-pl', () =>
+            drawBarChart('quarterly-pl-canvas', data.labels, data.profitLoss, v => (v < 0 ? lossColor : profitColor), data.currency));
+    }
     document.getElementById('equity-chart-hide').addEventListener('click', () => setHidden(true));
     document.getElementById('equity-chart-show').addEventListener('click', () => setHidden(false));
     render();

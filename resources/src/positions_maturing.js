@@ -1,54 +1,30 @@
-import Chart from 'chart.js/auto';
-import { loadPref, savePref } from './common';
+import Chart, { barChartOptions, barStyle } from './charts';
+import { chartColor, loadPref, savePref } from './common';
 
 const hiddenKey = 'kontoo.positions.maturitiesChartHidden';
 let chart = null;
 
 function drawBarChart(maturities) {
     if (!chart) {
-        chart = new Chart(
-            document.getElementById('maturities-canvas'),
-            {
-                type: 'bar',
-                data: {},
-                options: {
-                    animation: false,
-                    parsing: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            display: true,
-                            title: {
-                                display: true,
-                                text: maturities.currency
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: false
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function (ctx) {
-                                    // Display both absolute and % values in tooltip.
-                                    const pct = ctx.dataset.data[ctx.dataIndex] / ctx.dataset.data.reduce((s, r) => (s + r), 0) * 100;
-                                    return ctx.formattedValue + " (" + pct.toFixed(1) + "%)";
-                                }
-                            }
-                        }
-                    }
-                },
-            }
-        );
+        // The tooltip shows each bucket's share of the total, too.
+        const tooltipLabel = ctx => {
+            const pct = ctx.raw / ctx.dataset.data.reduce((sum, v) => sum + v, 0) * 100;
+            return `${ctx.formattedValue} ${maturities.currency} (${pct.toFixed(1)}%)`;
+        };
+        chart = new Chart(document.getElementById('maturities-canvas'), {
+            type: 'bar',
+            data: {},
+            options: barChartOptions(maturities.currency, tooltipLabel),
+        });
     }
     chart.data = {
         labels: maturities.bucketLabels,
         datasets: maturities.values.map(v => ({
-            label: v.label,
-            data: v.valueMicros.map(x => Math.round(x / 1e6))
-        }))
-    }
+            ...barStyle,
+            backgroundColor: chartColor(0),
+            data: v.valueMicros.map(x => Math.round(x / 1e6)),
+        })),
+    };
     chart.update('none');
 }
 

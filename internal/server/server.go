@@ -883,6 +883,23 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 	if totalPL1YBasis != 0 {
 		totalProfitLoss1YRatio = totalPL1Y.Div(totalPL1YBasis)
 	}
+	report := s.Store().QuarterlyReport(date, 5)
+	// Quarterly totals for the purchases and P&L charts, as int64 micros.
+	type quarterlyChart struct {
+		Currency   units.Currency `json:"currency"`
+		Labels     []string       `json:"labels"`
+		Purchases  []int64        `json:"purchases"`
+		ProfitLoss []int64        `json:"profitLoss"`
+		// False if all P&L totals are zero: then there is nothing to chart.
+		HasProfitLoss bool `json:"-"`
+	}
+	chart := quarterlyChart{Currency: s.Store().BaseCurrency()}
+	for _, d := range report.Data {
+		chart.Labels = append(chart.Labels, d.Period.Label)
+		chart.Purchases = append(chart.Purchases, int64(d.PurchasesTotal))
+		chart.ProfitLoss = append(chart.ProfitLoss, int64(d.ProfitLossTotal))
+		chart.HasProfitLoss = chart.HasProfitLoss || d.ProfitLossTotal != 0
+	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
 		"ActiveChips": map[string]bool{
@@ -899,7 +916,8 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 		},
 		"MonthOptions":    ui.MonthOptions(*r.URL, date),
 		"YearOptions":     ui.YearOptions(*r.URL, date, minDate, maxDate),
-		"QuarterlyReport": s.Store().QuarterlyReport(date, 5),
+		"QuarterlyReport": report,
+		"QuarterlyChart":  chart,
 	})
 	return s.templates.ExecuteTemplate(w, "positions_equity.html", ctx)
 }
