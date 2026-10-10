@@ -1,4 +1,3 @@
-import { registerContextMenu, base64ToString, stringToBase64 } from "./common";
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 import { format } from "date-fns";
@@ -6,18 +5,6 @@ import { enGB } from 'date-fns/locale';
 
 
 let chart = null;
-
-function followUrl(item) {
-    window.location.href = item.dataset.url;
-}
-
-function contextMenuSelected(item) {
-    const action = item.dataset.action;
-    if (["add-entry", "show-ledger", "edit-asset"].includes(action)) {
-        return followUrl(item);
-    }
-    console.error(`Unhandled action in context menu: ${action}`);
-}
 
 function drawBarChart(maturities) {
     if (!chart) {
@@ -106,9 +93,6 @@ async function fetchAndDrawMaturities() {
 }
 
 export function init() {
-    document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
-        registerContextMenu(td, contextMenuSelected);
-    });
     const chartDiv = document.querySelector("#maturities-chart");
     chartDiv.querySelector(".close").addEventListener("click", () => {
         chartDiv.classList.add("hidden");

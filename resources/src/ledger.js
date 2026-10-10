@@ -1,126 +1,77 @@
-import { calloutError, hideCallout } from "./common";
+import { calloutError } from './common';
 
-async function deleteLedgerEntry(sequenceNum) {
+async function deleteLedgerEntry(button) {
+    const sequenceNum = Number(button.dataset.seq);
+    if (!window.confirm(`Delete entry #${sequenceNum}? This cannot be undone.`)) return;
+    button.disabled = true;
     try {
-        const response = await fetch("/kontoo/entries/delete", {
-            method: "POST",
-            body: JSON.stringify({
-                sequenceNum: sequenceNum
-            }),
-            headers: {
-                "Content-Type": "application/json"
-            }
+        const response = await fetch('/kontoo/entries/delete', {
+            method: 'POST',
+            body: JSON.stringify({ sequenceNum }),
+            headers: { 'Content-Type': 'application/json' }
         });
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
+        if (!response.ok) throw new Error((await response.text()) || `HTTP error: ${response.status}`);
         const data = await response.json();
-        if (data.status === "OK") {
-            console.log(`Deleted ledger entry ${data.sequenceNum}.`);
-            location.reload();
-        } else {
-            console.error("Could not delete ledger entry:", data.status, data.error);
-        }
-    }
-    catch (error) {
-        console.error("Error on submit:", error);
-    }
-}
-
-async function editLedgerEntry(sequenceNum) {
-    console.log(`WIP: Would like to edit entry ${sequenceNum}`);
-}
-
-async function reloadLedger() {
-    try {
-        const resp = await fetch("/kontoo/ledger/reload", {
-            method: "POST"
-        });
-        if (!resp.ok) {
-            throw new Error(`HTTP error: status ${resp.status}`);
-        }
+        if (data.status !== 'OK') throw new Error(data.error || 'Could not delete the entry.');
         location.reload();
-    }
-    catch (error) {
-        console.error("Failed to reload:", error);
-    }
-}
-
-function registerTableEventListeners() {
-    document.querySelectorAll("button.delete").forEach(button => {
-        button.addEventListener("click", () => deleteLedgerEntry(parseInt(button.dataset.seq)));
-    });
-    document.querySelectorAll("button.edit").forEach(button => {
-        button.addEventListener("click", () => editLedgerEntry(parseInt(button.dataset.seq)));
-    });
-}
-
-async function filterEntries(query) {
-    try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('q', query);
-        url.searchParams.set('snippet', 'true')
-        const response = await fetch(url);
-        if (!response.ok) {
-            const body = await response.text();
-            if (body) {
-                throw new Error(body);
-            }
-            throw new Error(`Server responsed with status ${response.status}`);
-        }
-        // Hide any previously shown callout explicitly, since we don't reload the page.
-        hideCallout();
-        // Display result.
-        const html = await response.text();
-        document.getElementById("ledger-table-div").innerHTML = html;
-        registerTableEventListeners();
-        // Request the full page in the browser's history.
-        url.searchParams.delete("snippet");
-        history.pushState({ html: html, query: query }, "", url.href);
-    }
-    catch (error) {
+    } catch (error) {
         calloutError(error.message);
+        button.disabled = false;
+    }
+}
+
+async function reloadLedger(button) {
+    button.disabled = true;
+    try {
+        const response = await fetch('/kontoo/ledger/reload', { method: 'POST' });
+        if (!response.ok) throw new Error((await response.text()) || `HTTP error: ${response.status}`);
+        location.reload();
+    } catch (error) {
+        calloutError(error.message);
+        button.disabled = false;
     }
 }
 
 export function init() {
-    // Per-row buttons
-    document.getElementById("toggle-row-actions").addEventListener("click", () => {
-        document.querySelectorAll(".action-column").forEach(elem => {
-            elem.classList.toggle("hidden");
+    document.querySelectorAll('#ledger-page form').forEach(form => {
+        form.addEventListener('formdata', event => {
+            if (event.formData.has('include_market')) {
+                event.formData.set('include_market', event.formData.getAll('include_market').includes('1') ? '1' : '0');
+            }
+            for (const [name, value] of [...event.formData]) {
+                if (value === '') event.formData.delete(name);
+            }
         });
     });
-
-    document.getElementById("reload-ledger").addEventListener("click", reloadLedger);
-
-    registerTableEventListeners();
-
-    // Filter query
-    const filter = document.getElementById("filter");
-    filter.addEventListener('keydown', async function (event) {
-        if (event.key !== 'Enter') {
-            return;
-        }
-        event.preventDefault();
-        const query = event.target.value;
-        await filterEntries(query);
+    document.querySelectorAll('button.delete').forEach(button => {
+        button.addEventListener('click', () => deleteLedgerEntry(button));
     });
-    window.addEventListener("popstate", (event) => {
-        if (event.state) {
-            const state = event.state;
-            document.getElementById("ledger-table-div").innerHTML = state.html;
-            document.getElementById("filter").value = state.query;
-            registerTableEventListeners();
-        } else {
-            // No state => just refresh the page
-            location.reload();
-        }
-    });
-    // Focus the search bar if "/" is hit.
-    document.addEventListener('keydown', function(event) {
-        if (event.key === '/' && event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
+    const reload = document.getElementById('reload-ledger');
+    reload.addEventListener('click', () => reloadLedger(reload));
+    const form = document.getElementById('ledger-filters');
+    if (form) {
+        form.querySelector('[name="include_market"]').addEventListener('change', () => form.requestSubmit());
+        const search = form.querySelector('.ledger-asset-search');
+        search.addEventListener('input', () => {
+            const term = search.value.trim().toLowerCase();
+            let matches = 0;
+            form.querySelectorAll('.ledger-asset-options label').forEach(option => {
+                const visible = option.textContent.toLowerCase().includes(term);
+                option.hidden = !visible;
+                if (visible) matches++;
+            });
+            form.querySelector('.ledger-asset-empty').hidden = matches > 0;
+        });
+        search.addEventListener('keydown', event => {
+            if (event.key === 'Enter') event.preventDefault();
+        });
+    }
+    document.addEventListener('keydown', event => {
+        const target = event.target;
+        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey &&
+            !target.isContentEditable && !['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName)) {
             event.preventDefault();
-            document.getElementById("filter").focus();
+            document.getElementById('filter').focus();
         }
     });
 }

@@ -1,21 +1,8 @@
-import { registerContextMenu } from "./common";
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 
 
 let chart = null;
-
-function followUrl(item) {
-    window.location.href = item.dataset.url;
-}
-
-function contextMenuSelected(item) {
-    const action = item.dataset.action;
-    if (["add-entry", "show-ledger", "edit-asset"].includes(action)) {
-        return followUrl(item);
-    }
-    console.error(`Unhandled action in context menu: ${action}`);
-}
 
 function drawDoughnutChart(chartData) {
     if (!chart) {
@@ -94,9 +81,6 @@ async function fetchAndDrawEquity() {
 }
 
 export function init() {
-    document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
-        registerContextMenu(td, contextMenuSelected);
-    });
     const chartDiv = document.querySelector("#equity-chart");
     chartDiv.querySelector(".close").addEventListener("click", () => {
         chartDiv.classList.add("hidden");

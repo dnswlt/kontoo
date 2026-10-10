@@ -1,29 +1,60 @@
 <!DOCTYPE html>
 <html lang="en">
-
-<head>
-    {{template "head_common.html"}}
-</head>
-
+<head>{{template "head_common.html"}}</head>
 <body id="ledger-page">
     {{template "nav.html" .}}
     <h1>Ledger</h1>
-    <div id="status-callout" class="callout hidden"></div>
-    <div class="minibar">
-        <div class="minibar-group">
-            <input id="filter" type="text" class="filter" value="{{.Query}}">
+    <div id="status-callout" class="callout hidden" role="alert"></div>
+    {{if .Filters.Error}}<div class="callout callout-err" role="alert">{{.Filters.Error}}</div>{{end}}
+
+    <form id="ledger-filters" method="get" action="/kontoo/ledger">
+        {{if .Filters.Date}}<input type="hidden" name="date" value="{{.Filters.Date}}">{{end}}
+        <input type="hidden" name="sort" value="{{.Filters.Sort}}">
+        <div class="ledger-toolbar">
+            <label class="ledger-search-label" for="filter">Search entries</label>
+            <input id="filter" name="search" type="search" value="{{.Filters.Search}}" placeholder="Search assets, identifiers or comments" autocomplete="off">
+            <button class="ledger-primary" type="submit">Search</button>
+            <button class="ledger-button ledger-filter-trigger" type="button" popovertarget="ledger-filter-panel" data-positioned-popover>Add filter <span aria-hidden="true">＋</span></button>
+            <button id="reload-ledger" class="ledger-button ledger-icon-button" type="button" title="Reload ledger" aria-label="Reload ledger">
+                <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.4 6.4L3 16M3 21v-5h5"/></svg>
+            </button>
+            <label class="ledger-market-toggle"><input type="checkbox" name="include_market" value="1" {{if .Filters.IncludeMarket}}checked{{end}}> Include prices and exchange rates</label>
+            <input type="hidden" name="include_market" value="0">
         </div>
-        <div class="minibar-group">
-            <button class="minibar" id="toggle-row-actions" type="button">Edit</button>
+        <div id="ledger-filter-panel" class="ledger-filter-panel" popover="auto" aria-labelledby="ledger-filter-title">
+            <h2 id="ledger-filter-title">Filter entries</h2>
+            <section class="ledger-filter-group" aria-labelledby="ledger-assets-title">
+                <h3 id="ledger-assets-title">Asset</h3>
+                <input class="ledger-asset-search" type="search" placeholder="Find an asset…" aria-label="Find an asset" autocomplete="off" autofocus>
+                <div class="ledger-filter-options ledger-asset-options">
+                    {{range .Filters.Assets}}<label><input type="checkbox" name="asset" value="{{.Value}}" {{if .Selected}}checked{{end}}> <span>{{.Label}}</span></label>{{end}}
+                </div>
+                <p class="ledger-asset-empty" hidden>No assets found.</p>
+            </section>
+            <section class="ledger-filter-group" aria-labelledby="ledger-dates-title">
+                <h3 id="ledger-dates-title">Date range</h3>
+                <div class="ledger-date-range">
+                    <label>From <input name="from" type="date" value="{{.Filters.From}}"></label>
+                    <label>Through <input name="until" type="date" value="{{.Filters.Until}}"></label>
+                </div>
+            </section>
+            <div class="ledger-filter-footer"><a class="ledger-text-link" href="{{.Filters.ClearURL}}">Clear filters</a><button class="ledger-primary" type="submit">Apply filters</button></div>
         </div>
-        <div class="minibar-group">
-            <button id="reload-ledger" type="button">Reload</button>
-        </div>
+    </form>
+    {{if .Filters.Chips}}
+    <div class="ledger-filter-chips" aria-label="Applied filters">
+        {{range .Filters.Chips}}<a href="{{.URL}}" aria-label="Remove filter {{.Label}}">{{.Label}} <span aria-hidden="true">×</span></a>{{end}}
+        <a class="ledger-clear-filters" href="{{.Filters.ClearURL}}">Clear all</a>
     </div>
-    <div id="ledger-table-div">
+    {{end}}
+    <div class="ledger-results-bar">
+        <span>{{if gt .Filters.PageCount 1}}{{.Filters.FirstEntry}}–{{.Filters.LastEntry}} of {{end}}{{.Filters.EntryCount}} {{if eq .Filters.EntryCount 1}}entry{{else}}entries{{end}}</span>
+        {{template "snip_ledger_pagination.html" .Filters}}
+    </div>
+    <div id="ledger-table-div" class="ledger-table-wrap">
         {{template "snip_ledger_table.html" .}}
     </div>
-
+    {{if gt .Filters.PageCount 1}}<div class="ledger-pagination-footer">{{template "snip_ledger_pagination.html" .Filters}}</div>{{end}}
+    <p class="footer">Report generated {{.Now}}</p>
 </body>
-
 </html>

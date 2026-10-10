@@ -126,30 +126,3 @@ export function registerQuotesSubmit() {
         submit.addEventListener("click", handleQuotesSubmit);
     }
 }
-
-export function registerContextMenu(element, callback) {
-    if (!element.classList.contains("contextmenu")) {
-        console.error("Context menu must have class contextmenu");
-        return;
-    }
-    const menu = element.querySelector(".contextmenu-options");
-    if (!menu) {
-        console.error("Cannot register context for element: no .contextmenu child div");
-        return;
-    }
-    element.setAttribute("tabindex", "0");
-    element.addEventListener("focus", function () {
-        element.classList.add("open");
-    });
-    element.addEventListener("blur", function () {
-        element.classList.remove("open");
-    });
-    menu.addEventListener("click", (event) => {
-        const option = event.target;
-        if (!option.classList.contains("contextmenu-option")) {
-            return;
-        }
-        element.blur();
-        callback(option);
-    })
-}

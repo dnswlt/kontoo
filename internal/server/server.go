@@ -543,7 +543,7 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 	}
 	ctx["Nav"] = map[string]string{
 		// Default filter for ledger view: no prices and exchange rates.
-		"ledger":        newURL("/kontoo/ledger", addP(ctxQ, "q", "$main")).String(),
+		"ledger":        newURL("/kontoo/ledger", ctxQ).String(),
 		"positions":     newURL("/kontoo/positions", ctxQ).String(),
 		"addEntry":      newURL("/kontoo/entries/new", ctxQ).String(),
 		"updateBalance": newURL("/kontoo/entries/new", addP(ctxQ, "prefill", "balance")).String(),
@@ -554,19 +554,6 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		"calc":          newURL("/kontoo/calc", ctxQ).String(),
 	}
 	return ctx
-}
-
-func (s *Server) renderLedgerTemplate(w io.Writer, r *http.Request, query *ledger.Query, snippet bool) error {
-	rows := s.Store().LedgerEntryRows(query)
-	tmpl := "ledger.html"
-	if snippet {
-		tmpl = "snip_ledger_table.html"
-	}
-	ctx := s.addCommonCtx(r, map[string]any{
-		"TableRows": rows,
-		"Query":     query.Raw(),
-	})
-	return s.templates.ExecuteTemplate(w, tmpl, ctx)
 }
 
 func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *ledger.LedgerEntry, date civil.Date) error {
@@ -877,19 +864,20 @@ func (s *Server) renderSnipAssetInfo(w io.Writer, asset *ledger.Asset, date civi
 }
 
 func (s *Server) handleLedger(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	query, err := ledger.ParseQuery(q.Get("q"))
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Invalid query: %v", err), http.StatusBadRequest)
-		return
+	ctx, queryErr := s.ledgerViewContext(r)
+	tmpl := "ledger.html"
+	if r.URL.Query().Get("snippet") == "true" {
+		tmpl = "snip_ledger_table.html"
 	}
-	snippet := q.Get("snippet") == "true"
 	var buf bytes.Buffer
-	if err := s.renderLedgerTemplate(&buf, r, query, snippet); err != nil {
+	if err := s.templates.ExecuteTemplate(&buf, tmpl, ctx); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
+	if queryErr != nil {
+		w.WriteHeader(http.StatusBadRequest)
+	}
 	w.Write(buf.Bytes())
 }
 

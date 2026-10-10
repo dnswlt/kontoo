@@ -350,3 +350,32 @@ type Ledger struct {
 func (t EntryType) NeedsAssetID() bool {
 	return t != ExchangeRate && t != UnspecifiedEntryType
 }
+
+func (t EntryType) DisplayName() string {
+	switch t {
+	case AssetPurchase:
+		return "Purchase"
+	case AssetSale:
+		return "Sale"
+	case AssetPrice:
+		return "Price"
+	case AssetHolding:
+		return "Holding"
+	case AccountCredit:
+		return "Credit"
+	case AccountDebit:
+		return "Debit"
+	case AccountBalance:
+		return "Balance"
+	case AssetMaturity:
+		return "Maturity"
+	case DividendPayment:
+		return "Dividend"
+	case InterestPayment:
+		return "Interest"
+	case ExchangeRate:
+		return "Exchange rate"
+	default:
+		return t.String()
+	}
+}

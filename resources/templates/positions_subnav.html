@@ -8,7 +8,7 @@
     <div class="report-date-controls" role="group" aria-label="Report date">
         <span class="report-date-label">As of</span>
         {{if .YearOptions}}
-        <button type="button" class="report-date-button" popovertarget="report-years"
+        <button type="button" class="report-date-button" data-positioned-popover popovertarget="report-years"
             aria-label="Choose year, current year {{.YearOptions.Selected.Name}}">
             {{.YearOptions.Selected.Name}}
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>
@@ -24,7 +24,7 @@
         </div>
         {{end}}
         {{if .MonthOptions}}
-        <button type="button" class="report-date-button" popovertarget="report-months"
+        <button type="button" class="report-date-button" data-positioned-popover popovertarget="report-months"
             aria-label="Choose month, current month {{.MonthOptions.Selected.Name}}">
             {{.MonthOptions.Selected.Name}}
             <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="m4 6 4 4 4-4"/></svg>

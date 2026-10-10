@@ -33,7 +33,7 @@
             "IssueDate": "2001-02-15",
             "MaturityDate": "2031-02-15",
             "Interest": "0.053750",
-            "InterestPayment": "annual"
+            "InterestPayment": "AnnualPayment"
         }
     ],
     "Entries": [

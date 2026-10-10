@@ -1,0 +1,9 @@
+{{if gt .PageCount 1}}
+<nav class="ledger-pagination" aria-label="Ledger pages">
+    {{if .FirstPageURL}}<a class="ledger-page-link" href="{{.FirstPageURL}}" aria-label="First ledger page">« First</a>{{else}}<span class="ledger-page-link" aria-disabled="true">« First</span>{{end}}
+    {{if .PreviousPageURL}}<a class="ledger-page-link" href="{{.PreviousPageURL}}" rel="prev" aria-label="Previous ledger page">‹ Previous</a>{{else}}<span class="ledger-page-link" aria-disabled="true">‹ Previous</span>{{end}}
+    <span class="ledger-page-number">Page {{.Page}} of {{.PageCount}}</span>
+    {{if .NextPageURL}}<a class="ledger-page-link" href="{{.NextPageURL}}" rel="next" aria-label="Next ledger page">Next ›</a>{{else}}<span class="ledger-page-link" aria-disabled="true">Next ›</span>{{end}}
+    {{if .LastPageURL}}<a class="ledger-page-link" href="{{.LastPageURL}}" aria-label="Last ledger page">Last »</a>{{else}}<span class="ledger-page-link" aria-disabled="true">Last »</span>{{end}}
+</nav>
+{{end}}

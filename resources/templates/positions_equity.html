@@ -42,13 +42,11 @@
         <tbody>
             {{range .TableRows}}
             <tr>
-                <td class="contextmenu entry-actions">
-                    {{ .AssetName }}
-                    <div class="contextmenu-options">
-                        <div class="contextmenu-option" data-url='{{setp $nav.addEntry "AssetID" .AssetID}}'
-                            data-action="add-entry">Add entry</div>
-                        <div class="contextmenu-option" data-url='{{setp $nav.ledger "q" (concat "id=" .AssetID) }}'
-                            data-action="show-ledger">Show ledger</div>
+                <td class="position-name">
+                    {{template "snip_position_action_button.html" .}}
+                    <div id="position-actions-{{.AssetID}}" class="position-actions-popover" popover="auto" aria-label="Actions for {{.AssetName}}">
+                        <a href='{{setp $nav.addEntry "AssetID" .AssetID}}'>Add entry</a>
+                        <a href='{{setpvar $nav.editAsset "assetID" .AssetID}}'>Edit asset</a>
                     </div>
                 </td>
                 <td>{{ .AssetID }}</td>

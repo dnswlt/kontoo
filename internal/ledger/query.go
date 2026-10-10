@@ -36,6 +36,7 @@ type Query struct {
 	ordering     []fieldOrdering // Fields to order by. If set, the `descending` field is ignored.
 	// Maximum number of entries to return per "group" (typically: asset)
 	maxPerGroup int
+	filters     *EntryFilters
 }
 
 func (q *Query) Raw() string {
@@ -43,7 +44,7 @@ func (q *Query) Raw() string {
 }
 
 func (q *Query) Empty() bool {
-	return q.raw == ""
+	return q.raw == "" && q.filters == nil
 }
 
 var (
@@ -322,6 +323,9 @@ func matchAsset(t string, a *Asset) bool {
 func (q *Query) Match(e *LedgerEntryRow) bool {
 	if q.Empty() {
 		return true
+	}
+	if q.filters != nil && !q.filters.match(e) {
+		return false
 	}
 	// Terms matching any of the "standard" fields.
 	for _, t := range q.terms {

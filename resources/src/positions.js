@@ -1,4 +1,4 @@
-import { registerContextMenu, base64ToString, stringToBase64 } from "./common";
+import { base64ToString, stringToBase64 } from "./common";
 import Chart from 'chart.js/auto'
 import 'chartjs-adapter-date-fns'
 import { enGB } from 'date-fns/locale'
@@ -9,21 +9,6 @@ let uiState = {
     assetIds: [],
     period: "1Y",  // Period to be displayed.
 };
-
-function followUrl(item) {
-    window.location.href = item.dataset.url;
-}
-
-function contextMenuSelected(item) {
-    const action = item.dataset.action;
-    if (["add-entry", "update-balance", "show-ledger", "edit-asset"].includes(action)) {
-        return followUrl(item);
-    }
-    if (action === "toggle-chart") {
-        return toggleChartDisplay(item.dataset.id);
-    }
-    console.error(`Unhandled action in context menu: ${action}`);
-}
 
 function updateUIState(update) {
     uiState = { ...uiState, ...update }
@@ -155,8 +140,11 @@ async function fetchAndDrawTimelines() {
 }
 
 export function init() {
-    document.querySelectorAll(".contextmenu.entry-actions").forEach((td) => {
-        registerContextMenu(td, contextMenuSelected);
+    document.querySelectorAll("[data-position-chart]").forEach(button => {
+        button.addEventListener("click", () => {
+            button.closest("[popover]").hidePopover();
+            toggleChartDisplay(button.dataset.positionChart);
+        });
     });
     const chartDiv = document.querySelector("#positions-chart");
     if (chartDiv) {
