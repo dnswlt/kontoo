@@ -825,17 +825,40 @@ func (s *Server) renderQuotesTemplate(w io.Writer, r *http.Request, date civil.D
 func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	rows := positionTableRows(s.Store(), date)
 	groups := positionTableRowGroups(rows)
-	var total units.Micros
-	for _, g := range groups {
-		total += g.ValueBaseCurrency()
+	// Totals and the category chart need all values in the base currency.
+	missingRates := missingExchangeRates(rows)
+	// Category totals for the allocation chart, largest first, as int64 micros.
+	type categoryChart struct {
+		Currency units.Currency `json:"currency"`
+		Labels   []string       `json:"labels"`
+		Values   []int64        `json:"values"`
 	}
-	for _, g := range groups {
-		g.FractionOfTotal = g.ValueBaseCurrency().Div(total)
+	chart := categoryChart{Currency: s.Store().BaseCurrency()}
+	var total units.Micros
+	if len(missingRates) == 0 {
+		for _, g := range groups {
+			total += g.ValueBaseCurrency()
+		}
+		if total != 0 {
+			for _, g := range groups {
+				g.FractionOfTotal = g.ValueBaseCurrency().Div(total)
+			}
+		}
+		byValue := slices.Clone(groups)
+		slices.SortStableFunc(byValue, func(a, b *PositionTableRowGroup) int {
+			return cmp.Compare(b.ValueBaseCurrency(), a.ValueBaseCurrency())
+		})
+		for _, g := range byValue {
+			chart.Labels = append(chart.Labels, g.Category.DisplayName())
+			chart.Values = append(chart.Values, int64(g.ValueBaseCurrency()))
+		}
 	}
 	minDate, maxDate := s.Store().ValueDateRange()
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TotalValueBaseCurrency": total,
 		"Groups":                 groups,
+		"MissingRates":           missingRates,
+		"CategoryChart":          chart,
 		"ActiveChips": map[string]bool{
 			"all":   true,
 			"today": date.Equal(civil.Today()),

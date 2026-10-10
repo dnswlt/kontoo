@@ -96,7 +96,7 @@ func TestPositionsMaturitiesMissingExchangeRate(t *testing.T) {
 	}
 	html := b.String()
 	if !strings.Contains(html, "No exchange rate for CHF as of 2024-06-30") ||
-		strings.Contains(html, `class="total"`) || strings.Contains(html, `id="maturities-chart"`) {
+		strings.Contains(html, `class="total"`) || strings.Contains(html, `id="maturities-canvas"`) {
 		t.Error("missing rates should show a warning instead of totals and the chart")
 	}
 }

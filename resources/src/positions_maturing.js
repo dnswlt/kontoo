@@ -1,7 +1,6 @@
 import Chart, { barChartOptions, barStyle } from './charts';
-import { chartColor, loadPref, savePref } from './common';
+import { chartColor } from './common';
 
-const hiddenKey = 'kontoo.positions.maturitiesChartHidden';
 let chart = null;
 
 function drawBarChart(maturities) {
@@ -14,7 +13,7 @@ function drawBarChart(maturities) {
         chart = new Chart(document.getElementById('maturities-canvas'), {
             type: 'bar',
             data: {},
-            options: barChartOptions(maturities.currency, tooltipLabel),
+            options: barChartOptions(maturities.currency, { tooltipLabel }),
         });
     }
     chart.data = {
@@ -57,22 +56,7 @@ async function fetchAndDrawMaturities() {
     }
 }
 
-// Whether the chart is hidden is remembered per browser, like the chart on the "All" tab.
-function render() {
-    const hidden = loadPref(hiddenKey) === 'true';
-    document.getElementById('maturities-chart').hidden = hidden;
-    document.getElementById('maturities-chart-show').hidden = !hidden;
-    if (!hidden) fetchAndDrawMaturities();
-}
-
-function setHidden(hidden) {
-    savePref(hiddenKey, String(hidden));
-    render();
-}
-
 export function init() {
-    if (!document.getElementById('maturities-chart')) return; // Not shown when exchange rates are missing.
-    document.getElementById('maturities-chart-hide').addEventListener('click', () => setHidden(true));
-    document.getElementById('maturities-chart-show').addEventListener('click', () => setHidden(false));
-    render();
+    // The chart is not shown when exchange rates are missing.
+    if (document.getElementById('maturities-canvas')) fetchAndDrawMaturities();
 }

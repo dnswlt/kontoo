@@ -1,12 +1,12 @@
 import { base64ToString, chartColor, loadPref, savePref, stringToBase64 } from './common';
-import Chart from './charts';
+import Chart, { barChartOptions, barStyle, lossColor } from './charts';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
 
 // The chart shows the total value of all assets, or only the selected assets.
-// Selection and period live in the URL. Whether the chart is hidden and the
-// last chosen period (the default for URLs without one) are per-browser preferences.
-const hiddenKey = 'kontoo.positions.chartHidden';
+// Selection and period live in the URL. The last chosen period (the default for
+// URLs without one) is a per-browser preference.
 const periodKey = 'kontoo.positions.chartPeriod';
 const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' });
 
@@ -34,15 +34,6 @@ function updateState(update) {
     render();
 }
 
-function isHidden() {
-    return loadPref(hiddenKey) === 'true';
-}
-
-function setHidden(hidden) {
-    savePref(hiddenKey, String(hidden));
-    render();
-}
-
 function setPeriod(period) {
     savePref(periodKey, period);
     updateState({ period });
@@ -52,7 +43,6 @@ function toggleAsset(assetId) {
     const assetIds = state.assetIds.includes(assetId)
         ? state.assetIds.filter(id => id !== assetId)
         : [...state.assetIds, assetId];
-    if (isHidden()) setHidden(false);
     updateState({ assetIds });
 }
 
@@ -158,9 +148,6 @@ function markRows(timelines) {
 }
 
 async function render() {
-    const hidden = isHidden();
-    document.getElementById('positions-chart').hidden = hidden;
-    document.getElementById('positions-chart-show').hidden = !hidden;
     document.querySelectorAll('.positions-chart-periods button').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.period === state.period));
     });
@@ -168,10 +155,6 @@ async function render() {
         button.textContent = state.assetIds.includes(button.dataset.positionChart) ? 'Remove from chart' : 'Show in chart';
     });
     request?.abort();
-    if (hidden) {
-        markRows([]);
-        return;
-    }
     request = new AbortController();
     try {
         const date = new URLSearchParams(window.location.search).get('date');
@@ -196,7 +179,34 @@ async function render() {
     }
 }
 
+// Category allocation: one horizontal bar per category, labelled with its share
+// of the net total. Debts are negative and extend left of zero.
+function drawCategoryChart(data) {
+    const values = data.values.map(v => Math.round(v / 1e6));
+    const total = values.reduce((sum, v) => sum + v, 0);
+    const share = value => (total ? `${(value / total * 100).toFixed(1)}%` : '');
+    const canvas = document.getElementById('category-canvas');
+    canvas.parentElement.style.height = `${values.length * 34 + 40}px`;
+    const options = barChartOptions(data.currency, {
+        horizontal: true,
+        tooltipLabel: ctx => `${ctx.formattedValue} ${data.currency} (${share(ctx.raw)})`,
+    });
+    options.scales.x.grace = '15%'; // Room for the share labels at the bar ends.
+    options.plugins.datalabels = { anchor: 'end', align: 'end', formatter: share, color: '#566171' };
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [{ ...barStyle, data: values, backgroundColor: values.map(v => (v < 0 ? lossColor : chartColor(0))) }],
+        },
+        options,
+        plugins: [ChartDataLabels],
+    });
+}
+
 export function init() {
+    const categoryData = document.getElementById('category-chart-data');
+    if (categoryData) drawCategoryChart(JSON.parse(categoryData.textContent));
     document.querySelectorAll('[data-position-chart]').forEach(button => {
         button.addEventListener('click', () => {
             button.closest('[popover]').hidePopover();
@@ -206,8 +216,6 @@ export function init() {
     document.querySelectorAll('.positions-chart-periods button').forEach(button => {
         button.addEventListener('click', () => setPeriod(button.dataset.period));
     });
-    document.getElementById('positions-chart-hide').addEventListener('click', () => setHidden(true));
-    document.getElementById('positions-chart-show').addEventListener('click', () => setHidden(false));
     window.addEventListener('popstate', () => {
         readState();
         render();

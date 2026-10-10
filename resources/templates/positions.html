@@ -10,10 +10,13 @@
     <main class="page-content">
     <h1>Positions &middot; {{.Date}}</h1>
     {{template "positions_subnav.html" .}}
+    {{if .MissingRates}}
+    <div class="callout callout-warn" role="status">No exchange rate for {{join .MissingRates ", "}} as of {{.Date}}, so totals and the allocation chart are not shown.</div>
+    {{end}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
-    {{ $showSubtotals := gt (len .Groups) 1 }}
-    <section id="positions-chart" class="positions-chart no-print" aria-label="Value over time" hidden>
+    {{ $showSubtotals := and (gt (len .Groups) 1) (not .MissingRates) }}
+    <section id="positions-chart" class="positions-chart no-print" aria-label="Value over time">
         <div class="positions-chart-header">
             <div id="positions-chart-series" class="positions-chart-series"></div>
             <div class="positions-chart-periods" role="group" aria-label="Chart period">
@@ -25,11 +28,9 @@
                 <button type="button" data-period="5Y">5Y</button>
                 <button type="button" data-period="Max">Max</button>
             </div>
-            <button type="button" id="positions-chart-hide" class="positions-chart-toggle">Hide chart</button>
         </div>
         <div class="positions-chart-canvas"><canvas id="positions-canvas"></canvas></div>
     </section>
-    <button type="button" id="positions-chart-show" class="positions-chart-toggle no-print" hidden>Show chart</button>
     <table id="positions-table" class="report-table">
         <thead>
             <tr>
@@ -93,6 +94,7 @@
             </tr>
             {{end}}
             {{end}}
+            {{if not .MissingRates}}
             <tr class="total">
                 <td>Total</td>
                 <td></td>
@@ -105,8 +107,16 @@
                 </td>
                 <td class="no-print"></td>
             </tr>
+            {{end}}
         </tbody>
     </table>
+    {{if and (not .MissingRates) .CategoryChart.Values}}
+    <script id="category-chart-data" type="application/json">{{.CategoryChart}}</script>
+    <section class="chart-block no-print" aria-labelledby="category-heading">
+        <h2 id="category-heading" class="section-heading">Asset allocation by category</h2>
+        <div class="category-chart-canvas"><canvas id="category-canvas"></canvas></div>
+    </section>
+    {{end}}
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>
