@@ -2,13 +2,15 @@
 // values and metadata, and provides a fallback before this module initializes.
 // The popover is manual: focus never leaves the input while it is open, so
 // focusout dismisses it, and clicks on the input don't light-dismiss it.
-export function initCombobox(input, { autocomplete = false, assetNames = false } = {}) {
+// Options: autocomplete completes a unique match while typing; showValue lists
+// each option's value below its label.
+export function initCombobox(input, { autocomplete = false, showValue = false } = {}) {
     const source = input.list;
-    const wrapper = input.closest('.entry-combobox');
-    const toggle = wrapper.querySelector('.entry-combobox-toggle');
+    const wrapper = input.closest('.combobox');
+    const toggle = wrapper.querySelector('.combobox-toggle');
     const popup = wrapper.querySelector('[popover]');
     const list = popup.querySelector('[role="listbox"]');
-    const empty = popup.querySelector('.entry-combobox-empty');
+    const empty = popup.querySelector('.combobox-empty');
     let matches = [];
     let active = -1;
     let query = '';
@@ -43,7 +45,8 @@ export function initCombobox(input, { autocomplete = false, assetNames = false }
         if (!isOpen()) return;
         const anchor = wrapper.getBoundingClientRect();
         const margin = 12;
-        popup.style.width = `${Math.min(Math.max(anchor.width, assetNames ? 380 : anchor.width), window.innerWidth - margin * 2)}px`;
+        const width = showValue ? Math.max(anchor.width, 380) : anchor.width;
+        popup.style.width = `${Math.min(width, window.innerWidth - margin * 2)}px`;
         popup.style.maxHeight = '320px';
         const below = window.innerHeight - anchor.bottom - margin - 4;
         const above = anchor.top - margin - 4;
@@ -60,16 +63,16 @@ export function initCombobox(input, { autocomplete = false, assetNames = false }
         matches.forEach((option, index) => {
             const row = document.createElement('div');
             row.id = `${list.id}-${index}`;
-            row.className = 'entry-combobox-option';
+            row.className = 'combobox-option';
             row.setAttribute('role', 'option');
             const label = document.createElement('span');
             label.textContent = option.label;
             row.append(label);
-            if (assetNames) {
-                const identifier = document.createElement('span');
-                identifier.className = 'entry-combobox-identifier';
-                identifier.textContent = option.value;
-                row.append(identifier);
+            if (showValue) {
+                const value = document.createElement('span');
+                value.className = 'combobox-value';
+                value.textContent = option.value;
+                row.append(value);
             }
             row.addEventListener('pointermove', () => setActive(index));
             row.addEventListener('click', () => choose(index));
@@ -81,7 +84,7 @@ export function initCombobox(input, { autocomplete = false, assetNames = false }
     }
 
     function open(all = false) {
-        if (input.disabled) return;
+        if (input.disabled || input.readOnly) return;
         if (all) query = '';
         render();
         if (!isOpen()) popup.showPopover();

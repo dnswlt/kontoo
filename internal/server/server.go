@@ -521,10 +521,17 @@ func newURL(path string, queryParams url.Values) *url.URL {
 	return u
 }
 
-func safeEntryReturnURL(raw, fallback string) string {
+// isFormPage reports whether p is an entry or asset form, which return to
+// the page they were opened from instead of serving as return targets.
+func isFormPage(p string) bool {
+	p = path.Clean(p)
+	return strings.HasPrefix(p, "/kontoo/entries/") || strings.HasPrefix(p, "/kontoo/assets/")
+}
+
+func safeReturnURL(raw, fallback string) string {
 	u, err := url.Parse(raw)
 	if err != nil || u.IsAbs() || u.Host != "" || strings.Contains(raw, "\\") ||
-		!strings.HasPrefix(path.Clean(u.Path), "/kontoo/") || strings.HasPrefix(path.Clean(u.Path), "/kontoo/entries/") {
+		!strings.HasPrefix(path.Clean(u.Path), "/kontoo/") || isFormPage(u.Path) {
 		return fallback
 	}
 	// Return to the full page, not the table snippet a page may have been fetched as.
@@ -555,19 +562,19 @@ func (s *Server) addCommonCtx(r *http.Request, ctx map[string]any) map[string]an
 		ctx["Date"] = date
 		ctxQ.Set("date", date)
 	}
-	returnURL := safeEntryReturnURL(r.URL.RequestURI(), newURL("/kontoo/ledger", ctxQ).String())
-	if strings.HasPrefix(r.URL.Path, "/kontoo/entries/") {
-		returnURL = safeEntryReturnURL(q.Get("return_to"), newURL("/kontoo/ledger", ctxQ).String())
+	returnURL := safeReturnURL(r.URL.RequestURI(), newURL("/kontoo/ledger", ctxQ).String())
+	if isFormPage(r.URL.Path) {
+		returnURL = safeReturnURL(q.Get("return_to"), newURL("/kontoo/ledger", ctxQ).String())
 	}
-	ctx["EntryReturnURL"] = returnURL
-	entryQ := addP(ctxQ, "return_to", returnURL)
+	ctx["ReturnURL"] = returnURL
+	formQ := addP(ctxQ, "return_to", returnURL)
 	ctx["Nav"] = map[string]string{
 		"ledger":        newURL("/kontoo/ledger", ctxQ).String(),
 		"positions":     newURL("/kontoo/positions", ctxQ).String(),
-		"addEntry":      newURL("/kontoo/entries/new", entryQ).String(),
-		"updateBalance": newURL("/kontoo/entries/new", addP(entryQ, "prefill", "balance")).String(),
-		"addAsset":      newURL("/kontoo/assets/new", ctxQ).String(),
-		"editAsset":     newURL("/kontoo/assets/edit/{assetID}", ctxQ).String(),
+		"addEntry":      newURL("/kontoo/entries/new", formQ).String(),
+		"updateBalance": newURL("/kontoo/entries/new", addP(formQ, "prefill", "balance")).String(),
+		"addAsset":      newURL("/kontoo/assets/new", formQ).String(),
+		"editAsset":     newURL("/kontoo/assets/edit/{assetID}", formQ).String(),
 		"uploadCSV":     newURL("/kontoo/csv/upload", ctxQ).String(),
 		"quotes":        newURL("/kontoo/quotes", ctxQ).String(),
 		"calc":          newURL("/kontoo/calc", ctxQ).String(),
@@ -624,22 +631,72 @@ func (s *Server) renderEntryTemplate(w io.Writer, r *http.Request, entry *ledger
 	return s.templates.ExecuteTemplate(w, "entry.html", ctx)
 }
 
+// assetFormFields returns the IDs of the type-specific asset form fields
+// that apply to assets of type t. Fields that apply to all types (name,
+// currency, custom ID, ...) are not included.
+func assetFormFields(t ledger.AssetType) []string {
+	securityIDs := []string{"ISIN", "WKN", "TickerSymbol", "YFSymbol"}
+	accountIDs := []string{"IBAN", "AccountNumber"}
+	terms := []string{"IssueDate", "MaturityDate", "Interest", "InterestPayment"}
+	switch t {
+	case ledger.Stock, ledger.StockExchangeTradedFund, ledger.StockMutualFund,
+		ledger.BondExchangeTradedFund, ledger.BondMutualFund, ledger.Commodity:
+		return securityIDs
+	case ledger.CorporateBond, ledger.GovernmentBond:
+		return slices.Concat(securityIDs, terms)
+	case ledger.FixedDepositAccount:
+		return slices.Concat(accountIDs, terms)
+	case ledger.MoneyMarketAccount, ledger.SavingsAccount, ledger.CheckingAccount,
+		ledger.BrokerageAccount, ledger.PensionAccount:
+		return append(accountIDs, "Interest")
+	case ledger.CreditCardDebt:
+		return accountIDs
+	}
+	return nil // Cash, taxes, other debt: identified by custom ID only.
+}
+
 func (s *Server) renderAssetTemplate(w io.Writer, r *http.Request, asset *ledger.Asset) error {
-	assetTypeVals := ledger.AssetTypeValues()
-	assetTypes := make([]string, 0, len(assetTypeVals))
-	for _, a := range assetTypeVals {
-		if a == ledger.UnspecifiedAssetType {
+	assetID := ""
+	hasEntries := false
+	if asset == nil {
+		// Ensure template can render empty values. New assets default to the base currency.
+		asset = &ledger.Asset{Currency: s.Store().BaseCurrency()}
+	} else {
+		assetID = asset.ID()
+		hasEntries = s.Store().HasEntries(assetID)
+	}
+	type assetTypeOption struct {
+		Value    ledger.AssetType
+		Label    string
+		Fields   []string
+		Disabled bool
+	}
+	var assetTypes []assetTypeOption
+	for _, t := range ledger.AssetTypeValues() {
+		if t == ledger.UnspecifiedAssetType {
 			continue
 		}
-		assetTypes = append(assetTypes, a.String())
+		assetTypes = append(assetTypes, assetTypeOption{
+			Value:  t,
+			Label:  t.DisplayName(),
+			Fields: assetFormFields(t),
+			// The category of an asset with ledger entries is immutable.
+			Disabled: hasEntries && t.Category() != asset.Category(),
+		})
 	}
-	if asset == nil {
-		asset = &ledger.Asset{} // Ensure template can render empty values.
+	currencies := []units.Currency{s.Store().BaseCurrency()}
+	for _, a := range s.Store().AllAssets() {
+		if !slices.Contains(currencies, a.Currency) {
+			currencies = append(currencies, a.Currency)
+		}
 	}
+	slices.Sort(currencies)
 	ctx := s.addCommonCtx(r, map[string]any{
-		"AssetTypes":           assetTypes,
-		"InterestPaymentTypes": ledger.InterestPaymentScheduleValues(),
-		"Asset":                asset,
+		"AssetTypes": assetTypes,
+		"Currencies": currencies,
+		"Asset":      asset,
+		"AssetID":    assetID,
+		"HasEntries": hasEntries,
 	})
 	return s.templates.ExecuteTemplate(w, "asset.html", ctx)
 }
@@ -1454,6 +1511,11 @@ func (s *Server) handleAssetsPost(w http.ResponseWriter, r *http.Request) {
 	if req.Asset == nil {
 		http.Error(w, "missing asset", http.StatusBadRequest)
 		return
+	}
+	// The form doesn't edit the exchange timezone: keep it while the symbol is unchanged.
+	if old, ok := s.Store().Asset(req.AssetID); ok && req.Asset.ExchangeTimezone == "" &&
+		old.QuoteServiceSymbols["YF"] == req.Asset.QuoteServiceSymbols["YF"] {
+		req.Asset.ExchangeTimezone = old.ExchangeTimezone
 	}
 	// Try to retrieve timezone for quote service symbol, if it is not already set.
 	if len(req.Asset.QuoteServiceSymbols) > 0 && req.Asset.QuoteServiceSymbols["YF"] != "" {

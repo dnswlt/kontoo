@@ -5,13 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"testing"
 
 	"github.com/dnswlt/kontoo/internal/civil"
 	"golang.org/x/net/html"
 )
 
-func TestEntryReturnURL(t *testing.T) {
+func TestSafeReturnURL(t *testing.T) {
 	fallback := "/kontoo/ledger"
 	for _, tc := range []struct{ raw, want string }{
 		{"/kontoo/ledger?asset=account&page=2&sort=-value", "/kontoo/ledger?asset=account&page=2&sort=-value"},
@@ -20,8 +21,9 @@ func TestEntryReturnURL(t *testing.T) {
 		{"", fallback}, {"https://example.com/kontoo/ledger", fallback}, {"//example.com/kontoo/ledger", fallback},
 		{"/\\example.com/kontoo/ledger", fallback}, {"/other-app", fallback},
 		{"/kontoo/../elsewhere", fallback}, {"/kontoo/entries/new", fallback}, {"/kontoo/entries/edit/1", fallback},
+		{"/kontoo/assets/new", fallback}, {"/kontoo/assets/edit/NESN", fallback},
 	} {
-		if got := safeEntryReturnURL(tc.raw, fallback); got != tc.want {
+		if got := safeReturnURL(tc.raw, fallback); got != tc.want {
 			t.Errorf("%q: got %q, want %q", tc.raw, got, tc.want)
 		}
 	}
@@ -43,7 +45,7 @@ func TestEntryNavigationPreservesOrigin(t *testing.T) {
 	}
 	r := httptest.NewRequest(http.MethodGet, nav["addEntry"], nil)
 	ctx = s.addCommonCtx(r, map[string]any{})
-	if ctx["EntryReturnURL"] != origin {
+	if ctx["ReturnURL"] != origin {
 		t.Fatal("entry page lost return destination")
 	}
 	reentry, _ := url.Parse(ctx["Nav"].(map[string]string)["addEntry"])
@@ -63,6 +65,10 @@ func findElement(n *html.Node, tag, key, val string) *html.Node {
 		}
 	}
 	return nil
+}
+
+func hasAttr(n *html.Node, key string) bool {
+	return slices.ContainsFunc(n.Attr, func(a html.Attribute) bool { return a.Key == key })
 }
 
 func htmlAttr(n *html.Node, key string) string {
@@ -111,7 +117,7 @@ func TestEntryFormActionsAndTypeNames(t *testing.T) {
 		if form := findElement(doc, "form", "id", "entry-form"); form == nil || htmlAttr(form, "data-return-url") != returnURL {
 			t.Errorf("update=%t: form should return to %s", update, returnURL)
 		}
-		if cancel := findElement(doc, "a", "class", "entry-cancel"); cancel == nil || htmlAttr(cancel, "href") != returnURL {
+		if cancel := findElement(doc, "a", "class", "form-cancel"); cancel == nil || htmlAttr(cancel, "href") != returnURL {
 			t.Errorf("update=%t: Cancel should link to %s", update, returnURL)
 		}
 		if findElement(doc, "button", "value", "save") == nil {

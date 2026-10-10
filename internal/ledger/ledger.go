@@ -239,6 +239,11 @@ func (s *Store) FindEntryBySequenceNum(sequenceNum int64) *LedgerEntry {
 	return nil
 }
 
+// HasEntries reports whether any ledger entries refer to assetID.
+func (s *Store) HasEntries(assetID string) bool {
+	return len(s.entries[assetID]) > 0
+}
+
 // EntriesAround returns n ledger entries before date and n entries after date for assetID.
 // If there are less than n entries before or after, guess what, only those are returned.
 func (s *Store) EntriesAround(assetID string, date civil.Date, n int) (before, after []*LedgerEntry) {

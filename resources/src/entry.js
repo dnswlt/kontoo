@@ -1,4 +1,4 @@
-import { callout, calloutError, hideCallout } from './common';
+import { callout, calloutError, hideCallout, preventEnterSubmit } from './common';
 import { initCombobox } from './combobox';
 
 let assetInfoRequest;
@@ -159,11 +159,8 @@ async function submitForm(event) {
 export function init() {
     const form = document.getElementById('entry-form');
     form.addEventListener('submit', submitForm);
-    // Saving is always an explicit button press: Enter in a field never submits.
-    form.addEventListener('keydown', event => {
-        if (event.key === 'Enter' && event.target instanceof HTMLInputElement) event.preventDefault();
-    });
-    initCombobox(document.getElementById('AssetID'), { assetNames: true, autocomplete: true });
+    preventEnterSubmit(form);
+    initCombobox(document.getElementById('AssetID'), { showValue: true, autocomplete: true });
     typeCombobox = initCombobox(document.getElementById('Type'), { autocomplete: true });
     document.getElementById('AssetID').addEventListener('input', updateAsset);
     document.getElementById('Type').addEventListener('input', () => {

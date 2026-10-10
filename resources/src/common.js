@@ -56,6 +56,13 @@ export function calloutStatus(status, text, elementId) {
     callout(text, className, elementId);
 }
 
+// Saving a form is always an explicit button press: Enter in a field never submits.
+export function preventEnterSubmit(form) {
+    form.addEventListener("keydown", event => {
+        if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault();
+    });
+}
+
 // Used as part of registerQuotesSubmit() below.
 export async function handleQuotesSubmit(e) {
     const inputs = document.querySelectorAll("input.selector:checked");

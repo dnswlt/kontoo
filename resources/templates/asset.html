@@ -7,156 +7,195 @@
 
 <body id="asset-page">
     {{template "nav.html" .}}
-    <h1>Add asset</h1>
-    <div id="status-callout" class="callout hidden"></div>
-    <form class="columnar" id="asset-form" method="post" action="/kontoo/assets" autocomplete="off">
-        {{if .Asset}}
-        <input type="hidden" name="AssetId" value="{{.Asset.ID}}">
+    <main class="form-content">
+    {{ $update := ne .AssetID "" }}
+    <h1>{{if $update}}Edit asset{{else}}Add asset{{end}}</h1>
+    <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>
+    <form class="columnar edit-form" id="asset-form" method="post" action="/kontoo/assets" autocomplete="off"
+        data-return-url="{{.ReturnURL}}">
+        {{if $update}}
+        <input type="hidden" name="AssetId" value="{{.AssetID}}">
         {{end}}
-        <div class="field">
-            <div class="field-label">
-                <label for="Type">Type</label>
+        <section class="form-section" aria-labelledby="AssetHeading">
+            <h2 class="form-section-heading" id="AssetHeading">Asset</h2>
+            <div id="TypeField" class="field">
+                <div class="field-label">
+                    <label for="Type">Type</label>
+                </div>
+                <div class="field-value combobox">
+                    <input id="Type" type="text" name="Type" list="TypeList" value="{{if .Asset.Type}}{{.Asset.Type}}{{end}}" required>
+                    <button class="combobox-toggle" type="button" tabindex="-1" aria-label="Show asset types"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+                    <div class="combobox-popup" popover="manual">
+                        <div id="TypeChoices" role="listbox" aria-label="Asset types"></div>
+                        <p class="combobox-empty" role="status" hidden>No matching asset types.</p>
+                    </div>
+                    <datalist id="TypeList">
+                        {{range .AssetTypes}}
+                        <option value="{{.Value}}" data-fields='{{join .Fields " "}}' {{if .Disabled}}disabled{{end}}>{{.Label}}</option>
+                        {{end}}
+                    </datalist>
+                </div>
+                {{if .HasEntries}}
+                <div class="field-details">Category can't be changed: this asset has ledger entries.</div>
+                {{end}}
             </div>
-            <div class="field-value">
-                <input id="Type" type="text" name="Type" list="TypeList" value="{{if .Asset.Type}}{{.Asset.Type}}{{end}}">
-                <datalist id="TypeList">
-                    {{range .AssetTypes}}
-                    <option value="{{.}}"></option>
-                    {{end}}
-                </datalist>
+            <div id="NameField" class="field">
+                <div class="field-label">
+                    <label for="Name">Name</label>
+                </div>
+                <div class="field-value">
+                    <input id="Name" name="Name" type="text" class="trim" value="{{.Asset.Name}}" required>
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="Currency">Currency</label>
+            <div id="ShortNameField" class="field">
+                <div class="field-label">
+                    <label for="ShortName">Short name</label>
+                </div>
+                <div class="field-value">
+                    <input id="ShortName" name="ShortName" type="text" class="trim" value="{{.Asset.ShortName}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="Currency" name="Currency" type="text" pattern="[A-Z]{3}" value="{{.Asset.Currency}}" required>
+            <div id="CurrencyField" class="field">
+                <div class="field-label">
+                    <label for="Currency">Currency</label>
+                </div>
+                <div class="field-value combobox">
+                    <input id="Currency" name="Currency" type="text" list="CurrencyList" pattern="[A-Z]{3}" maxlength="3"
+                        title="Three-letter ISO currency code, e.g. EUR" value="{{.Asset.Currency}}" required {{if .HasEntries}}readonly{{end}}>
+                    <button class="combobox-toggle" type="button" tabindex="-1" aria-label="Show currencies"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+                    <div class="combobox-popup" popover="manual">
+                        <div id="CurrencyChoices" role="listbox" aria-label="Currencies"></div>
+                        <p class="combobox-empty" role="status" hidden>New currency. Use its three-letter ISO code.</p>
+                    </div>
+                    <datalist id="CurrencyList">
+                        {{range .Currencies}}
+                        <option value="{{.}}"></option>
+                        {{end}}
+                    </datalist>
+                </div>
+                {{if .HasEntries}}
+                <div class="field-details">Can't be changed: this asset has ledger entries.</div>
+                {{end}}
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="Name">Name</label>
+        </section>
+        <section class="form-section" aria-labelledby="IdentifiersHeading">
+            <h2 class="form-section-heading" id="IdentifiersHeading">Identifiers</h2>
+            <div id="ISINField" class="field">
+                <div class="field-label">
+                    <label for="ISIN">ISIN</label>
+                </div>
+                <div class="field-value">
+                    <input id="ISIN" name="ISIN" type="text" class="noblanks" value="{{.Asset.ISIN}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="Name" name="Name" type="text" class="trim" value="{{.Asset.Name}}" required>
+            <div id="WKNField" class="field">
+                <div class="field-label">
+                    <label for="WKN">WKN</label>
+                </div>
+                <div class="field-value">
+                    <input id="WKN" name="WKN" type="text" class="noblanks" value="{{.Asset.WKN}}">
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="ShortName">Short name</label>
+            <div id="TickerSymbolField" class="field">
+                <div class="field-label">
+                    <label for="TickerSymbol">Ticker symbol</label>
+                </div>
+                <div class="field-value">
+                    <input id="TickerSymbol" name="TickerSymbol" type="text" class="noblanks" value="{{.Asset.TickerSymbol}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="ShortName" name="ShortName" type="text" value="{{.Asset.ShortName}}" class="trim">
+            <div id="YFSymbolField" class="field">
+                <div class="field-label">
+                    <label for="YFSymbol">Yahoo Finance symbol</label>
+                </div>
+                <div class="field-value">
+                    <input id="YFSymbol" name="QuoteServiceSymbols" type="text" class="noblanks" value="{{.Asset.QuoteServiceSymbols.YF}}">
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="IssueDate">Issue date</label>
+            <div id="IBANField" class="field">
+                <div class="field-label">
+                    <label for="IBAN">IBAN</label>
+                </div>
+                <div class="field-value">
+                    <input id="IBAN" name="IBAN" type="text" class="noblanks" value="{{.Asset.IBAN}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="IssueDate" name="IssueDate" value="{{if .Asset.IssueDate}}{{.Asset.IssueDate}}{{end}}" class="datepicker">
+            <div id="AccountNumberField" class="field">
+                <div class="field-label">
+                    <label for="AccountNumber">Account number</label>
+                </div>
+                <div class="field-value">
+                    <input id="AccountNumber" name="AccountNumber" type="text" class="noblanks" value="{{.Asset.AccountNumber}}">
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="MaturityDate">Maturity date</label>
+            <div id="CustomIDField" class="field">
+                <div class="field-label">
+                    <label for="CustomID">Custom ID</label>
+                </div>
+                <div class="field-value">
+                    <input id="CustomID" name="CustomID" type="text" class="noblanks" value="{{.Asset.CustomID}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate" value="{{if .Asset.MaturityDate}}{{.Asset.MaturityDate}}{{end}}" class="datepicker">
+        </section>
+        <section class="form-section" id="TermsSection" aria-labelledby="TermsHeading">
+            <h2 class="form-section-heading" id="TermsHeading">Terms</h2>
+            <div id="IssueDateField" class="field">
+                <div class="field-label">
+                    <label for="IssueDate">Issue date</label>
+                </div>
+                <div class="field-value">
+                    <input id="IssueDate" name="IssueDate" type="text" class="datepicker" value="{{if .Asset.IssueDate}}{{.Asset.IssueDate}}{{end}}">
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="Interest">Interest</label>
+            <div id="MaturityDateField" class="field">
+                <div class="field-label">
+                    <label for="MaturityDate">Maturity date</label>
+                </div>
+                <div class="field-value">
+                    <input id="MaturityDate" name="MaturityDate" type="text" class="datepicker" value="{{if .Asset.MaturityDate}}{{.Asset.MaturityDate}}{{end}}">
+                </div>
             </div>
-            <div class="field-value">
-                <input id="Interest" name="Interest" type="text" value="{{if nonzero .Asset.InterestMicros}}{{percent .Asset.InterestMicros}}{{end}}" pattern="\d+(\.\d+)?%?">
+            <div id="InterestField" class="field">
+                <div class="field-label">
+                    <label for="Interest">Interest rate</label>
+                </div>
+                <div class="field-value">
+                    <input id="Interest" name="Interest" type="text" pattern="\d+(\.\d+)?%?" title="Annual rate in percent, e.g. 2.5%"
+                        value="{{if nonzero .Asset.InterestMicros}}{{.Asset.InterestMicros.Format "%"}}{{end}}">
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="InterestPayment">InterestPayment</label>
+            <div id="InterestPaymentField" class="field">
+                <div class="field-label">
+                    <label for="InterestPayment">Interest payment</label>
+                </div>
+                <div class="field-value">
+                    {{$payment := .Asset.InterestPayment.String}}
+                    <select id="InterestPayment" name="InterestPayment">
+                        <option value="">Not specified</option>
+                        <option value="AnnualPayment" {{if eq $payment "AnnualPayment"}}selected{{end}}>Annual</option>
+                        <option value="AccruedPayment" {{if eq $payment "AccruedPayment"}}selected{{end}}>At maturity (accrued)</option>
+                    </select>
+                </div>
             </div>
-            <div class="field-value">
-                <input id="InterestPayment" type="text" name="InterestPayment" list="InterestPaymentList" value="{{.Asset.InterestPayment}}">
-                <datalist id="InterestPaymentList">
-                    {{range .InterestPaymentTypes}}
-                    <option value="{{.}}"></option>
-                    {{end}}
-                </datalist>
+        </section>
+        <section class="form-section" aria-labelledby="NotesHeading">
+            <h2 class="form-section-heading" id="NotesHeading">Notes</h2>
+            <div id="CommentField" class="field">
+                <div class="field-label">
+                    <label for="Comment">Comment</label>
+                </div>
+                <div class="field-value">
+                    <textarea rows="3" id="Comment" name="Comment">{{.Asset.Comment}}</textarea>
+                </div>
             </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="IBAN">IBAN</label>
-            </div>
-            <div class="field-value">
-                <input id="IBAN" name="IBAN" type="text" value="{{.Asset.IBAN}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="AccountNumber">Account number</label>
-            </div>
-            <div class="field-value">
-                <input id="AccountNumber" name="AccountNumber" type="text" value="{{.Asset.AccountNumber}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="ISIN">ISIN</label>
-            </div>
-            <div class="field-value">
-                <input id="ISIN" name="ISIN" type="text" value="{{.Asset.ISIN}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="WKN">WKN</label>
-            </div>
-            <div class="field-value">
-                <input id="WKN" name="WKN" type="text" value="{{.Asset.WKN}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="TickerSymbol">Ticker symbol</label>
-            </div>
-            <div class="field-value">
-                <input id="TickerSymbol" name="TickerSymbol" type="text" value="{{.Asset.TickerSymbol}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="YFSymbol">y!finance symbol</label>
-            </div>
-            <div class="field-value">
-                <input id="YFSymbol" name="QuoteServiceSymbols" type="text" value="{{.Asset.QuoteServiceSymbols.YF}}" class="noblanks">
-            </div>
-        </div>
-        <div class="field">
-            <div class="field-label">
-                <label for="CustomID">Custom ID</label>
-            </div>
-            <div class="field-value">
-                <input id="CustomID" name="CustomID" type="text" value="{{.Asset.CustomID}}" class="noblanks">
-            </div>
-        </div>
-
-        <div id="CommentField" class="field">
-            <div class="field-label">
-                <label for="Comment">Comment</label>
-            </div>
-            <div class="field-value">
-                <textarea rows="3" id="Comment" name="Comment">{{.Asset.Comment}}</textarea>
-            </div>
-        </div>
-        <div class="button-field">
-            <input class="click-button" id="submit" type="submit" name="Submit" value="Save &amp; enter next">
+        </section>
+        <div class="form-actions">
+            <button class="form-save" id="submit" type="submit" value="save">Save</button>
+            {{if not $update}}<button type="submit" value="next">Save &amp; add another</button>{{end}}
+            <a class="form-cancel" href="{{.ReturnURL}}">Cancel</a>
         </div>
     </form>
-
+    </main>
 </body>
 
 </html>
