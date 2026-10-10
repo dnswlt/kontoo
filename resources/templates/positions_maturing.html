@@ -10,6 +10,9 @@
     <main class="page-content">
     <h1>Positions &middot;  {{.Date}}</h1>
     {{template "positions_subnav.html" .}}
+    {{if .MissingRates}}
+    <div class="callout callout-warn" role="status">No exchange rate for {{join .MissingRates ", "}} as of {{.Date}}, so totals and the chart are not shown.</div>
+    {{end}}
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
     <table>
@@ -62,6 +65,7 @@
                 </td>
             </tr>
             {{end}}
+            {{if .Totals}}
             <tr class="total">
                 <td>Total</td>
                 <td></td>
@@ -81,12 +85,21 @@
                 <td></td>
                 <td></td>
             </tr>
+            {{end}}
         </tbody>
     </table>
-    <div id="maturities-chart" class="chart-container hidden topsep">
-        <canvas id="maturities-canvas"></canvas>
-        <button type="button" class="close">&times;</button>
+    {{if not .MissingRates}}
+    <div class="topsep no-print">
+        <section id="maturities-chart" class="positions-chart" aria-labelledby="maturities-heading" hidden>
+            <div class="positions-chart-header">
+                <h2 id="maturities-heading" class="section-heading">Value by time to maturity (years)</h2>
+                <button type="button" id="maturities-chart-hide" class="positions-chart-toggle">Hide chart</button>
+            </div>
+            <div class="positions-chart-canvas"><canvas id="maturities-canvas"></canvas></div>
+        </section>
+        <button type="button" id="maturities-chart-show" class="positions-chart-toggle" hidden>Show chart</button>
     </div>
+    {{end}}
     <p class="footer">
         Report date: {{.Date}} (generated {{.Now}})
     </p>

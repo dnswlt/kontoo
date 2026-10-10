@@ -56,6 +56,23 @@ export function calloutStatus(status, text, elementId) {
     callout(text, className, elementId);
 }
 
+// Per-browser preferences. Storage may be unavailable (e.g. blocked site data):
+// then nothing is remembered and the defaults apply.
+export function loadPref(key) {
+    try {
+        return localStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+export function savePref(key, value) {
+    try {
+        localStorage.setItem(key, value);
+    } catch {
+        // Not remembered.
+    }
+}
+
 // Saving a form is always an explicit button press: Enter in a field never submits.
 export function preventEnterSubmit(form) {
     form.addEventListener("keydown", event => {

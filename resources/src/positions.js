@@ -1,4 +1,4 @@
-import { base64ToString, stringToBase64 } from './common';
+import { base64ToString, loadPref, savePref, stringToBase64 } from './common';
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
@@ -15,23 +15,6 @@ let state;
 let chart = null;
 let currency = '';
 let request = null;
-
-// Storage may be unavailable (e.g. blocked site data): then the defaults apply.
-function loadPref(key) {
-    try {
-        return localStorage.getItem(key);
-    } catch {
-        return null;
-    }
-}
-
-function savePref(key, value) {
-    try {
-        localStorage.setItem(key, value);
-    } catch {
-        // Not remembered; the default applies on the next visit.
-    }
-}
 
 function readState() {
     state = { assetIds: [], period: loadPref(periodKey) || '1Y' };

@@ -395,6 +395,19 @@ func maturingPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTabl
 	return res
 }
 
+// missingExchangeRates returns the currencies of rows that have no exchange rate
+// to the base currency, sorted and without duplicates.
+func missingExchangeRates(rows []*PositionTableRow) []units.Currency {
+	var missing []units.Currency
+	for _, r := range rows {
+		if r.ExchangeRate == 0 && !slices.Contains(missing, r.Currency) {
+			missing = append(missing, r.Currency)
+		}
+	}
+	slices.Sort(missing)
+	return missing
+}
+
 func equityPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTableRow {
 	positions := s.AssetPositionsAt(date)
 	slices.SortFunc(positions, func(a, b *ledger.AssetPosition) int {
@@ -812,19 +825,25 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, date civil.Date) error {
 	rows := maturingPositionTableRows(s.Store(), date)
 	minDate, maxDate := s.Store().ValueDateRange()
-	var totalValue, totalEarnings, totalIRR units.Micros
-	for _, r := range rows {
-		if r.ExchangeRate == 0 {
-			totalValue, totalEarnings = 0, 0
-			break
+	// Totals and the maturities chart need all values in the base currency.
+	missingRates := missingExchangeRates(rows)
+	var totals map[string]units.Micros
+	if len(missingRates) == 0 {
+		var totalValue, totalEarnings, totalIRR units.Micros
+		for _, r := range rows {
+			valueBC := r.Value.Div(r.ExchangeRate)
+			totalValue += valueBC
+			totalEarnings += r.TotalEarningsAtMaturity.Div(r.ExchangeRate)
+			totalIRR += r.InternalRateOfReturn.Mul(valueBC)
 		}
-		valueBC := r.Value.Div(r.ExchangeRate)
-		totalValue += valueBC
-		totalEarnings += r.TotalEarningsAtMaturity.Div(r.ExchangeRate)
-		totalIRR += r.InternalRateOfReturn.Mul(valueBC)
-	}
-	if totalValue > 0 {
-		totalIRR = totalIRR.Div(totalValue)
+		if totalValue > 0 {
+			totalIRR = totalIRR.Div(totalValue)
+		}
+		totals = map[string]units.Micros{
+			"Value":                totalValue,
+			"EarningsAtMaturity":   totalEarnings,
+			"InternalRateOfReturn": totalIRR,
+		}
 	}
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TableRows": rows,
@@ -832,11 +851,8 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 			"maturing": true,
 			"today":    date.Equal(civil.Today()),
 		},
-		"Totals": map[string]units.Micros{
-			"Value":                totalValue,
-			"EarningsAtMaturity":   totalEarnings,
-			"InternalRateOfReturn": totalIRR,
-		},
+		"Totals":       totals,
+		"MissingRates": missingRates,
 		"MonthOptions": ui.MonthOptions(*r.URL, date),
 		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
@@ -1174,6 +1190,13 @@ func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Reques
 	}
 	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
 	rows := maturingPositionTableRows(s.Store(), date)
+	if missing := missingExchangeRates(rows); len(missing) > 0 {
+		s.jsonResponse(w, PositionsMaturitiesResponse{
+			Status: StatusInvalidArgument,
+			Error:  fmt.Sprintf("no exchange rate for %v as of %v", missing, date),
+		})
+		return
+	}
 
 	// Calculate total value for each months-bucket defined by these monthBounds.
 	// Use 6-month buckets up to 3 years, then 1-year buckets up to 10 years.
@@ -1187,7 +1210,7 @@ func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Reques
 		j := sort.Search(len(monthBounds), func(i int) bool {
 			return monthBounds[i] > b
 		})
-		buckets[j-1] += row.Value
+		buckets[j-1] += row.Value.Div(row.ExchangeRate)
 	}
 	// Drop empty trailing buckets.
 	maxIdx := len(buckets) - 1

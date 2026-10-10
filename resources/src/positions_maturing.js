@@ -1,9 +1,7 @@
 import Chart from 'chart.js/auto';
-import 'chartjs-adapter-date-fns';
-import { format } from "date-fns";
-import { enGB } from 'date-fns/locale';
+import { loadPref, savePref } from './common';
 
-
+const hiddenKey = 'kontoo.positions.maturitiesChartHidden';
 let chart = null;
 
 function drawBarChart(maturities) {
@@ -16,6 +14,7 @@ function drawBarChart(maturities) {
                 options: {
                     animation: false,
                     parsing: true,
+                    maintainAspectRatio: false,
                     scales: {
                         y: {
                             display: true,
@@ -27,23 +26,14 @@ function drawBarChart(maturities) {
                     },
                     plugins: {
                         legend: {
-                            position: 'top',
-                            display: true
-                        },
-                        title: {
-                            display: true,
-                            text: "Value by time to maturity (years)"
+                            display: false
                         },
                         tooltip: {
                             callbacks: {
                                 label: function (ctx) {
                                     // Display both absolute and % values in tooltip.
-                                    if (ctx.dataset.label) {
-                                        const pct = ctx.dataset.data[ctx.dataIndex] / ctx.dataset.data.reduce((s, r) => (s + r), 0) * 100;
-                                        const formattedValue = ctx.formattedValue + " (" + pct.toFixed(1) + "%)";
-                                        return ctx.dataset.label + ": " + formattedValue;
-                                    }
-                                    return undefined;
+                                    const pct = ctx.dataset.data[ctx.dataIndex] / ctx.dataset.data.reduce((s, r) => (s + r), 0) * 100;
+                                    return ctx.formattedValue + " (" + pct.toFixed(1) + "%)";
                                 }
                             }
                         }
@@ -84,7 +74,6 @@ async function fetchAndDrawMaturities() {
             return;
         }
         drawBarChart(result.maturities);
-        document.getElementById("maturities-chart").classList.remove("hidden");
     }
     catch (error) {
         console.error("Error fetching maturities:", error);
@@ -92,10 +81,22 @@ async function fetchAndDrawMaturities() {
     }
 }
 
+// Whether the chart is hidden is remembered per browser, like the chart on the "All" tab.
+function render() {
+    const hidden = loadPref(hiddenKey) === 'true';
+    document.getElementById('maturities-chart').hidden = hidden;
+    document.getElementById('maturities-chart-show').hidden = !hidden;
+    if (!hidden) fetchAndDrawMaturities();
+}
+
+function setHidden(hidden) {
+    savePref(hiddenKey, String(hidden));
+    render();
+}
+
 export function init() {
-    const chartDiv = document.querySelector("#maturities-chart");
-    chartDiv.querySelector(".close").addEventListener("click", () => {
-        chartDiv.classList.add("hidden");
-    });
-    fetchAndDrawMaturities();
+    if (!document.getElementById('maturities-chart')) return; // Not shown when exchange rates are missing.
+    document.getElementById('maturities-chart-hide').addEventListener('click', () => setHidden(true));
+    document.getElementById('maturities-chart-show').addEventListener('click', () => setHidden(false));
+    render();
 }
