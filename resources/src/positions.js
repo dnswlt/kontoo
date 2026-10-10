@@ -1,4 +1,4 @@
-import { base64ToString, loadPref, savePref, stringToBase64 } from './common';
+import { base64ToString, chartColor, loadPref, savePref, stringToBase64 } from './common';
 import Chart from 'chart.js/auto';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
@@ -8,7 +8,6 @@ import { enGB } from 'date-fns/locale';
 // last chosen period (the default for URLs without one) are per-browser preferences.
 const hiddenKey = 'kontoo.positions.chartHidden';
 const periodKey = 'kontoo.positions.chartPeriod';
-const colors = ['#2457a7', '#d9822b', '#2f9e6e', '#b83280', '#7c5cc4', '#0f8a9d', '#a16207', '#64748b'];
 const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' });
 
 let state;
@@ -61,10 +60,6 @@ function formatMoney(value) {
     return value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, "'");
 }
 
-function color(i) {
-    return colors[i % colors.length];
-}
-
 function dot(seriesColor) {
     const span = document.createElement('span');
     span.className = 'chart-dot';
@@ -75,8 +70,8 @@ function dot(seriesColor) {
 function drawChart(timelines) {
     const datasets = timelines.map((timeline, i) => ({
         label: timeline.label,
-        borderColor: color(i),
-        backgroundColor: color(i),
+        borderColor: chartColor(i),
+        backgroundColor: chartColor(i),
         data: timeline.timestamps.map((x, j) => ({ x, y: timeline.valueMicros[j] / 1e6 })),
     }));
     if (!chart) {
@@ -128,7 +123,7 @@ function renderSeries(timelines) {
     if (state.assetIds.length === 0) {
         const title = document.createElement('span');
         title.className = 'positions-chart-title';
-        title.append(dot(color(0)), `Total value (${currency})`);
+        title.append(dot(chartColor(0)), `Total value (${currency})`);
         series.append(title);
         return;
     }
@@ -140,7 +135,7 @@ function renderSeries(timelines) {
         const remove = document.createElement('span');
         remove.setAttribute('aria-hidden', 'true');
         remove.textContent = '×';
-        chip.append(dot(color(i)), timeline.label, remove);
+        chip.append(dot(chartColor(i)), timeline.label, remove);
         chip.addEventListener('click', () => toggleAsset(timeline.assetId));
         series.append(chip);
     });
@@ -158,7 +153,7 @@ function markRows(timelines) {
     timelines.forEach((timeline, i) => {
         if (!timeline.assetId) return; // The total has no row.
         const cell = document.querySelector(`[data-position-chart="${CSS.escape(timeline.assetId)}"]`)?.closest('td');
-        cell?.prepend(dot(color(i)));
+        cell?.prepend(dot(chartColor(i)));
     });
 }
 

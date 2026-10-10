@@ -676,27 +676,7 @@ label.row-select { cursor: pointer; user-select: none; }
     .position-actions-popover { display: none; }
 }
 
-/* Charts */
-
-.chart-container {
-    width: 800px;
-    position: relative;
-}
-
-.chart-container button.close {
-    position: absolute;
-    top: 0;
-    right: 0;
-    cursor: pointer;
-    font-size: 150%;
-    background: none;
-    border: none;
-    padding: 0;
-    margin: 0;
-    color: inherit;
-}
-
-/* Positions value chart */
+/* Position charts */
 .positions-chart { max-width: 60rem; margin-bottom: 24px; }
 .positions-chart-header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin-bottom: 12px; }
 .positions-chart-series { display: flex; flex: 1; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
@@ -717,6 +697,7 @@ td.position-name .chart-dot { margin-right: 6px; }
 .positions-chart-toggle { padding: 5px 10px; border: 1px solid #ccd5e0; border-radius: 8px; background: white; color: #566171; font: inherit; font-size: 0.85em; cursor: pointer; }
 .positions-chart-toggle:hover { background: #f4f7fb; border-color: #91a7c4; }
 #positions-chart-show { margin-bottom: 16px; }
+.equity-chart-canvas { position: relative; max-width: 40rem; height: 260px; }
 
 /* Ledger filters and table */
 .visually-hidden,

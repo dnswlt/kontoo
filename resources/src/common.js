@@ -56,6 +56,13 @@ export function calloutStatus(status, text, elementId) {
     callout(text, className, elementId);
 }
 
+// Colors of chart series (lines, donut segments), in order of use.
+const chartColors = ['#2457a7', '#d9822b', '#2f9e6e', '#b83280', '#7c5cc4', '#0f8a9d', '#a16207', '#64748b',
+    '#5b8fd6', '#e0a458', '#6cbf8f', '#d77fb3'];
+export function chartColor(i) {
+    return chartColors[i % chartColors.length];
+}
+
 // Per-browser preferences. Storage may be unavailable (e.g. blocked site data):
 // then nothing is remembered and the defaults apply.
 export function loadPref(key) {

@@ -1154,25 +1154,31 @@ func (s *Server) handleChartsEquity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
-	rows := equityPositionTableRows(s.Store(), date)
-	// Sort by value, descending
-	sort.Slice(rows, func(i, j int) bool {
-		c := cmp.Compare(rows[j].Value, rows[i].Value)
-		if c != 0 {
-			return c < 0
-		}
-		return cmp.Less(rows[j].AssetName, rows[i].AssetName)
-	})
-	var assetNames []string
-	var valueMicros []int64
-	for _, r := range rows {
+	type allocation struct {
+		name  string
+		value units.Micros // In the base currency.
+	}
+	var allocations []allocation
+	for _, r := range equityPositionTableRows(s.Store(), date) {
 		if r.ExchangeRate == 0 {
-			// Ignore assess whose value we cannot calculate in the base currency. Should not happen.
+			// Ignore assets whose value we cannot calculate in the base currency. Should not happen.
 			log.Printf("handleChartsEquity: no exchange rate for asset %q", r.AssetID)
 			continue
 		}
-		assetNames = append(assetNames, r.AssetName)
-		valueMicros = append(valueMicros, int64(r.Value.Div(r.ExchangeRate)))
+		allocations = append(allocations, allocation{r.AssetName, r.Value.Div(r.ExchangeRate)})
+	}
+	// Largest first.
+	slices.SortFunc(allocations, func(a, b allocation) int {
+		if c := cmp.Compare(b.value, a.value); c != 0 {
+			return c
+		}
+		return strings.Compare(a.name, b.name)
+	})
+	var assetNames []string
+	var valueMicros []int64
+	for _, a := range allocations {
+		assetNames = append(assetNames, a.name)
+		valueMicros = append(valueMicros, int64(a.value))
 	}
 	s.jsonResponse(w, EquityChartResponse{
 		Status:      StatusOK,
