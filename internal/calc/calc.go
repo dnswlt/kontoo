@@ -2,6 +2,7 @@ package calc
 
 import (
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/dnswlt/kontoo/internal/civil"
@@ -19,21 +20,29 @@ func diffYears(d1, d2 civil.Date) float64 {
 // of f(x)-y.
 // ffp must return the tuple (f(x), f'(x)).
 // x0 is the initial guess for the root.
+// newton stops once a step changes x by less than precision, so x is accurate
+// independently of the magnitude of f's values.
 func newton(y, x0 float64, ffp func(float64) (float64, float64)) (float64, error) {
 	const maxIter = 10
-	const precision = 1e-7
+	const precision = 1e-9
 	x := x0
 	for k := 0; k < maxIter; k++ {
-		y1, u1 := ffp(x)
-		if math.Abs(y-y1) <= precision {
+		fx, dfx := ffp(x)
+		if math.IsNaN(fx) || math.IsNaN(dfx) {
+			// E.g. (1+r)^t for r <= -1 and fractional t.
+			return 0, fmt.Errorf("newton: function undefined at %f", x)
+		}
+		if fx == y {
 			return x, nil
 		}
-		if u1 == 0 {
+		if dfx == 0 {
 			return 0, fmt.Errorf("newton: zero derivative at %f", x)
 		}
-		x1 := x - (y1-y)/u1
-		// fmt.Printf("x_%d = %.3f x_%d = %.3f\n", k, x, k+1, x1)
-		x = x1
+		step := (fx - y) / dfx
+		x -= step
+		if math.Abs(step) <= precision {
+			return x, nil
+		}
 	}
 	return 0, fmt.Errorf("newton: failed to converge after %d iterations", maxIter)
 }
@@ -239,7 +248,7 @@ func InternalRateOfReturn(p *ledger.AssetPosition) units.Micros {
 		y := x + tem
 		return units.FloatAsMicros(math.Pow(y/x, 1/t) - 1)
 	}
-	// More than one item: use bisection.
+	// More than one item: solve numerically, with bisection as a fallback for Newton.
 	ts := make([]float64, len(p.Items))
 	xs := make([]float64, len(p.Items))
 	var xsSum float64
@@ -259,8 +268,7 @@ func InternalRateOfReturn(p *ledger.AssetPosition) units.Micros {
 	}
 	irr, err := newton(xsSum+tem, 0.05, returnsFunc)
 	if err != nil {
-		// Newton did not converge, try bisection.
-		fmt.Println("INFO Newton did not converge")
+		log.Printf("InternalRateOfReturn: falling back to bisection for %s: %v", p.Asset.ID(), err)
 		irr, err = bisect(xsSum+tem, 0, 0.1, func(r float64) float64 {
 			y, _ := returnsFunc(r)
 			return y

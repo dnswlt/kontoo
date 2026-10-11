@@ -57,6 +57,12 @@ func TestNewton(t *testing.T) {
 		{y: 100, x0: 0, f: func(x float64) (float64, float64) { return x, 1 }, x: 100},
 		{y: 0, x0: 1, f: func(x float64) (float64, float64) { return x*x - 10, 2 * x }, x: math.Sqrt(10)},
 		{y: 10, x0: 1, f: func(x float64) (float64, float64) { return math.Exp(x / 2), math.Exp(x/2) / 2 }, x: math.Log(100)},
+		// Large values, as for IRRs of large positions: precision is about x, not f(x).
+		{y: 1.37e10 + 0.123, x0: 0.05, f: func(r float64) (float64, float64) {
+			return 1e10 * math.Pow(1+r, 7.3), 1e10 * 7.3 * math.Pow(1+r, 6.3)
+		}, x: math.Pow((1.37e10+0.123)/1e10, 1/7.3) - 1},
+		// Undefined function values end the search instead of iterating on NaN.
+		{y: 1, x0: -2, f: func(x float64) (float64, float64) { return math.Sqrt(x), 0.5 / math.Sqrt(x) }, wantErr: "undefined"},
 	}
 	for _, tc := range tests {
 		x, err := newton(tc.y, tc.x0, tc.f)
