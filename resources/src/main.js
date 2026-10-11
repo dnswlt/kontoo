@@ -56,8 +56,10 @@ function validateMicros(input) {
         val = val.trim().replaceAll(" ", "").replaceAll("\'", "");
         if (val && !microsRegex.test(val)) {
             input.classList.add("invalid");
+            input.setCustomValidity("Enter a number, optionally with %.");
         } else {
             input.classList.remove("invalid");
+            input.setCustomValidity("");
             input.value = val;
         }
     });
