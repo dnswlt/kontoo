@@ -225,11 +225,6 @@ div.field {
     transition: border-color 0.3s ease;
 }
 
-input.result-display {
-    background-color: #dfffd6;
-    font-weight: bold;
-}
-
 input[type="text"]:focus {
     border-color: var(--dark-border);
     /* Changes the border color on focus */
@@ -238,28 +233,6 @@ input[type="text"]:focus {
 input[type="text"].invalid {
     border-color: var(--red-foreground);
     background-color: var(--red-background);
-}
-
-.click-button {
-    padding: 12px 20px;
-    background-color: var(--gray-passive);
-    border: none;
-    border-radius: 5px;
-    font-size: inherit;
-    cursor: pointer;
-    /* Smooth background and transform transitions */
-    transition: background-color 0.3s ease, transform 0.2s ease;
-}
-
-.click-button:hover {
-    background-color: var(--gray-active);
-}
-
-/* Container for right-aligned buttons. */
-div.button-field {
-    width: 16em;
-    display: flex;
-    justify-content: flex-end;
 }
 
 div.minibar {
@@ -639,6 +612,13 @@ label.row-select { cursor: pointer; user-select: none; }
 .form-actions .form-save { background: #2457a7; border-color: #2457a7; color: white; }
 .form-actions .form-save:hover { background: #1d488b; border-color: #1d488b; }
 .form-actions button:disabled { opacity: 0.6; cursor: default; }
+#irr-form { display: grid; grid-template-columns: max-content 8.5rem; gap: 6px 16px; align-items: center; }
+#irr-form .field { display: contents; }
+#irr-form .field-label { margin: 0; }
+#irr-form .field-value input { padding: 5px 8px; }
+#irr-form .form-actions { grid-column: 2; margin: 4px 0 8px; }
+#irr-form .form-actions button { width: 100%; min-height: 0; padding: 5px 12px; }
+.calc-result { font-size: 1.2em; font-weight: 600; font-variant-numeric: tabular-nums; }
 #entry-page #asset-info { margin: 0; padding: 16px; border: 1px solid #e3e8ee; border-radius: 8px; background: #f8fafc; min-width: 24rem; max-width: 38rem; box-sizing: border-box; }
 #entry-page #asset-info .main { margin: 0 0 12px; font-weight: 600; }
 #entry-page #asset-info .bsep { margin-bottom: 18px; }

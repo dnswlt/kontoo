@@ -7,12 +7,11 @@
 
 <body id="calc-page">
     {{template "nav.html" .}}
+    <main class="page-content">
     <h1>Calculator</h1>
-    <div id="status-callout" class="callout hidden"></div>
-
-    <h2>Internal rate of return &middot; IRR</h2>
-
-    <div>
+    <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>
+    <h2 class="section-heading">Internal rate of return (IRR)</h2>
+    <form id="irr-form" class="edit-form" autocomplete="off">
         <div class="field">
             <div class="field-label">
                 <label for="NominalValue">Nominal value</label>
@@ -42,7 +41,7 @@
                 <label for="PurchaseDate">Purchase date</label>
             </div>
             <div class="field-value">
-                <input id="PurchaseDate" name="PurchaseDate" value="{{.Today}}" class="datepicker" required>
+                <input id="PurchaseDate" name="PurchaseDate" type="text" value="{{.Today}}" class="datepicker" required>
             </div>
         </div>
         <div class="field">
@@ -50,7 +49,7 @@
                 <label for="MaturityDate">Maturity date</label>
             </div>
             <div class="field-value">
-                <input id="MaturityDate" name="MaturityDate" value="{{.DefaultMaturity}}" class="datepicker" required>
+                <input id="MaturityDate" name="MaturityDate" type="text" value="{{.DefaultMaturity}}" class="datepicker" required>
             </div>
         </div>
         <div class="field">
@@ -58,21 +57,20 @@
                 <label for="InterestRate">Interest rate</label>
             </div>
             <div class="field-value">
-                <input id="InterestRate" name="InterestRate" type="text" value="2%" pattern="\d+(\.\d+)?%?">
+                <input id="InterestRate" name="InterestRate" type="text" value="2%" pattern="\d+(\.\d+)?%?" required>
             </div>
+        </div>
+        <div class="form-actions">
+            <button class="form-save" type="submit">Calculate</button>
         </div>
         <div class="field">
             <div class="field-label">
                 <label for="IRR">Internal rate of return</label>
             </div>
-            <div class="field-value">
-                <input id="IRR" name="IRR" type="text" class="result-display" value="" readonly>
-            </div>
+            <output id="IRR" class="calc-result" for="NominalValue PurchasePrice Cost PurchaseDate MaturityDate InterestRate">–</output>
         </div>
-        <div class="button-field">
-            <input class="click-button" id="calculate-irr" type="button" name="Submit" value="Calculate">
-        </div>
-    </div>
+    </form>
+    </main>
 </body>
 
 </html>

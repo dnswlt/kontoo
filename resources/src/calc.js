@@ -1,47 +1,33 @@
-import { calloutError, calloutStatus, hideCallout } from "./common";
+import { calloutError, hideCallout } from './common';
 
 export function init() {
-    // Send calculate IRR JSON request to backend on click
-    document.querySelector("#calculate-irr").addEventListener("click", async function () {
-        const nominalValue = document.querySelector("#NominalValue").value;
-        const purchasePrice = document.querySelector("#PurchasePrice").value;
-        const cost = document.querySelector("#Cost").value;
-        const purchaseDate = document.querySelector("#PurchaseDate").value;
-        const maturityDate = document.querySelector("#MaturityDate").value;
-        const interestRate = document.querySelector("#InterestRate").value;
+    const form = document.getElementById('irr-form');
+    const result = document.getElementById('IRR');
+    form.addEventListener('submit', async event => {
+        event.preventDefault();
+        const value = id => document.getElementById(id).value.trim();
         try {
-            const payload = {
-                "nominalValue": nominalValue,
-                "purchasePrice": purchasePrice,
-                "cost": cost,
-                "purchaseDate": purchaseDate,
-                "maturityDate": maturityDate,
-                "interestRate": interestRate,
-                "accruedInterest": false,
-            }
-            const response = await fetch("/kontoo/calculate", {
-                method: "POST",
-                body: JSON.stringify(payload),
-                headers: {
-                    "Content-Type": "application/json"
-                }
+            const response = await fetch('/kontoo/calculate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nominalValue: value('NominalValue'),
+                    purchasePrice: value('PurchasePrice'),
+                    cost: value('Cost'),
+                    purchaseDate: value('PurchaseDate'),
+                    maturityDate: value('MaturityDate'),
+                    interestRate: value('InterestRate'),
+                    accruedInterest: false,
+                }),
             });
-            if (!response.ok) {
-                const errorMsg = await response.text();
-                calloutError(`that did not go so well: ${errorMsg}`);
-                return;
-            }
+            if (!response.ok) throw new Error((await response.text()) || `Calculation failed (${response.status}).`);
             const data = await response.json();
-            if (data.status !== "OK") {
-                calloutStatus(data.status, data.error);
-                return;
-            }
-            // Display result.
+            if (data.status !== 'OK') throw new Error(data.error);
             hideCallout();
-            document.querySelector("#IRR").value = data.irrFormatted;
-        }
-        catch (error) {
-            console.error("Error on submit:", error);
+            result.textContent = data.irrFormatted;
+        } catch (error) {
+            result.textContent = '–';
+            calloutError(error.message);
         }
     });
 }
