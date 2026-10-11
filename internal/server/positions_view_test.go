@@ -54,9 +54,11 @@ func TestPositionsCategoryChart(t *testing.T) {
 		t.Fatal("missing category chart data")
 	}
 	var data struct {
-		Currency string
-		Labels   []string
-		Values   []int64
+		Currency         string
+		Labels           []string
+		Values           []int64
+		Currencies       []string
+		ValuesByCurrency [][]int64
 	}
 	if err := json.Unmarshal([]byte(textContent(script)), &data); err != nil {
 		t.Fatal(err)
@@ -65,6 +67,12 @@ func TestPositionsCategoryChart(t *testing.T) {
 	if data.Currency != "CHF" || !slices.Equal(data.Labels, []string{"Cash equivalents", "Equity"}) ||
 		!slices.Equal(data.Values, []int64{int64(125 * units.One), int64(10 * units.One)}) {
 		t.Errorf("got %+v", data)
+	}
+	// Per currency (base currency first), in CHF: the account is in CHF, the stock in USD.
+	if !slices.Equal(data.Currencies, []string{"CHF", "USD"}) || len(data.ValuesByCurrency) != 2 ||
+		!slices.Equal(data.ValuesByCurrency[0], []int64{int64(125 * units.One), 0}) ||
+		!slices.Equal(data.ValuesByCurrency[1], []int64{0, int64(10 * units.One)}) {
+		t.Errorf("got currencies %v, values by currency %v", data.Currencies, data.ValuesByCurrency)
 	}
 }
 

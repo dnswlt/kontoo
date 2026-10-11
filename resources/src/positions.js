@@ -1,5 +1,5 @@
 import { base64ToString, chartColor, loadPref, savePref, stringToBase64 } from './common';
-import Chart, { barChartOptions, barStyle, lossColor } from './charts';
+import Chart, { barChartOptions, barStyle } from './charts';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
@@ -9,6 +9,7 @@ import { enGB } from 'date-fns/locale';
 // URLs without one) is a per-browser preference.
 const periodKey = 'kontoo.positions.chartPeriod';
 const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' });
+const wholeNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
 
 let state;
 let chart = null;
@@ -192,28 +193,64 @@ function loadExcludedCategories() {
     }
 }
 
+// With several currencies, each bar is stacked by currency (values in the base
+// currency) and the share label sits at the end of the whole bar.
 function initCategoryChart(data) {
     const excluded = loadExcludedCategories();
-    const values = data.values.map(v => Math.round(v / 1e6));
     const canvas = document.getElementById('category-canvas');
+    let totals = []; // Per category shown.
     let total = 0;
+    let outermost = []; // Per category shown: the dataset whose segment ends the bar.
     const share = value => (total ? `${(value / total * 100).toFixed(1)}%` : '');
-    const options = barChartOptions(data.currency, {
-        horizontal: true,
-        tooltipLabel: ctx => `${ctx.formattedValue} ${data.currency} (${share(ctx.raw)})`,
-    });
+    const options = barChartOptions(data.currency, { horizontal: true });
+    options.scales.x.stacked = true;
+    options.scales.y.stacked = true;
     options.scales.x.grace = '15%'; // Room for the share labels at the bar ends.
-    options.plugins.datalabels = { anchor: 'end', align: 'end', formatter: share, color: '#566171' };
+    options.interaction = { mode: 'index', axis: 'y', intersect: false };
+    options.plugins.legend = {
+        position: 'bottom',
+        onClick: () => {}, // A key for the colors only; categories have their own toggles.
+        labels: { usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8 },
+    };
+    options.plugins.tooltip = {
+        filter: item => item.raw !== 0,
+        callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${ctx.formattedValue} ${data.currency}`,
+            footer: items => {
+                const value = totals[items[0]?.dataIndex];
+                return value !== undefined ? `Total: ${wholeNumber.format(value)} ${data.currency} (${share(value)})` : '';
+            },
+        },
+    };
+    options.plugins.datalabels = {
+        display: ctx => outermost[ctx.dataIndex] === ctx.datasetIndex,
+        formatter: (value, ctx) => share(totals[ctx.dataIndex]),
+        anchor: 'end',
+        align: 'end',
+        color: '#566171',
+    };
     const chart = new Chart(canvas, { type: 'bar', data: {}, options, plugins: [ChartDataLabels] });
 
     const render = () => {
-        const included = data.labels.map((label, i) => ({ label, value: values[i] })).filter(c => !excluded.has(c.label));
-        total = included.reduce((sum, c) => sum + c.value, 0);
-        canvas.parentElement.style.height = `${included.length * 34 + 40}px`;
-        chart.data = {
-            labels: included.map(c => c.label),
-            datasets: [{ ...barStyle, data: included.map(c => c.value), backgroundColor: included.map(c => (c.value < 0 ? lossColor : chartColor(0))) }],
-        };
+        const shown = data.labels.map((_, i) => i).filter(i => !excluded.has(data.labels[i]));
+        totals = shown.map(i => Math.round(data.values[i] / 1e6));
+        total = totals.reduce((sum, v) => sum + v, 0);
+        const datasets = data.currencies.map((currency, k) => {
+            const values = shown.map(i => Math.round(data.valuesByCurrency[k][i] / 1e6));
+            return {
+                ...barStyle,
+                label: currency,
+                data: values,
+                backgroundColor: chartColor(k),
+                borderRadius: ctx => (outermost[ctx.dataIndex] === ctx.datasetIndex ? barStyle.borderRadius : 0),
+            };
+        }).filter(d => d.data.some(v => v !== 0)); // Only currencies held in the categories shown.
+        outermost = shown.map((_, j) => datasets.reduce((last, d, k) => (d.data[j] !== 0 ? k : last), 0));
+        // The legend only helps when bars are stacked by more than one currency.
+        const showLegend = datasets.length > 1;
+        chart.options.plugins.legend.display = showLegend;
+        canvas.parentElement.style.height = `${shown.length * 34 + (showLegend ? 70 : 40)}px`;
+        chart.data = { labels: shown.map(i => data.labels[i]), datasets };
         chart.update('none');
     };
 

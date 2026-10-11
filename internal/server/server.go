@@ -844,6 +844,10 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 		Currency units.Currency `json:"currency"`
 		Labels   []string       `json:"labels"`
 		Values   []int64        `json:"values"`
+		// The currencies of the holdings (base currency first), and for each,
+		// the part of each category's value held in it (in the base currency).
+		Currencies       []units.Currency `json:"currencies"`
+		ValuesByCurrency [][]int64        `json:"valuesByCurrency"`
 	}
 	chart := categoryChart{Currency: s.Store().BaseCurrency()}
 	var total units.Micros
@@ -863,6 +867,32 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 		for _, g := range byValue {
 			chart.Labels = append(chart.Labels, g.Category.DisplayName())
 			chart.Values = append(chart.Values, int64(g.ValueBaseCurrency()))
+		}
+		base := s.Store().BaseCurrency()
+		for _, r := range rows {
+			if !slices.Contains(chart.Currencies, r.Currency) {
+				chart.Currencies = append(chart.Currencies, r.Currency)
+			}
+		}
+		slices.SortFunc(chart.Currencies, func(a, b units.Currency) int {
+			switch {
+			case a == base && b != base:
+				return -1
+			case b == base && a != base:
+				return 1
+			}
+			return strings.Compare(string(a), string(b))
+		})
+		for _, c := range chart.Currencies {
+			values := make([]int64, len(byValue))
+			for i, g := range byValue {
+				for _, r := range g.Rows {
+					if r.Currency == c {
+						values[i] += int64(r.Value.Div(r.ExchangeRate))
+					}
+				}
+			}
+			chart.ValuesByCurrency = append(chart.ValuesByCurrency, values)
 		}
 	}
 	minDate, maxDate := s.Store().ValueDateRange()
