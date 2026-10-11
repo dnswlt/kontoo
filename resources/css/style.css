@@ -695,7 +695,7 @@ td.position-name .chart-dot { margin-right: 6px; }
 .positions-chart-periods button[aria-pressed="true"] { background: #edf3fc; color: #2457a7; font-weight: 600; }
 .equity-chart-canvas { position: relative; height: 260px; }
 .chart-block { max-width: 40rem; margin-bottom: 16px; }
-.bar-chart-canvas { position: relative; height: 200px; }
+.chart-canvas { position: relative; height: 200px; }
 .category-chart-canvas { position: relative; }
 .quarterly-chart { margin-top: 16px; }
 .section-empty { margin: 0; color: #566171; }

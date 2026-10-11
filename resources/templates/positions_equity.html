@@ -47,6 +47,7 @@
                     {{template "snip_position_action_button.html" .}}
                     <div id="position-actions-{{.AssetID}}" class="position-actions-popover" popover="auto" aria-label="Actions for {{.AssetName}}">
                         <a href='{{setp $nav.addEntry "AssetID" .AssetID}}'>Add entry</a>
+                        <a href='{{setp $nav.ledger "asset" .AssetID}}'>Show ledger</a>
                         <a href='{{setpvar $nav.editAsset "assetID" .AssetID}}'>Edit asset</a>
                     </div>
                 </td>
@@ -164,7 +165,7 @@
             {{ end }}
         </tbody>
     </table>
-    <div id="quarterly-purchases-chart" class="chart-block bar-chart-canvas quarterly-chart no-print"><canvas id="quarterly-purchases-canvas"></canvas></div>
+    <div id="quarterly-purchases-chart" class="chart-block chart-canvas quarterly-chart no-print"><canvas id="quarterly-purchases-canvas"></canvas></div>
     {{ else }}
     <h2 class="section-heading">Quarterly Purchases</h2>
     <p class="section-empty">No purchases between {{.QuarterlyReport.StartDate}} and {{.QuarterlyReport.EndDate}}.</p>
@@ -230,7 +231,7 @@
         </tbody>
     </table>
     {{ if .QuarterlyChart.HasProfitLoss }}
-    <div id="quarterly-pl-chart" class="chart-block bar-chart-canvas quarterly-chart no-print"><canvas id="quarterly-pl-canvas"></canvas></div>
+    <div id="quarterly-pl-chart" class="chart-block chart-canvas quarterly-chart no-print"><canvas id="quarterly-pl-canvas"></canvas></div>
     {{ end }}
     {{ else }}
     <h2 class="section-heading">Quarterly Profit & Loss</h2>

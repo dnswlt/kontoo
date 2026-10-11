@@ -41,6 +41,7 @@
                     {{template "snip_position_action_button.html" .}}
                     <div id="position-actions-{{.AssetID}}" class="position-actions-popover" popover="auto" aria-label="Actions for {{.AssetName}}">
                         <a href='{{setp $nav.addEntry "AssetID" .AssetID}}'>Add entry</a>
+                        <a href='{{setp $nav.ledger "asset" .AssetID}}'>Show ledger</a>
                         <a href='{{setpvar $nav.editAsset "assetID" .AssetID}}'>Edit asset</a>
                     </div>
                 </td>
@@ -51,7 +52,7 @@
                 <td class="ralign">{{if nonzero .PurchasePrice}}{{ money .PurchasePrice }}{{end}}</td>
                 <td class="ralign">{{if nonzero .NominalValue}}{{ money .NominalValue }}{{end}}</td>
                 <td class="ralign">{{ percent .InterestRate }}</td>
-                <td class="nowrap">{{ .IssueDate }}</td>
+                <td class="nowrap">{{ if .IssueDate }}{{ .IssueDate }}{{ end }}</td>
                 <td class="nowrap">{{ .MaturityDate }}</td>
                 <td class="ralign">{{ money .TotalEarningsAtMaturity }}</td>
                 <td class="ralign">{{if nonzero .InternalRateOfReturn}}{{ percent .InternalRateOfReturn }}{{end}}</td>
@@ -90,8 +91,12 @@
     </table>
     {{if not .MissingRates}}
     <section class="chart-block no-print" aria-labelledby="maturities-heading">
-        <h2 id="maturities-heading" class="section-heading">Value by time to maturity (years)</h2>
-        <div class="bar-chart-canvas"><canvas id="maturities-canvas"></canvas></div>
+        <h2 id="maturities-heading" class="section-heading">Nominal value by time to maturity (years)</h2>
+        <div class="chart-canvas"><canvas id="maturities-canvas"></canvas></div>
+    </section>
+    <section class="chart-block no-print" aria-labelledby="cumulative-maturities-heading">
+        <h2 id="cumulative-maturities-heading" class="section-heading">Cumulative nominal value by time to maturity (years)</h2>
+        <div class="chart-canvas"><canvas id="cumulative-maturities-canvas"></canvas></div>
     </section>
     {{end}}
     <p class="footer">

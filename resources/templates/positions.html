@@ -53,6 +53,7 @@
                     <div id="position-actions-{{.AssetID}}" class="position-actions-popover" popover="auto" aria-label="Actions for {{.AssetName}}">
                         <a href='{{setp $nav.addEntry "AssetID" .AssetID}}'>Add entry</a>
                         {{if .AssetType.IsAccountType}}<a href='{{setp $nav.updateBalance "AssetID" .AssetID}}'>Update balance</a>{{end}}
+                        <a href='{{setp $nav.ledger "asset" .AssetID}}'>Show ledger</a>
                         <a href='{{setpvar $nav.editAsset "assetID" .AssetID}}'>Edit asset</a>
                         <button type="button" data-position-chart="{{.AssetID}}">Show in chart</button>
                     </div>

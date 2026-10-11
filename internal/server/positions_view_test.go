@@ -67,3 +67,37 @@ func TestPositionsCategoryChart(t *testing.T) {
 		t.Errorf("got %+v", data)
 	}
 }
+
+// Each position's action menu links to the ledger, filtered to that asset.
+func TestPositionActionsShowLedger(t *testing.T) {
+	s := ledgerViewTestServer(t)
+	r := httptest.NewRequest(http.MethodGet, "/kontoo/positions", nil)
+	date := civil.DateVal(2024, 3, 1)
+	maturing := maturitiesTestServer(t, true)
+	for _, tc := range []struct {
+		name    string
+		render  func(*bytes.Buffer) error
+		assetID string
+	}{
+		{"all", func(b *bytes.Buffer) error { return s.renderPositionsTemplate(b, r, date) }, "account"},
+		{"equity", func(b *bytes.Buffer) error { return s.renderEquityPositionsTemplate(b, r, date) }, "stock"},
+		{"maturing", func(b *bytes.Buffer) error { return maturing.renderMaturingPositionsTemplate(b, r, date) }, "US0000000001"},
+	} {
+		var b bytes.Buffer
+		if err := tc.render(&b); err != nil {
+			t.Fatal(err)
+		}
+		doc, err := html.Parse(&b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		menu := findElement(doc, "div", "id", "position-actions-"+tc.assetID)
+		if menu == nil {
+			t.Fatalf("%s: no action menu for %s", tc.name, tc.assetID)
+		}
+		link := findElement(menu, "a", "href", "/kontoo/ledger?asset="+tc.assetID)
+		if link == nil || textContent(link) != "Show ledger" {
+			t.Errorf("%s: missing Show ledger link for %s", tc.name, tc.assetID)
+		}
+	}
+}

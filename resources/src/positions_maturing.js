@@ -1,30 +1,39 @@
 import Chart, { barChartOptions, barStyle } from './charts';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
 import { chartColor } from './common';
 
-let chart = null;
-
-function drawBarChart(maturities) {
-    if (!chart) {
-        // The tooltip shows each bucket's share of the total, too.
-        const tooltipLabel = ctx => {
-            const pct = ctx.raw / ctx.dataset.data.reduce((sum, v) => sum + v, 0) * 100;
-            return `${ctx.formattedValue} ${maturities.currency} (${pct.toFixed(1)}%)`;
-        };
-        chart = new Chart(document.getElementById('maturities-canvas'), {
-            type: 'bar',
-            data: {},
-            options: barChartOptions(maturities.currency, { tooltipLabel }),
-        });
-    }
-    chart.data = {
-        labels: maturities.bucketLabels,
-        datasets: maturities.values.map(v => ({
-            ...barStyle,
-            backgroundColor: chartColor(0),
-            data: v.valueMicros.map(x => Math.round(x / 1e6)),
-        })),
+// A bar per maturity bucket, labelled with its share of the total principal.
+// Empty buckets get no label.
+function drawShareBarChart(canvasId, labels, values, total, currency) {
+    const share = value => (total ? `${(value / total * 100).toFixed(0)}%` : '');
+    const options = barChartOptions(currency, {
+        tooltipLabel: ctx => `${ctx.formattedValue} ${currency} (${share(ctx.raw)})`,
+    });
+    // Room for the share labels above the bars: text, label padding and offset.
+    options.layout = { padding: { top: 28 } };
+    options.plugins.datalabels = {
+        display: ctx => ctx.dataset.data[ctx.dataIndex] !== 0,
+        anchor: 'end',
+        align: 'end',
+        formatter: share,
+        color: '#566171',
     };
-    chart.update('none');
+    new Chart(document.getElementById(canvasId), {
+        type: 'bar',
+        data: { labels, datasets: [{ ...barStyle, data: values, backgroundColor: chartColor(0) }] },
+        options,
+        plugins: [ChartDataLabels],
+    });
+}
+
+// The principal per bucket, and cumulated: repaid within each bucket's time to maturity.
+function drawMaturityCharts(maturities) {
+    const values = maturities.values[0].valueMicros.map(v => Math.round(v / 1e6));
+    const total = values.reduce((sum, v) => sum + v, 0);
+    let repaid = 0;
+    const cumulative = values.map(v => (repaid += v));
+    drawShareBarChart('maturities-canvas', maturities.bucketLabels, values, total, maturities.currency);
+    drawShareBarChart('cumulative-maturities-canvas', maturities.bucketLabels, cumulative, total, maturities.currency);
 }
 
 async function fetchAndDrawMaturities() {
@@ -48,7 +57,7 @@ async function fetchAndDrawMaturities() {
             console.log("Response not OK:", result);
             return;
         }
-        drawBarChart(result.maturities);
+        drawMaturityCharts(result.maturities);
     }
     catch (error) {
         console.error("Error fetching maturities:", error);

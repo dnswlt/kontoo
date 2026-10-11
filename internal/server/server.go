@@ -10,7 +10,6 @@ import (
 	"io"
 	"io/fs"
 	"log"
-	"math"
 	"net/http"
 	"net/url"
 	"os"
@@ -124,6 +123,9 @@ type MaturitiesChartValues struct {
 	Label       string  `json:"label"`
 	ValueMicros []int64 `json:"valueMicros"`
 }
+
+// MaturitiesChartData contains the principal (nominal value) of maturing
+// positions in the base currency, as int64 micros.
 type MaturitiesChartData struct {
 	Currency     string                   `json:"currency"`
 	BucketLabels []string                 `json:"bucketLabels"`
@@ -393,6 +395,16 @@ func maturingPositionTableRows(s *ledger.Store, date civil.Date) []*PositionTabl
 		res = append(res, row)
 	}
 	return res
+}
+
+// maturityPrincipal returns the amount repaid at maturity: the nominal value of
+// bonds, and for fixed deposits (which have no quantity) the credited amounts,
+// excluding interest recorded through later balance updates.
+func maturityPrincipal(r *PositionTableRow) units.Micros {
+	if r.AssetType.IsAccountType() {
+		return r.PurchasePrice
+	}
+	return r.NominalValue
 }
 
 // missingExchangeRates returns the currencies of rows that have no exchange rate
@@ -1269,44 +1281,18 @@ func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Calculate total value for each months-bucket defined by these monthBounds.
-	// Use 6-month buckets up to 3 years, then 1-year buckets up to 10 years.
-	monthBounds := []int{0, 6, 12, 18, 24, 30, 36, 48, 60, 72, 84, 96, 108, 120, 15 * 12, 20 * 12, 50 * 12, 100 * 12}
-	buckets := make([]units.Micros, len(monthBounds))
+	// Principal per bucket of time to maturity: the next six months, the rest
+	// of the first year, years 2 to 4, and later. Bucket i holds maturities up
+	// to upperMonths[i]; the last bucket all later ones.
+	upperMonths := []float64{6, 12, 24, 36, 48}
+	bucketLabels := []string{"0.5", "1", "2", "3", "4", "5+"}
+	buckets := make([]int64, len(bucketLabels))
 	for _, row := range rows {
 		if row.YearsToMaturity < 0 {
 			continue
 		}
-		b := int(math.Floor(row.YearsToMaturity * 12))
-		j := sort.Search(len(monthBounds), func(i int) bool {
-			return monthBounds[i] > b
-		})
-		buckets[j-1] += row.Value.Div(row.ExchangeRate)
-	}
-	// Drop empty trailing buckets.
-	maxIdx := len(buckets) - 1
-	for maxIdx >= 0 && buckets[maxIdx] == 0 {
-		maxIdx--
-	}
-	buckets = buckets[:maxIdx+1]
-	bucketLabels := make([]string, len(buckets))
-	bLabel := func(months int) string {
-		if months%12 == 0 {
-			return strconv.Itoa(months / 12)
-		}
-		return fmt.Sprintf("%.1f", float32(months)/12)
-	}
-	for i := range bucketLabels {
-		if i < len(monthBounds)-1 {
-			bucketLabels[i] = fmt.Sprintf("%s - %s", bLabel(monthBounds[i]), bLabel(monthBounds[i+1]))
-		} else {
-			bucketLabels[i] = fmt.Sprintf(">= %s", bLabel(monthBounds[i]))
-		}
-	}
-	// Response uses int64 to represent micros (to avoid getting the string repr in JSON).
-	bucketInts := make([]int64, len(buckets))
-	for i, v := range buckets {
-		bucketInts[i] = int64(v)
+		i := sort.SearchFloat64s(upperMonths, row.YearsToMaturity*12)
+		buckets[i] += int64(maturityPrincipal(row).Div(row.ExchangeRate))
 	}
 	s.jsonResponse(w, PositionsMaturitiesResponse{
 		Status: StatusOK,
@@ -1316,7 +1302,7 @@ func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Reques
 			Values: []*MaturitiesChartValues{
 				{
 					Label:       "All maturing assets",
-					ValueMicros: bucketInts,
+					ValueMicros: buckets,
 				},
 			},
 		},
