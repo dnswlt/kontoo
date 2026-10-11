@@ -619,6 +619,16 @@ label.row-select { cursor: pointer; user-select: none; }
 #irr-form .form-actions { grid-column: 2; margin: 4px 0 8px; }
 #irr-form .form-actions button { width: 100%; min-height: 0; padding: 5px 12px; }
 .calc-result { font-size: 1.2em; font-weight: 600; font-variant-numeric: tabular-nums; }
+.allocation-controls { display: flex; align-items: flex-end; gap: 24px; margin-bottom: 16px; }
+.allocation-controls .field { width: auto; margin: 0; }
+#AllocationAmount { width: 8.5rem; padding: 5px 8px; text-align: right; }
+#allocation-table input { box-sizing: border-box; width: 5rem; padding: 2px 6px; border: 1px solid #ccd5e0; border-radius: 5px; font: inherit; text-align: right; }
+#allocation-form .form-actions { margin-top: 12px; }
+.allocation-target { white-space: nowrap; }
+.fill-rest { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin-left: 2px; padding: 0; border: 0; border-radius: 4px; background: none; color: #8c95a2; cursor: pointer; vertical-align: middle; }
+.fill-rest:hover { background: #f4f7fb; color: #2457a7; }
+.fill-rest svg { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#allocation-table tfoot .allocation-target { padding-right: 36px; } /* Aligned with the inputs. */
 #entry-page #asset-info { margin: 0; padding: 16px; border: 1px solid #e3e8ee; border-radius: 8px; background: #f8fafc; min-width: 24rem; max-width: 38rem; box-sizing: border-box; }
 #entry-page #asset-info .main { margin: 0 0 12px; font-weight: 600; }
 #entry-page #asset-info .bsep { margin-bottom: 18px; }
@@ -668,11 +678,11 @@ td.position-name .chart-dot { margin-right: 6px; }
 .chart-chip:hover { background: #f4f7fb; border-color: #91a7c4; }
 .chart-show-total { padding: 3px 4px; border: 0; background: none; color: #2457a7; font: inherit; font-size: 0.9em; cursor: pointer; }
 .chart-show-total:hover { text-decoration: underline; }
-.positions-chart-periods { display: inline-flex; border: 1px solid #ccd5e0; border-radius: 8px; overflow: hidden; }
-.positions-chart-periods button { padding: 5px 10px; border: 0; border-left: 1px solid #e3e8ee; background: white; color: #566171; font: inherit; font-size: 0.85em; cursor: pointer; }
-.positions-chart-periods button:first-child { border-left: 0; }
-.positions-chart-periods button:hover { background: #f4f7fb; }
-.positions-chart-periods button[aria-pressed="true"] { background: #edf3fc; color: #2457a7; font-weight: 600; }
+.positions-chart-periods, .segmented { display: inline-flex; border: 1px solid #ccd5e0; border-radius: 8px; overflow: hidden; }
+.positions-chart-periods button, .segmented button { padding: 5px 10px; border: 0; border-left: 1px solid #e3e8ee; background: white; color: #566171; font: inherit; font-size: 0.85em; cursor: pointer; }
+.positions-chart-periods button:first-child, .segmented button:first-child { border-left: 0; }
+.positions-chart-periods button:hover, .segmented button:hover { background: #f4f7fb; }
+.positions-chart-periods button[aria-pressed="true"], .segmented button[aria-pressed="true"] { background: #edf3fc; color: #2457a7; font-weight: 600; }
 .equity-chart-canvas { position: relative; height: 260px; }
 .chart-block { max-width: 40rem; margin-bottom: 16px; }
 .chart-canvas { position: relative; height: 200px; }

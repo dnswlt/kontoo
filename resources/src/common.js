@@ -48,6 +48,22 @@ export function chartColor(i) {
     return chartColors[i % chartColors.length];
 }
 
+// Numbers are entered as decimals with an optional '%' at the end, and may use
+// spaces or apostrophes as thousands separators. Without '%', 2 means 200%.
+const microsRegex = /^-?([0-9]+(\.[0-9]{0,6})?|\.[0-9]{1,6})%?$/;
+export function normalizeMicros(text) {
+    return text.trim().replaceAll(" ", "").replaceAll("'", "");
+}
+// Returns the number in text as integer micros (1'000'000 is 1, or 100%),
+// or NaN if it is not a valid number.
+export function parseMicros(text) {
+    const val = normalizeMicros(text);
+    if (!microsRegex.test(val)) {
+        return NaN;
+    }
+    return val.endsWith("%") ? Math.round(parseFloat(val) * 1e4) : Math.round(parseFloat(val) * 1e6);
+}
+
 // Per-browser preferences. Storage may be unavailable (e.g. blocked site data):
 // then nothing is remembered and the defaults apply.
 export function loadPref(key) {

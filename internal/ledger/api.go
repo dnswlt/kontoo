@@ -50,6 +50,11 @@ const (
 	Debt
 )
 
+// AssetCategories returns all asset categories except UnspecfiedAssetCategory.
+func AssetCategories() []AssetCategory {
+	return []AssetCategory{Equity, FixedIncome, CashEquivalents, RetirementSavings, Commodities, Taxes, Debt}
+}
+
 // DisplayName returns a human-readable name of the asset category.
 func (ac AssetCategory) DisplayName() string {
 	switch ac {

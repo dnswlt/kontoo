@@ -9,8 +9,12 @@
     {{template "nav.html" .}}
     <main class="page-content">
     <h1>Calculator</h1>
+    <nav class="report-tabs" aria-label="Calculators">
+        <a class="report-tab" href="/kontoo/calc" {{if eq .Tab "irr"}}aria-current="page"{{end}}>IRR</a>
+        <a class="report-tab" href="/kontoo/calc/allocation" {{if eq .Tab "allocation"}}aria-current="page"{{end}}>Allocation</a>
+    </nav>
     <div id="status-callout" class="callout hidden" role="status" aria-live="polite"></div>
-    <h2 class="section-heading">Internal rate of return (IRR)</h2>
+    {{if eq .Tab "irr"}}
     <form id="irr-form" class="edit-form" autocomplete="off">
         <div class="field">
             <div class="field-label">
@@ -70,6 +74,74 @@
             <output id="IRR" class="calc-result" for="NominalValue PurchasePrice Cost PurchaseDate MaturityDate InterestRate">–</output>
         </div>
     </form>
+    {{else if .MissingRates}}
+    <div class="callout callout-warn" role="status">No exchange rate for {{join .MissingRates ", "}} as of {{.Today}}, so the allocation cannot be calculated.</div>
+    {{else}}
+    <form id="allocation-form" class="edit-form" autocomplete="off">
+        <div id="allocation-toggles" class="category-toggles" role="group" aria-label="Categories in the plan">
+            {{range .Categories}}<button type="button" data-category="{{.Name}}">{{.Name}}</button>{{end}}
+        </div>
+        <div class="allocation-controls">
+            <div class="field">
+                <div class="field-label">
+                    <label for="AllocationAmount">Amount to invest</label>
+                </div>
+                <div class="field-value">
+                    <input id="AllocationAmount" type="text" class="micros" value="0"> {{.BaseCurrency}}
+                </div>
+            </div>
+            <div id="allocation-mode" class="segmented" role="group" aria-label="Rebalancing">
+                <button type="button" data-mode="rebalance">Buy and sell</button>
+                <button type="button" data-mode="buy">Buy only</button>
+            </div>
+        </div>
+        <table id="allocation-table" class="report-table">
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th class="ralign">Value</th>
+                    <th class="ralign">Share</th>
+                    <th class="ralign">Target</th>
+                    <th class="ralign">Change</th>
+                    <th class="ralign">New value</th>
+                    <th class="ralign">New share</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range .Categories}}
+                <tr data-category="{{.Name}}" data-value="{{micros .Value}}"{{if .Included}} data-included{{end}}>
+                    <td>{{.Name}}</td>
+                    <td class="ralign{{if negative .Value}} negative-amount{{end}}">{{money .Value}}</td>
+                    <td class="ralign" data-share></td>
+                    <td class="ralign allocation-target">
+                        <input type="text" class="micros" aria-label="Target share of {{.Name}}">
+                        <button type="button" class="fill-rest" title="Fill in the rest" aria-label="Fill in the rest for {{.Name}}">
+                            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24"><path d="M19 12H7m5-5-5 5 5 5"/></svg>
+                        </button>
+                    </td>
+                    <td class="ralign" data-change></td>
+                    <td class="ralign" data-new-value></td>
+                    <td class="ralign" data-new-share></td>
+                </tr>
+                {{end}}
+            </tbody>
+            <tfoot>
+                <tr class="total">
+                    <td>Total</td>
+                    <td class="ralign" data-value></td>
+                    <td class="ralign" data-share></td>
+                    <td class="ralign allocation-target" data-target></td>
+                    <td class="ralign" data-change></td>
+                    <td class="ralign" data-new-value></td>
+                    <td class="ralign" data-new-share></td>
+                </tr>
+            </tfoot>
+        </table>
+        <div class="form-actions">
+            <button class="form-save" type="submit">Calculate</button>
+        </div>
+    </form>
+    {{end}}
     </main>
 </body>
 

@@ -3,6 +3,7 @@ import flatpickr from 'flatpickr';
 // that you have to import the CSS, too?!?
 // See https://github.com/flatpickr/flatpickr/issues/141
 import 'flatpickr/dist/flatpickr.min.css';
+import { normalizeMicros, parseMicros } from './common';
 import { init as initPopovers } from './popover';
 
 //
@@ -48,13 +49,11 @@ async function initCalcPage() {
 
 // Validate that input contains a decimal number with an optional '%' at the end.
 // (I.e., a string that can be JSON-parsed as Micros.)
-const microsRegex = new RegExp("^-?([0-9]+(\\.[0-9]{0,6})?|\\.[0-9]{1,6})%?$");
 function validateMicros(input) {
     input.addEventListener("change", function (event) {
         const input = event.target;
-        let val = input.value;
-        val = val.trim().replaceAll(" ", "").replaceAll("\'", "");
-        if (val && !microsRegex.test(val)) {
+        const val = normalizeMicros(input.value);
+        if (val && Number.isNaN(parseMicros(val))) {
             input.classList.add("invalid");
             input.setCustomValidity("Enter a number, optionally with %.");
         } else {

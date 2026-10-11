@@ -154,6 +154,32 @@ type CalculateIRRResponse struct {
 	IRRFormatted string     `json:"irrFormatted"`
 }
 
+type CalculateAllocationRequest struct {
+	// The categories in the plan and their target shares, which must add up to 100%.
+	Targets []AllocationTarget `json:"targets"`
+	Amount  units.Micros       `json:"amount"` // To invest, or to withdraw if negative.
+	BuyOnly bool               `json:"buyOnly"`
+}
+
+type AllocationTarget struct {
+	Category string       `json:"category"`
+	Target   units.Micros `json:"target"`
+}
+
+type CalculateAllocationResponse struct {
+	Status StatusCode          `json:"status"`
+	Error  string              `json:"error,omitempty"`
+	Rows   []*AllocationResult `json:"rows,omitempty"` // In the order of the request's targets.
+	Total  *AllocationResult   `json:"total,omitempty"`
+}
+
+// AllocationResult holds the formatted results of a category, or their total.
+type AllocationResult struct {
+	Change   string `json:"change"`
+	NewValue string `json:"newValue"`
+	NewShare string `json:"newShare"`
+}
+
 type StatusCode string
 
 const (
@@ -1001,10 +1027,52 @@ func (s *Server) renderUploadCsvTemplate(w io.Writer, r *http.Request) error {
 	return s.templates.ExecuteTemplate(w, "upload_csv.html", s.addCommonCtx(r, map[string]any{}))
 }
 
-func (s *Server) renderCalcTemplate(w io.Writer, r *http.Request) error {
-	return s.templates.ExecuteTemplate(w, "calc.html", s.addCommonCtx(r, map[string]any{
-		"DefaultMaturity": time.Now().AddDate(1, 0, 0).Format("2006-01-02"),
-	}))
+// AllocationCategory is a row of the allocation planner on the Calc page.
+type AllocationCategory struct {
+	Name  string
+	Value units.Micros // In the base currency.
+	// Cash can fund purchases without selling anything.
+	Cash bool
+	// Liabilities and retirement savings are not part of the plan by default.
+	Included bool
+}
+
+// allocationCategories returns all asset categories with their total value in
+// the base currency. The rows must all have an exchange rate.
+func allocationCategories(rows []*PositionTableRow) []AllocationCategory {
+	var res []AllocationCategory
+	for _, c := range ledger.AssetCategories() {
+		var value units.Micros
+		for _, r := range rows {
+			if r.AssetCategory() == c {
+				value += r.Value.Div(r.ExchangeRate)
+			}
+		}
+		res = append(res, AllocationCategory{
+			Name:     c.DisplayName(),
+			Value:    value,
+			Cash:     c == ledger.CashEquivalents,
+			Included: c != ledger.RetirementSavings && c != ledger.Taxes && c != ledger.Debt,
+		})
+	}
+	return res
+}
+
+// renderCalcTemplate renders the Calc page with the given tab ("irr" or "allocation").
+func (s *Server) renderCalcTemplate(w io.Writer, r *http.Request, tab string) error {
+	ctx := map[string]any{"Tab": tab}
+	switch tab {
+	case "irr":
+		ctx["DefaultMaturity"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	case "allocation":
+		rows := positionTableRows(s.Store(), civil.Today())
+		if missing := missingExchangeRates(rows); len(missing) > 0 {
+			ctx["MissingRates"] = missing
+		} else {
+			ctx["Categories"] = allocationCategories(rows)
+		}
+	}
+	return s.templates.ExecuteTemplate(w, "calc.html", s.addCommonCtx(r, ctx))
 }
 
 func (s *Server) renderSnipUploadCsvData(w io.Writer, items []*quotes.DepotExportItem, store *ledger.Store) error {
@@ -1355,14 +1423,17 @@ func (s *Server) handlePositionsEquity(w http.ResponseWriter, r *http.Request) {
 	w.Write(buf.Bytes())
 }
 
-func (s *Server) handleCalc(w http.ResponseWriter, r *http.Request) {
-	var buf bytes.Buffer
-	err := s.renderCalcTemplate(&buf, r)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+func (s *Server) handleCalc(tab string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var buf bytes.Buffer
+		err := s.renderCalcTemplate(&buf, r, tab)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to render template: %s", err), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html")
+		w.Write(buf.Bytes())
 	}
-	w.Header().Set("Content-Type", "text/html")
-	w.Write(buf.Bytes())
 }
 
 func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
@@ -1410,6 +1481,88 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 		IRRMicros:    int64(irrMicros),
 		IRRFormatted: irrMicros.Format("()'.2%"),
 	})
+}
+
+// formatShare formats a share rounded to a tenth of a percent, e.g. "52.0%".
+func formatShare(share units.Micros) string {
+	const tenth = 1_000 // A tenth of a percent, in micros.
+	half := units.Micros(tenth / 2)
+	if share < 0 {
+		half = -half
+	}
+	return ((share + half) / tenth * tenth).Format(".1%")
+}
+
+func (s *Server) handleCalculateAllocation(w http.ResponseWriter, r *http.Request) {
+	var req CalculateAllocationRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+	rows := positionTableRows(s.Store(), civil.Today())
+	if missing := missingExchangeRates(rows); len(missing) > 0 {
+		names := make([]string, len(missing))
+		for i, c := range missing {
+			names[i] = string(c)
+		}
+		s.jsonResponse(w, CalculateAllocationResponse{
+			Status: StatusInvalidArgument,
+			Error:  fmt.Sprintf("No exchange rate for %s.", strings.Join(names, ", ")),
+		})
+		return
+	}
+	categories := make(map[string]AllocationCategory)
+	for _, c := range allocationCategories(rows) {
+		categories[c.Name] = c
+	}
+	items := make([]calc.AllocationItem, len(req.Targets))
+	for i, t := range req.Targets {
+		c, ok := categories[t.Category]
+		if !ok {
+			http.Error(w, "unknown category: "+t.Category, http.StatusBadRequest)
+			return
+		}
+		items[i] = calc.AllocationItem{Value: c.Value, Target: t.Target, Cash: c.Cash}
+	}
+	newValues, err := calc.Rebalance(items, req.Amount, req.BuyOnly)
+	if err != nil {
+		msg := err.Error()
+		switch {
+		case errors.Is(err, calc.ErrTargetSum):
+			msg = "The targets do not add up to 100%."
+		case errors.Is(err, calc.ErrNotEnoughCash):
+			msg = "There is not enough cash to withdraw this amount without selling."
+		}
+		s.jsonResponse(w, CalculateAllocationResponse{Status: StatusInvalidArgument, Error: msg})
+		return
+	}
+	const money = "()'.2"
+	newTotal := req.Amount
+	for _, it := range items {
+		newTotal += it.Value
+	}
+	share := func(v units.Micros) string {
+		if newTotal == 0 {
+			return ""
+		}
+		return formatShare(v.Div(newTotal))
+	}
+	resp := CalculateAllocationResponse{
+		Status: StatusOK,
+		Total: &AllocationResult{
+			Change:   req.Amount.Format(money),
+			NewValue: newTotal.Format(money),
+			NewShare: share(newTotal),
+		},
+	}
+	for i, it := range items {
+		resp.Rows = append(resp.Rows, &AllocationResult{
+			Change:   (newValues[i] - it.Value).Format(money),
+			NewValue: newValues[i].Format(money),
+			NewShare: share(newValues[i]),
+		})
+	}
+	s.jsonResponse(w, resp)
 }
 
 func (s *Server) handleCsvUpload(w http.ResponseWriter, r *http.Request) {
@@ -1781,7 +1934,8 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/assets/new", s.reloadHandler(s.handleAssetsNew))
 	mux.HandleFunc("GET /kontoo/assets/edit/{assetID}", s.reloadHandler(s.handleAssetsEdit))
 	mux.HandleFunc("GET /kontoo/csv/upload", s.reloadHandler(s.handleCsvUpload))
-	mux.HandleFunc("GET /kontoo/calc", s.reloadHandler(s.handleCalc))
+	mux.HandleFunc("GET /kontoo/calc", s.reloadHandler(s.handleCalc("irr")))
+	mux.HandleFunc("GET /kontoo/calc/allocation", s.reloadHandler(s.handleCalc("allocation")))
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
 	mux.HandleFunc("GET /kontoo/positions/timeline", s.handlePositionsTimeline)
@@ -1792,6 +1946,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("POST /kontoo/csv", s.handleCsvPost)
 	mux.HandleFunc("POST /kontoo/quotes", jsonHandler(s.handleQuotesPost))
 	mux.HandleFunc("POST /kontoo/calculate", jsonHandler(s.handleCalculate))
+	mux.HandleFunc("POST /kontoo/calculate/allocation", jsonHandler(s.handleCalculateAllocation))
 	mux.HandleFunc("POST /kontoo/ledger/reload", s.reloadHandler(s.handleLedgerReload))
 	mux.HandleFunc("/{$}", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/kontoo/positions", http.StatusTemporaryRedirect)
