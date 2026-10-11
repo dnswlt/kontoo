@@ -697,6 +697,10 @@ td.position-name .chart-dot { margin-right: 6px; }
 .chart-block { max-width: 40rem; margin-bottom: 16px; }
 .chart-canvas { position: relative; height: 200px; }
 .category-chart-canvas { position: relative; }
+.category-toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.category-toggles button { padding: 3px 10px; border: 1px solid #ccd5e0; border-radius: 999px; background: white; color: #8c95a2; font: inherit; font-size: 0.85em; cursor: pointer; }
+.category-toggles button:hover { border-color: #91a7c4; }
+.category-toggles button[aria-pressed="true"] { background: #edf3fc; border-color: #b5c9e6; color: #2457a7; }
 .quarterly-chart { margin-top: 16px; }
 .section-empty { margin: 0; color: #566171; }
 

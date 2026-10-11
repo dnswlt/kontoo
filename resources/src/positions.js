@@ -180,33 +180,64 @@ async function render() {
 }
 
 // Category allocation: one horizontal bar per category, labelled with its share
-// of the net total. Debts are negative and extend left of zero.
-function drawCategoryChart(data) {
+// of the total of the categories shown. Debts are negative and extend left of zero.
+// Categories can be excluded with toggle buttons; this is remembered per browser.
+const excludedCategoriesKey = 'kontoo.positions.excludedCategories';
+
+function loadExcludedCategories() {
+    try {
+        return new Set(JSON.parse(loadPref(excludedCategoriesKey) || '[]'));
+    } catch {
+        return new Set();
+    }
+}
+
+function initCategoryChart(data) {
+    const excluded = loadExcludedCategories();
     const values = data.values.map(v => Math.round(v / 1e6));
-    const total = values.reduce((sum, v) => sum + v, 0);
-    const share = value => (total ? `${(value / total * 100).toFixed(1)}%` : '');
     const canvas = document.getElementById('category-canvas');
-    canvas.parentElement.style.height = `${values.length * 34 + 40}px`;
+    let total = 0;
+    const share = value => (total ? `${(value / total * 100).toFixed(1)}%` : '');
     const options = barChartOptions(data.currency, {
         horizontal: true,
         tooltipLabel: ctx => `${ctx.formattedValue} ${data.currency} (${share(ctx.raw)})`,
     });
     options.scales.x.grace = '15%'; // Room for the share labels at the bar ends.
     options.plugins.datalabels = { anchor: 'end', align: 'end', formatter: share, color: '#566171' };
-    new Chart(canvas, {
-        type: 'bar',
-        data: {
-            labels: data.labels,
-            datasets: [{ ...barStyle, data: values, backgroundColor: values.map(v => (v < 0 ? lossColor : chartColor(0))) }],
-        },
-        options,
-        plugins: [ChartDataLabels],
+    const chart = new Chart(canvas, { type: 'bar', data: {}, options, plugins: [ChartDataLabels] });
+
+    const render = () => {
+        const included = data.labels.map((label, i) => ({ label, value: values[i] })).filter(c => !excluded.has(c.label));
+        total = included.reduce((sum, c) => sum + c.value, 0);
+        canvas.parentElement.style.height = `${included.length * 34 + 40}px`;
+        chart.data = {
+            labels: included.map(c => c.label),
+            datasets: [{ ...barStyle, data: included.map(c => c.value), backgroundColor: included.map(c => (c.value < 0 ? lossColor : chartColor(0))) }],
+        };
+        chart.update('none');
+    };
+
+    const toggles = data.labels.map(label => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        button.setAttribute('aria-pressed', String(!excluded.has(label)));
+        button.addEventListener('click', () => {
+            if (excluded.has(label)) excluded.delete(label);
+            else excluded.add(label);
+            button.setAttribute('aria-pressed', String(!excluded.has(label)));
+            savePref(excludedCategoriesKey, JSON.stringify([...excluded]));
+            render();
+        });
+        return button;
     });
+    document.getElementById('category-toggles').replaceChildren(...toggles);
+    render();
 }
 
 export function init() {
     const categoryData = document.getElementById('category-chart-data');
-    if (categoryData) drawCategoryChart(JSON.parse(categoryData.textContent));
+    if (categoryData) initCategoryChart(JSON.parse(categoryData.textContent));
     document.querySelectorAll('[data-position-chart]').forEach(button => {
         button.addEventListener('click', () => {
             button.closest('[popover]').hidePopover();
