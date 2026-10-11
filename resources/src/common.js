@@ -1,25 +1,10 @@
 // Shared functions used by one or more HTML templates and snippets.
 
-export function base64ToString(base64) {
-    base64 = base64.replaceAll("-", "+").replaceAll("_", "/");
-    const e = base64.length % 4;
-    if (e > 0) {
-        // Add back padding.
-        base64 = base64 + "=".repeat(4 - e);
-    }
-    const binString = atob(base64);
-    const data = Uint8Array.from(binString, (m) => m.codePointAt(0));
-    return new TextDecoder().decode(data);
-}
-
-export function stringToBase64(s) {
-    const data = new TextEncoder().encode(s);
-    const binString = Array.from(data, (byte) =>
-        String.fromCodePoint(byte),
-    ).join("");
-    let base64 = btoa(binString);
-    // Make it URL safe
-    return base64.replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
+// Returns the data the server embedded in the page as
+// <script id="<id>" type="application/json">, or null if there is none.
+export function pageData(id) {
+    const script = document.getElementById(id);
+    return script ? JSON.parse(script.textContent) : null;
 }
 
 export function hideCallout(elementId = "status-callout") {

@@ -16,6 +16,7 @@
     {{ $nav := .Nav }}
     {{ $baseCurrency := .BaseCurrency }}
     {{ $showSubtotals := and (gt (len .Groups) 1) (not .MissingRates) }}
+    <script id="value-chart-data" type="application/json">{{.ValueChart}}</script>
     <section id="positions-chart" class="positions-chart no-print" aria-label="Value over time">
         <div class="positions-chart-header">
             <div id="positions-chart-series" class="positions-chart-series"></div>

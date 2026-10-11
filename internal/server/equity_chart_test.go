@@ -36,17 +36,11 @@ func TestChartsEquitySortedByBaseCurrencyValue(t *testing.T) {
 		}
 	}
 	s := &Server{store: store}
-	body, _ := json.Marshal(EquityChartRequest{EndTimestamp: civil.DateVal(2024, 6, 30).UnixMilli()})
-	w := httptest.NewRecorder()
-	s.handleChartsEquity(w, httptest.NewRequest(http.MethodPost, "/kontoo/charts/equity", bytes.NewReader(body)))
-	var resp EquityChartResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-		t.Fatal(err)
-	}
+	chart := s.equityChart(civil.DateVal(2024, 6, 30))
 	wantNames := []string{"EUR stock", "CHF stock"}
 	wantValues := []int64{int64(1000 * units.One), int64(550 * units.One)}
-	if !slices.Equal(resp.AssetNames, wantNames) || !slices.Equal(resp.ValueMicros, wantValues) {
-		t.Errorf("got %v %v, want %v %v", resp.AssetNames, resp.ValueMicros, wantNames, wantValues)
+	if !slices.Equal(chart.AssetNames, wantNames) || !slices.Equal(chart.ValueMicros, wantValues) {
+		t.Errorf("got %v %v, want %v %v", chart.AssetNames, chart.ValueMicros, wantNames, wantValues)
 	}
 }
 

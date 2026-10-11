@@ -149,11 +149,11 @@ func TestHandleGetAllPaths(t *testing.T) {
 		{"/kontoo/ledger", http.StatusOK},
 		{"/kontoo/positions", http.StatusOK},
 		{"/kontoo/positions/maturing", http.StatusOK},
+		{"/kontoo/positions/timeline?date=2024-12-31&period=1Y&chart=NESN", http.StatusOK},
 		{"/kontoo/entries/new", http.StatusOK},
 		{"/kontoo/assets/new", http.StatusOK},
 		{"/kontoo/csv/upload", http.StatusOK},
 		// Exclude /kontoo/quotes, as that would trigger Y! finance requests.
-		{"/kontoo/positions/timeline", http.StatusMethodNotAllowed},
 		{"/kontoo/entries", http.StatusMethodNotAllowed},
 		{"/kontoo/entries/delete", http.StatusMethodNotAllowed},
 		{"/kontoo/assets", http.StatusMethodNotAllowed},
@@ -214,16 +214,6 @@ func TestHandlePostJson(t *testing.T) {
 					TickerSymbol: "NESN",
 					Currency:     "CHF",
 				},
-			},
-		},
-		{
-			path: "/kontoo/positions/timeline",
-			data: &PositionTimelineRequest{
-				AssetIDs: []string{
-					"NESN",
-				},
-				EndTimestamp: civil.DateVal(2024, 12, 31).UnixMilli(),
-				Period:       "1Y",
 			},
 		},
 	}

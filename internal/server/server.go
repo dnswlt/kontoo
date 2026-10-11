@@ -93,14 +93,6 @@ type AddQuotesResponse struct {
 	ItemsImported int        `json:"itemsImported"`
 }
 
-// PositionTimelineRequest asks for the value over time of each given asset,
-// or of all assets combined if AssetIDs is empty.
-type PositionTimelineRequest struct {
-	AssetIDs     []string `json:"assetIds"`
-	EndTimestamp int64    `json:"endTimestamp"`
-	Period       string   `json:"period"`
-}
-
 // PositionTimeline contains the value over time of one asset or of all assets.
 type PositionTimeline struct {
 	AssetID    string  `json:"assetId,omitempty"` // Empty for the total of all assets.
@@ -110,41 +102,29 @@ type PositionTimeline struct {
 	// of units.Micros would send them as strings (e.g. "12.3").
 	ValueMicros []int64 `json:"valueMicros"`
 }
-type PositionTimelineResponse struct {
-	Status    StatusCode          `json:"status"`
-	Error     string              `json:"error,omitempty"`
-	Currency  units.Currency      `json:"currency,omitempty"`
-	Timelines []*PositionTimeline `json:"timelines,omitempty"`
-}
-type PositionsMaturitiesRequest struct {
-	EndTimestamp int64 `json:"endTimestamp"`
-}
-type MaturitiesChartValues struct {
-	Label       string  `json:"label"`
-	ValueMicros []int64 `json:"valueMicros"`
+
+// ValueChart is the data of the value-over-time chart on the positions page:
+// the total of all assets, or each selected asset.
+type ValueChart struct {
+	Period    string              `json:"period"`
+	AssetIDs  []string            `json:"assetIds"` // The selected assets; empty for the total.
+	Currency  units.Currency      `json:"currency"`
+	Timelines []*PositionTimeline `json:"timelines"`
 }
 
-// MaturitiesChartData contains the principal (nominal value) of maturing
-// positions in the base currency, as int64 micros.
-type MaturitiesChartData struct {
-	Currency     string                   `json:"currency"`
-	BucketLabels []string                 `json:"bucketLabels"`
-	Values       []*MaturitiesChartValues `json:"values"`
-}
-type PositionsMaturitiesResponse struct {
-	Status     StatusCode           `json:"status"`
-	Error      string               `json:"error,omitempty"`
-	Maturities *MaturitiesChartData `json:"maturities,omitempty"`
+// MaturitiesChart contains the principal (nominal value) of maturing
+// positions per bucket of time to maturity, in the base currency.
+type MaturitiesChart struct {
+	Currency     units.Currency `json:"currency"`
+	BucketLabels []string       `json:"bucketLabels"`
+	ValueMicros  []int64        `json:"valueMicros"`
 }
 
-type EquityChartRequest struct {
-	EndTimestamp int64 `json:"endTimestamp"`
-}
-type EquityChartResponse struct {
-	Status      StatusCode `json:"status"`
-	Currency    string     `json:"currency"`
-	AssetNames  []string   `json:"assetNames"`
-	ValueMicros []int64    `json:"valueMicros"`
+// EquityChart contains the value of each equity position in the base currency, largest first.
+type EquityChart struct {
+	Currency    units.Currency `json:"currency"`
+	AssetNames  []string       `json:"assetNames"`
+	ValueMicros []int64        `json:"valueMicros"`
 }
 
 type LedgerAssetInfoRequest struct {
@@ -895,12 +875,14 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 			chart.ValuesByCurrency = append(chart.ValuesByCurrency, values)
 		}
 	}
+	period, assetIDs := valueChartParams(r)
 	minDate, maxDate := s.Store().ValueDateRange()
 	ctx := s.addCommonCtx(r, map[string]any{
 		"TotalValueBaseCurrency": total,
 		"Groups":                 groups,
 		"MissingRates":           missingRates,
 		"CategoryChart":          chart,
+		"ValueChart":             s.valueChart(date, period, assetIDs),
 		"ActiveChips": map[string]bool{
 			"all":   true,
 			"today": date.Equal(civil.Today()),
@@ -917,7 +899,9 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 	// Totals and the maturities chart need all values in the base currency.
 	missingRates := missingExchangeRates(rows)
 	var totals map[string]units.Micros
+	var chart *MaturitiesChart
 	if len(missingRates) == 0 {
+		chart = s.maturitiesChart(rows)
 		var totalValue, totalEarnings, totalIRR units.Micros
 		for _, r := range rows {
 			valueBC := r.Value.Div(r.ExchangeRate)
@@ -940,10 +924,11 @@ func (s *Server) renderMaturingPositionsTemplate(w io.Writer, r *http.Request, d
 			"maturing": true,
 			"today":    date.Equal(civil.Today()),
 		},
-		"Totals":       totals,
-		"MissingRates": missingRates,
-		"MonthOptions": ui.MonthOptions(*r.URL, date),
-		"YearOptions":  ui.YearOptions(*r.URL, date, minDate, maxDate),
+		"Totals":          totals,
+		"MissingRates":    missingRates,
+		"MaturitiesChart": chart,
+		"MonthOptions":    ui.MonthOptions(*r.URL, date),
+		"YearOptions":     ui.YearOptions(*r.URL, date, minDate, maxDate),
 	})
 	return s.templates.ExecuteTemplate(w, "positions_maturing.html", ctx)
 }
@@ -1005,6 +990,7 @@ func (s *Server) renderEquityPositionsTemplate(w io.Writer, r *http.Request, dat
 		},
 		"MonthOptions":    ui.MonthOptions(*r.URL, date),
 		"YearOptions":     ui.YearOptions(*r.URL, date, minDate, maxDate),
+		"EquityChart":     s.equityChart(date),
 		"QuarterlyReport": report,
 		"QuarterlyChart":  chart,
 	})
@@ -1207,60 +1193,75 @@ func ensureDateParam(w http.ResponseWriter, r *http.Request) (civil.Date, bool) 
 	return date, true
 }
 
-func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request) {
-	var req PositionTimelineRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
-		return
+// valueChartPeriods are the periods offered by the value chart.
+var valueChartPeriods = []string{"1M", "3M", "6M", "YTD", "1Y", "5Y", "Max"}
+
+// valueChartPeriodCookie holds the period last chosen in the value chart.
+const valueChartPeriodCookie = "kontoo_chart_period"
+
+// valueChartParams returns the value chart's period and selected assets from r:
+// the period from the period= parameter, else from the period cookie, else 1Y;
+// the assets from the repeated chart= parameter.
+func valueChartParams(r *http.Request) (period string, assetIDs []string) {
+	q := r.URL.Query()
+	period = q.Get("period")
+	if period == "" {
+		if c, err := r.Cookie(valueChartPeriodCookie); err == nil {
+			period = c.Value
+		}
 	}
-	end := civil.ToDate(time.UnixMilli(req.EndTimestamp))
-	start, err := ui.ParsePeriod(end, req.Period)
+	if !slices.Contains(valueChartPeriods, period) {
+		period = "1Y"
+	}
+	return period, q["chart"]
+}
+
+// valueChart returns the value over time of the given assets, or of all assets
+// combined if assetIDs contains no known asset.
+func (s *Server) valueChart(date civil.Date, period string, assetIDs []string) *ValueChart {
+	start, err := ui.ParsePeriod(date, period)
 	if err != nil {
-		http.Error(w, "invalid period: "+err.Error(), http.StatusBadRequest)
-		return
+		panic(fmt.Sprintf("invalid value chart period %q: %v", period, err)) // valueChartParams validates.
 	}
 	timeline := func(assetID, label string, assetIDs []string) *PositionTimeline {
 		t := &PositionTimeline{AssetID: assetID, Label: label}
-		for _, p := range s.Store().ValueTimeline(assetIDs, start, end) {
+		for _, p := range s.Store().ValueTimeline(assetIDs, start, date) {
 			t.Timestamps = append(t.Timestamps, p.Date.UnixMilli())
 			t.ValueMicros = append(t.ValueMicros, int64(p.ValueMicros))
 		}
 		return t
 	}
-	var timelines []*PositionTimeline
-	if len(req.AssetIDs) == 0 {
+	chart := &ValueChart{Period: period, AssetIDs: []string{}, Currency: s.Store().BaseCurrency()}
+	for _, assetID := range assetIDs {
+		if a, ok := s.Store().Asset(assetID); ok && !slices.Contains(chart.AssetIDs, a.ID()) {
+			chart.AssetIDs = append(chart.AssetIDs, a.ID())
+			chart.Timelines = append(chart.Timelines, timeline(a.ID(), a.Name, []string{a.ID()}))
+		}
+	}
+	if len(chart.AssetIDs) == 0 {
 		var all []string
 		for _, a := range s.Store().AllAssets() {
 			all = append(all, a.ID())
 		}
-		timelines = append(timelines, timeline("", "Total", all))
+		chart.Timelines = []*PositionTimeline{timeline("", "Total", all)}
 	}
-	for _, assetID := range req.AssetIDs {
-		if a, ok := s.Store().Asset(assetID); ok {
-			timelines = append(timelines, timeline(a.ID(), a.Name, []string{a.ID()}))
-		}
-	}
-	if len(timelines) == 0 {
-		s.jsonResponse(w, PositionTimelineResponse{
-			Status: StatusInvalidArgument,
-			Error:  fmt.Sprintf("No assets found for given %d IDs", len(req.AssetIDs)),
-		})
-		return
-	}
-	s.jsonResponse(w, PositionTimelineResponse{
-		Status:    StatusOK,
-		Currency:  s.Store().BaseCurrency(),
-		Timelines: timelines,
-	})
+	return chart
 }
 
-func (s *Server) handleChartsEquity(w http.ResponseWriter, r *http.Request) {
-	var req EquityChartRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
+// handlePositionsTimeline serves the value chart's data for the date, period
+// and chart parameters of the positions page, for redrawing it without a reload.
+func (s *Server) handlePositionsTimeline(w http.ResponseWriter, r *http.Request) {
+	date, err := dateParam(r)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("invalid date= parameter: %s", err), http.StatusBadRequest)
 		return
 	}
-	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
+	period, assetIDs := valueChartParams(r)
+	s.jsonResponse(w, s.valueChart(date, period, assetIDs))
+}
+
+// equityChart returns the value of each equity position on date, largest first.
+func (s *Server) equityChart(date civil.Date) *EquityChart {
 	type allocation struct {
 		name  string
 		value units.Micros // In the base currency.
@@ -1269,74 +1270,44 @@ func (s *Server) handleChartsEquity(w http.ResponseWriter, r *http.Request) {
 	for _, r := range equityPositionTableRows(s.Store(), date) {
 		if r.ExchangeRate == 0 {
 			// Ignore assets whose value we cannot calculate in the base currency. Should not happen.
-			log.Printf("handleChartsEquity: no exchange rate for asset %q", r.AssetID)
+			log.Printf("equityChart: no exchange rate for asset %q", r.AssetID)
 			continue
 		}
 		allocations = append(allocations, allocation{r.AssetName, r.Value.Div(r.ExchangeRate)})
 	}
-	// Largest first.
 	slices.SortFunc(allocations, func(a, b allocation) int {
 		if c := cmp.Compare(b.value, a.value); c != 0 {
 			return c
 		}
 		return strings.Compare(a.name, b.name)
 	})
-	var assetNames []string
-	var valueMicros []int64
+	chart := &EquityChart{Currency: s.Store().BaseCurrency()}
 	for _, a := range allocations {
-		assetNames = append(assetNames, a.name)
-		valueMicros = append(valueMicros, int64(a.value))
+		chart.AssetNames = append(chart.AssetNames, a.name)
+		chart.ValueMicros = append(chart.ValueMicros, int64(a.value))
 	}
-	s.jsonResponse(w, EquityChartResponse{
-		Status:      StatusOK,
-		Currency:    string(s.Store().BaseCurrency()),
-		AssetNames:  assetNames,
-		ValueMicros: valueMicros,
-	})
+	return chart
 }
 
-func (s *Server) handlePositionsMaturities(w http.ResponseWriter, r *http.Request) {
-	var req PositionsMaturitiesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "invalid json: "+err.Error(), http.StatusBadRequest)
-		return
-	}
-	date := civil.ToDate(time.UnixMilli(req.EndTimestamp))
-	rows := maturingPositionTableRows(s.Store(), date)
-	if missing := missingExchangeRates(rows); len(missing) > 0 {
-		s.jsonResponse(w, PositionsMaturitiesResponse{
-			Status: StatusInvalidArgument,
-			Error:  fmt.Sprintf("no exchange rate for %v as of %v", missing, date),
-		})
-		return
-	}
-
-	// Principal per bucket of time to maturity: the next six months, the rest
-	// of the first year, years 2 to 4, and later. Bucket i holds maturities up
-	// to upperMonths[i]; the last bucket all later ones.
+// maturitiesChart returns the principal per bucket of time to maturity: the next
+// six months, the rest of the first year, years 2 to 4, and later. All rows must
+// have an exchange rate.
+func (s *Server) maturitiesChart(rows []*PositionTableRow) *MaturitiesChart {
+	// Bucket i holds maturities up to upperMonths[i]; the last bucket all later ones.
 	upperMonths := []float64{6, 12, 24, 36, 48}
-	bucketLabels := []string{"0.5", "1", "2", "3", "4", "5+"}
-	buckets := make([]int64, len(bucketLabels))
+	chart := &MaturitiesChart{
+		Currency:     s.Store().BaseCurrency(),
+		BucketLabels: []string{"0.5", "1", "2", "3", "4", "5+"},
+		ValueMicros:  make([]int64, len(upperMonths)+1),
+	}
 	for _, row := range rows {
 		if row.YearsToMaturity < 0 {
 			continue
 		}
 		i := sort.SearchFloat64s(upperMonths, row.YearsToMaturity*12)
-		buckets[i] += int64(maturityPrincipal(row).Div(row.ExchangeRate))
+		chart.ValueMicros[i] += int64(maturityPrincipal(row).Div(row.ExchangeRate))
 	}
-	s.jsonResponse(w, PositionsMaturitiesResponse{
-		Status: StatusOK,
-		Maturities: &MaturitiesChartData{
-			Currency:     string(s.Store().BaseCurrency()),
-			BucketLabels: bucketLabels,
-			Values: []*MaturitiesChartValues{
-				{
-					Label:       "All maturing assets",
-					ValueMicros: buckets,
-				},
-			},
-		},
-	})
+	return chart
 }
 
 func (s *Server) handlePositions(w http.ResponseWriter, r *http.Request) {
@@ -1782,24 +1753,6 @@ func jsonHandler(h http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-func (s *Server) handleV1ListEntries(w http.ResponseWriter, r *http.Request) {
-}
-func (s *Server) handleV1GetEntry(w http.ResponseWriter, r *http.Request) {
-}
-func (s *Server) handleV1ListAssets(w http.ResponseWriter, r *http.Request) {
-}
-func (s *Server) handleV1GetAsset(w http.ResponseWriter, r *http.Request) {
-}
-
-func (s *Server) apiV1Handler() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("GET /kontoo/v1/entries", s.handleV1ListEntries)
-	mux.HandleFunc("GET /kontoo/v1/entries/{entryID}", s.handleV1GetEntry)
-	mux.HandleFunc("GET /kontoo/v1/assets", s.handleV1ListAssets)
-	mux.HandleFunc("GET /kontoo/v1/assets/{assetID}", s.handleV1GetAsset)
-	return mux
-}
-
 func (s *Server) createMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	// Serve static resources like CSS from resources/ and dist/ dirs.
@@ -1819,8 +1772,6 @@ func (s *Server) createMux() *http.ServeMux {
 			http.FileServer(http.Dir(path.Join(s.baseDir, "css")))))
 	}
 
-	mux.Handle("/kontoo/v1/", s.apiV1Handler())
-
 	mux.HandleFunc("GET /kontoo/ledger", s.reloadHandler(s.handleLedger))
 	mux.HandleFunc("GET /kontoo/positions", s.reloadHandler(s.handlePositions))
 	mux.HandleFunc("GET /kontoo/positions/maturing", s.reloadHandler(s.handlePositionsMaturing))
@@ -1833,9 +1784,7 @@ func (s *Server) createMux() *http.ServeMux {
 	mux.HandleFunc("GET /kontoo/calc", s.reloadHandler(s.handleCalc))
 	// TODO: Use different path, e.g. /kontoo/quotes/history? (for consistency)
 	mux.HandleFunc("GET /kontoo/quotes", s.reloadHandler(s.handleQuotes))
-	mux.HandleFunc("POST /kontoo/positions/timeline", jsonHandler(s.handlePositionsTimeline))
-	mux.HandleFunc("POST /kontoo/positions/maturities", jsonHandler(s.handlePositionsMaturities))
-	mux.HandleFunc("POST /kontoo/charts/equity", jsonHandler(s.handleChartsEquity))
+	mux.HandleFunc("GET /kontoo/positions/timeline", s.handlePositionsTimeline)
 	mux.HandleFunc("POST /kontoo/entries", jsonHandler(s.handleEntriesPost))
 	mux.HandleFunc("POST /kontoo/entries/delete", jsonHandler(s.handleEntriesDelete))
 	mux.HandleFunc("POST /kontoo/entries/assetinfo", jsonHandler(s.handleEntriesAssetInfo))

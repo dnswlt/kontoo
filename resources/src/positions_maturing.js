@@ -1,6 +1,6 @@
 import Chart, { barChartOptions, barStyle } from './charts';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
-import { chartColor } from './common';
+import { chartColor, pageData } from './common';
 
 // A bar per maturity bucket, labelled with its share of the total principal.
 // Empty buckets get no label.
@@ -28,7 +28,7 @@ function drawShareBarChart(canvasId, labels, values, total, currency) {
 
 // The principal per bucket, and cumulated: repaid within each bucket's time to maturity.
 function drawMaturityCharts(maturities) {
-    const values = maturities.values[0].valueMicros.map(v => Math.round(v / 1e6));
+    const values = maturities.valueMicros.map(v => Math.round(v / 1e6));
     const total = values.reduce((sum, v) => sum + v, 0);
     let repaid = 0;
     const cumulative = values.map(v => (repaid += v));
@@ -36,36 +36,8 @@ function drawMaturityCharts(maturities) {
     drawShareBarChart('cumulative-maturities-canvas', maturities.bucketLabels, cumulative, total, maturities.currency);
 }
 
-async function fetchAndDrawMaturities() {
-    try {
-        const dateParam = new URLSearchParams(window.location.search).get("date");
-        const endTimestamp = dateParam ? new Date(dateParam).getTime() : Date.now();
-        const resp = await fetch("/kontoo/positions/maturities", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                "endTimestamp": endTimestamp,
-            })
-        });
-        if (!resp.ok) {
-            throw new Error(`Server returned status ${resp.status}`);
-        }
-        const result = await resp.json();
-        if (result.status !== "OK") {
-            console.log("Response not OK:", result);
-            return;
-        }
-        drawMaturityCharts(result.maturities);
-    }
-    catch (error) {
-        console.error("Error fetching maturities:", error);
-        return;
-    }
-}
-
 export function init() {
-    // The chart is not shown when exchange rates are missing.
-    if (document.getElementById('maturities-canvas')) fetchAndDrawMaturities();
+    // There is no chart data when exchange rates are missing.
+    const data = pageData('maturities-chart-data');
+    if (data) drawMaturityCharts(data);
 }

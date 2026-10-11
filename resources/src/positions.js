@@ -1,42 +1,40 @@
-import { base64ToString, chartColor, loadPref, savePref, stringToBase64 } from './common';
+import { chartColor, loadPref, pageData, savePref } from './common';
 import Chart, { barChartOptions, barStyle } from './charts';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
 
-// The chart shows the total value of all assets, or only the selected assets.
-// Selection and period live in the URL. The last chosen period (the default for
-// URLs without one) is a per-browser preference.
-const periodKey = 'kontoo.positions.chartPeriod';
+// The value chart shows the total value of all assets, or only the selected
+// assets. Its state lives in the URL (period=, repeated chart=), so Back/Forward
+// and bookmarks work. The page embeds the chart's initial data; changes fetch the
+// data for the updated URL without reloading the page. The last chosen period is
+// a cookie, so the server can use it for URLs without a period.
+const periodCookie = 'kontoo_chart_period';
 const compactNumber = new Intl.NumberFormat('en', { notation: 'compact' });
 const wholeNumber = new Intl.NumberFormat('en', { maximumFractionDigits: 0 });
 
-let state;
+let state = { period: '1Y', assetIds: [] };
 let chart = null;
 let currency = '';
 let request = null;
 
-function readState() {
-    state = { assetIds: [], period: loadPref(periodKey) || '1Y' };
-    const param = new URLSearchParams(window.location.search).get('ui-state');
-    if (!param) return;
-    try {
-        state = { ...state, ...JSON.parse(base64ToString(param)) };
-    } catch (error) {
-        console.error('Invalid ui-state= param:', error);
-    }
+function setChartParams(url, { period, assetIds }) {
+    url.searchParams.delete('ui-state'); // Replaced by period= and chart=.
+    url.searchParams.set('period', period);
+    url.searchParams.delete('chart');
+    assetIds.forEach(id => url.searchParams.append('chart', id));
 }
 
+// Records the new state in the URL, as a new history entry, and loads its chart.
 function updateState(update) {
-    state = { ...state, ...update };
     const url = new URL(window.location);
-    url.searchParams.set('ui-state', stringToBase64(JSON.stringify(state)));
+    setChartParams(url, { ...state, ...update });
     window.history.pushState({}, '', url);
-    render();
+    load();
 }
 
 function setPeriod(period) {
-    savePref(periodKey, period);
+    document.cookie = `${periodCookie}=${period}; path=/kontoo; max-age=${365 * 24 * 3600}; samesite=lax`;
     updateState({ period });
 }
 
@@ -148,36 +146,38 @@ function markRows(timelines) {
     });
 }
 
-async function render() {
+// Fetches the chart data for the current URL: the endpoint takes the page's parameters.
+async function load() {
+    request?.abort();
+    request = new AbortController();
+    try {
+        const response = await fetch(`/kontoo/positions/timeline${window.location.search}`, { signal: request.signal });
+        if (!response.ok) throw new Error((await response.text()) || `HTTP error: ${response.status}`);
+        show(await response.json());
+    } catch (error) {
+        if (error.name !== 'AbortError') console.error('Error fetching timeline:', error);
+    }
+}
+
+// Shows the chart data and the state the server computed it for.
+function show(data) {
+    state = { period: data.period, assetIds: data.assetIds };
+    currency = data.currency;
     document.querySelectorAll('.positions-chart-periods button').forEach(button => {
         button.setAttribute('aria-pressed', String(button.dataset.period === state.period));
     });
     document.querySelectorAll('[data-position-chart]').forEach(button => {
         button.textContent = state.assetIds.includes(button.dataset.positionChart) ? 'Remove from chart' : 'Show in chart';
     });
-    request?.abort();
-    request = new AbortController();
-    try {
-        const date = new URLSearchParams(window.location.search).get('date');
-        const response = await fetch('/kontoo/positions/timeline', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                assetIds: state.assetIds,
-                endTimestamp: date ? new Date(date).getTime() : Date.now(),
-                period: state.period,
-            }),
-            signal: request.signal,
-        });
-        const result = await response.json();
-        if (result.status !== 'OK') throw new Error(result.error);
-        currency = result.currency;
-        drawChart(result.timelines);
-        renderSeries(result.timelines);
-        markRows(result.timelines);
-    } catch (error) {
-        if (error.name !== 'AbortError') console.error('Error fetching timeline:', error);
-    }
+    drawChart(data.timelines);
+    renderSeries(data.timelines);
+    markRows(data.timelines);
+    // The date controls were rendered for the URL at page load: keep their chart state current.
+    document.querySelectorAll('.positions-controls a.report-date-option, .positions-controls a.report-today').forEach(link => {
+        const url = new URL(link.href);
+        setChartParams(url, state);
+        link.href = url;
+    });
 }
 
 // Category allocation: one horizontal bar per category, labelled with its share
@@ -273,8 +273,8 @@ function initCategoryChart(data) {
 }
 
 export function init() {
-    const categoryData = document.getElementById('category-chart-data');
-    if (categoryData) initCategoryChart(JSON.parse(categoryData.textContent));
+    const categoryData = pageData('category-chart-data');
+    if (categoryData) initCategoryChart(categoryData);
     document.querySelectorAll('[data-position-chart]').forEach(button => {
         button.addEventListener('click', () => {
             button.closest('[popover]').hidePopover();
@@ -284,10 +284,6 @@ export function init() {
     document.querySelectorAll('.positions-chart-periods button').forEach(button => {
         button.addEventListener('click', () => setPeriod(button.dataset.period));
     });
-    window.addEventListener('popstate', () => {
-        readState();
-        render();
-    });
-    readState();
-    render();
+    window.addEventListener('popstate', load);
+    show(pageData('value-chart-data'));
 }

@@ -89,7 +89,8 @@
             {{end}}
         </tbody>
     </table>
-    {{if not .MissingRates}}
+    {{if .MaturitiesChart}}
+    <script id="maturities-chart-data" type="application/json">{{.MaturitiesChart}}</script>
     <section class="chart-block no-print" aria-labelledby="maturities-heading">
         <h2 id="maturities-heading" class="section-heading">Nominal value by time to maturity (years)</h2>
         <div class="chart-canvas"><canvas id="maturities-canvas"></canvas></div>

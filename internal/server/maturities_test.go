@@ -56,32 +56,29 @@ func maturitiesTestServer(t *testing.T, withCHFRate bool) *Server {
 	return s
 }
 
-type maturitiesResponse struct {
-	Status     StatusCode
-	Error      string
-	Maturities *struct {
-		Currency     string
-		BucketLabels []string
-		Values       []struct{ ValueMicros []int64 }
-	}
-}
-
-func postMaturities(t *testing.T, s *Server) maturitiesResponse {
+// renderMaturing renders the maturing positions page on 2024-06-30.
+func renderMaturing(t *testing.T, s *Server) *html.Node {
 	t.Helper()
-	body, _ := json.Marshal(PositionsMaturitiesRequest{EndTimestamp: civil.DateVal(2024, 6, 30).UnixMilli()})
-	w := httptest.NewRecorder()
-	s.handlePositionsMaturities(w, httptest.NewRequest(http.MethodPost, "/kontoo/positions/maturities", bytes.NewReader(body)))
-	var resp maturitiesResponse
-	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+	var b bytes.Buffer
+	r := httptest.NewRequest(http.MethodGet, "/kontoo/positions/maturing?date=2024-06-30", nil)
+	if err := s.renderMaturingPositionsTemplate(&b, r, civil.DateVal(2024, 6, 30)); err != nil {
 		t.Fatal(err)
 	}
-	return resp
+	doc, err := html.Parse(&b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return doc
 }
 
 func TestPositionsMaturitiesInBaseCurrency(t *testing.T) {
-	resp := postMaturities(t, maturitiesTestServer(t, true))
-	if resp.Status != StatusOK {
-		t.Fatalf("status %v: %s", resp.Status, resp.Error)
+	script := findElement(renderMaturing(t, maturitiesTestServer(t, true)), "script", "id", "maturities-chart-data")
+	if script == nil {
+		t.Fatal("missing maturities chart data")
+	}
+	var chart MaturitiesChart
+	if err := json.Unmarshal([]byte(textContent(script)), &chart); err != nil {
+		t.Fatal(err)
 	}
 	// Nominal values, not market values: 1000 USD at 1.25 USD per EUR and
 	// 1000 CHF at 0.8 CHF per EUR, maturing exactly two years after the report
@@ -89,27 +86,19 @@ func TestPositionsMaturitiesInBaseCurrency(t *testing.T) {
 	// balance of 520 EUR including interest), maturing after nine months.
 	wantLabels := []string{"0.5", "1", "2", "3", "4", "5+"}
 	wantValues := []int64{0, int64(500 * units.One), int64(2050 * units.One), 0, 0, 0}
-	if resp.Maturities.Currency != "EUR" || !slices.Equal(resp.Maturities.BucketLabels, wantLabels) ||
-		!slices.Equal(resp.Maturities.Values[0].ValueMicros, wantValues) {
-		t.Errorf("got %s %v %v, want EUR %v %v", resp.Maturities.Currency, resp.Maturities.BucketLabels,
-			resp.Maturities.Values[0].ValueMicros, wantLabels, wantValues)
+	if chart.Currency != "EUR" || !slices.Equal(chart.BucketLabels, wantLabels) || !slices.Equal(chart.ValueMicros, wantValues) {
+		t.Errorf("got %s %v %v, want EUR %v %v", chart.Currency, chart.BucketLabels, chart.ValueMicros, wantLabels, wantValues)
 	}
 }
 
 func TestPositionsMaturitiesMissingExchangeRate(t *testing.T) {
-	s := maturitiesTestServer(t, false)
-	if resp := postMaturities(t, s); resp.Status == StatusOK || !strings.Contains(resp.Error, "CHF") {
-		t.Errorf("want an error naming CHF, got status %v: %q", resp.Status, resp.Error)
+	doc := renderMaturing(t, maturitiesTestServer(t, false))
+	if callout := findElement(doc, "div", "class", "callout callout-warn"); callout == nil ||
+		!strings.Contains(textContent(callout), "No exchange rate for CHF as of 2024-06-30") {
+		t.Error("missing exchange-rate warning")
 	}
-	var b bytes.Buffer
-	r := httptest.NewRequest(http.MethodGet, "/kontoo/positions/maturing?date=2024-06-30", nil)
-	if err := s.renderMaturingPositionsTemplate(&b, r, civil.DateVal(2024, 6, 30)); err != nil {
-		t.Fatal(err)
-	}
-	html := b.String()
-	if !strings.Contains(html, "No exchange rate for CHF as of 2024-06-30") ||
-		strings.Contains(html, `class="total"`) || strings.Contains(html, `id="maturities-canvas"`) {
-		t.Error("missing rates should show a warning instead of totals and the chart")
+	if findElement(doc, "tr", "class", "total") != nil || findElement(doc, "script", "id", "maturities-chart-data") != nil {
+		t.Error("missing rates should show a warning instead of totals and the charts")
 	}
 }
 

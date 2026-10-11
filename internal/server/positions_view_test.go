@@ -109,3 +109,80 @@ func TestPositionActionsShowLedger(t *testing.T) {
 		}
 	}
 }
+
+func TestValueChartParams(t *testing.T) {
+	for _, tc := range []struct {
+		query, cookie, wantPeriod string
+		wantAssets                []string
+	}{
+		{"", "", "1Y", nil},
+		{"", "Max", "Max", nil},         // The last chosen period, from the cookie.
+		{"period=5Y", "Max", "5Y", nil}, // The URL wins over the cookie.
+		{"period=bogus", "", "1Y", nil}, // Invalid periods fall back to the default.
+		{"chart=a&chart=b", "", "1Y", []string{"a", "b"}},
+	} {
+		r := httptest.NewRequest(http.MethodGet, "/kontoo/positions?"+tc.query, nil)
+		if tc.cookie != "" {
+			r.AddCookie(&http.Cookie{Name: valueChartPeriodCookie, Value: tc.cookie})
+		}
+		period, assets := valueChartParams(r)
+		if period != tc.wantPeriod || !slices.Equal(assets, tc.wantAssets) {
+			t.Errorf("%q, cookie %q: got %q %v, want %q %v", tc.query, tc.cookie, period, assets, tc.wantPeriod, tc.wantAssets)
+		}
+	}
+}
+
+// The page embeds the value chart's data, and the endpoint serves the same data
+// for the page's parameters.
+func TestValueChartEmbeddedAndServed(t *testing.T) {
+	s := ledgerViewTestServer(t)
+	type valueChart struct {
+		Period    string
+		AssetIDs  []string
+		Timelines []struct{ AssetID, Label string }
+	}
+	query := "date=2024-03-01&period=Max&chart=stock&chart=missing"
+
+	var b bytes.Buffer
+	if err := s.renderPositionsTemplate(&b, httptest.NewRequest(http.MethodGet, "/kontoo/positions?"+query, nil), civil.DateVal(2024, 3, 1)); err != nil {
+		t.Fatal(err)
+	}
+	doc, err := html.Parse(&b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := findElement(doc, "script", "id", "value-chart-data")
+	if script == nil {
+		t.Fatal("missing value chart data")
+	}
+	var embedded valueChart
+	if err := json.Unmarshal([]byte(textContent(script)), &embedded); err != nil {
+		t.Fatal(err)
+	}
+
+	w := httptest.NewRecorder()
+	s.handlePositionsTimeline(w, httptest.NewRequest(http.MethodGet, "/kontoo/positions/timeline?"+query, nil))
+	var served valueChart
+	if err := json.NewDecoder(w.Body).Decode(&served); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, chart := range map[string]valueChart{"embedded": embedded, "served": served} {
+		// Unknown assets are ignored.
+		if chart.Period != "Max" || !slices.Equal(chart.AssetIDs, []string{"stock"}) ||
+			len(chart.Timelines) != 1 || chart.Timelines[0].Label != "Beta stock" {
+			t.Errorf("%s: got %+v", name, chart)
+		}
+	}
+
+	// Without selected assets, the chart shows the total.
+	w = httptest.NewRecorder()
+	s.handlePositionsTimeline(w, httptest.NewRequest(http.MethodGet, "/kontoo/positions/timeline?date=2024-03-01", nil))
+	var total valueChart
+	if err := json.NewDecoder(w.Body).Decode(&total); err != nil {
+		t.Fatal(err)
+	}
+	if total.Period != "1Y" || len(total.AssetIDs) != 0 || len(total.Timelines) != 1 || total.Timelines[0].Label != "Total" {
+		t.Errorf("total: got %+v", total)
+	}
+}
