@@ -53,6 +53,42 @@ func TestUnmarshalChartError(t *testing.T) {
 	}
 }
 
+func TestChartQuotesNullClose(t *testing.T) {
+	// Y! returns null for the latest close of some European exchanges,
+	// but has the price in the meta data.
+	data := `{"chart":{"result":[{
+		"meta":{"currency":"EUR","symbol":"EUNL.DE","exchangeTimezoneName":"Europe/Berlin",
+			"regularMarketPrice":130.785,"regularMarketTime":1792078557},
+		"timestamp":[1791961200,1792047600],
+		"indicators":{"quote":[{"close":[131.795,null]}]}}],"error":null}}`
+	var cr YFChartResponse
+	if err := json.Unmarshal([]byte(data), &cr); err != nil {
+		t.Fatalf("Cannot unmarshal: %v", err)
+	}
+	hist, err := chartQuotes(cr.Chart.Result[0], "EUNL.DE")
+	if err != nil {
+		t.Fatalf("chartQuotes failed: %v", err)
+	}
+	var got []units.Micros
+	for _, h := range hist {
+		got = append(got, h.ClosingPrice)
+	}
+	want := []units.Micros{131_795_000, 130_785_000}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Wrong closing prices (-want +got):\n%s", diff)
+	}
+
+	// Without a same-day meta price, the null day is skipped.
+	cr.Chart.Result[0].Meta.RegularMarketTime = 1791961200
+	hist, err = chartQuotes(cr.Chart.Result[0], "EUNL.DE")
+	if err != nil {
+		t.Fatalf("chartQuotes failed: %v", err)
+	}
+	if len(hist) != 1 || hist[0].ClosingPrice != 131_795_000 {
+		t.Errorf("Expected only the first quote, got %v", hist)
+	}
+}
+
 func TestFetchPriceHistory(t *testing.T) {
 	if !*integrationTest {
 		t.Skip("Skipping integration test")

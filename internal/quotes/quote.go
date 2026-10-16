@@ -26,14 +26,18 @@ type DailyExchangeRate struct {
 	Symbol        string // Ticker symbol at the quote service, e.g. "EURCHF=X".
 	BaseCurrency  units.Currency
 	QuoteCurrency units.Currency
-	Timestamp     time.Time    // Timestamp for the ClosingPrice as received from the quote service.
+	Timestamp     time.Time    // Timestamp of the price bar as received from the quote service, see DailyQuote.
 	ClosingPrice  units.Micros // Expressed as a multiple of the QuoteCurrency: 1.30 means for 1 BaseCurrency you get 1.30 QuoteCurrency.
 }
 
 type DailyQuote struct {
-	Symbol       string
-	Currency     units.Currency
-	Timestamp    time.Time // Timestamp for the ClosingPrice as received from the quote service.
+	Symbol   string
+	Currency units.Currency
+	// Timestamp of the daily price bar as received from the quote service.
+	// For Y! this is the start of the trading day (exchange opening time),
+	// not the time of the close. For 24h markets like FX, the bar of a day
+	// still in progress carries the time of the latest price instead.
+	Timestamp    time.Time
 	ClosingPrice units.Micros
 }
 
@@ -72,15 +76,19 @@ type YFChartResult struct {
 	Timestamps []float64     `json:"timestamp"`
 }
 type YFMeta struct {
-	ExchangeTimezoneName string `json:"exchangeTimezoneName"`
-	Currency             string `json:"currency"`
-	Symbol               string `json:"symbol"`
+	ExchangeTimezoneName string  `json:"exchangeTimezoneName"`
+	Currency             string  `json:"currency"`
+	Symbol               string  `json:"symbol"`
+	RegularMarketPrice   float64 `json:"regularMarketPrice"`
+	RegularMarketTime    int64   `json:"regularMarketTime"`
 }
 type YFIndicators struct {
 	Quote []*YFQuote `json:"quote"`
 }
 type YFQuote struct {
-	Close []float64 `json:"close"`
+	// Y! sometimes returns null closing prices, e.g. for the most recent day
+	// of European exchanges.
+	Close []*float64 `json:"close"`
 }
 
 // Response for /quoteSummary GET requests:
@@ -368,9 +376,14 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 		log.Printf("Unexpected response structure: %s", string(body))
 		return nil, fmt.Errorf("YFChartResponse is missing expected data")
 	}
+	return chartQuotes(yresp.Chart.Result[0], symbol)
+}
+
+// chartQuotes converts a validated chart result into daily quotes.
+// Days without a closing price are skipped.
+func chartQuotes(res *YFChartResult, symbol string) ([]*DailyQuote, error) {
 	var hist []*DailyQuote
 	var currency units.Currency
-	res := yresp.Chart.Result[0]
 	timezone := time.UTC
 	if res.Meta != nil {
 		currency = units.Currency(res.Meta.Currency)
@@ -381,12 +394,28 @@ func (yf *YFinance) FetchPriceHistory(symbol string, start, end time.Time) ([]*D
 			return nil, fmt.Errorf("response is for a different symbol: requested %q, received %q", symbol, res.Meta.Symbol)
 		}
 	}
-	for i, c := range res.Indicators.Quote[0].Close {
+	closes := res.Indicators.Quote[0].Close
+	for i, c := range closes {
+		ts := time.Unix(int64(res.Timestamps[i]), 0).In(timezone)
+		var price float64
+		if c != nil {
+			price = *c
+		} else if i == len(closes)-1 && res.Meta != nil {
+			// The latest close may be missing, but the meta data then usually
+			// has the latest price for the same day.
+			mt := time.Unix(res.Meta.RegularMarketTime, 0).In(timezone)
+			if civil.ToDate(mt).Equal(civil.ToDate(ts)) && !mt.Before(ts) {
+				price = res.Meta.RegularMarketPrice
+			}
+		}
+		if price <= 0 {
+			continue
+		}
 		hist = append(hist, &DailyQuote{
 			Symbol:       symbol,
 			Currency:     currency,
-			ClosingPrice: units.Micros(c * 1e6),
-			Timestamp:    time.Unix(int64(res.Timestamps[i]), 0).In(timezone),
+			ClosingPrice: units.FloatAsMicros(price),
+			Timestamp:    ts,
 		})
 	}
 	return hist, nil
