@@ -130,3 +130,31 @@ func TestCalculateAllocation(t *testing.T) {
 		t.Errorf("unknown category: got status %d, want %d", code, http.StatusBadRequest)
 	}
 }
+
+func TestCalculateIRR(t *testing.T) {
+	s := ledgerViewTestServer(t)
+	w := httptest.NewRecorder()
+	body := `{"nominalValue": "10000", "purchasePrice": "98.5%", "cost": "25", "purchaseDate": "2026-01-15", "maturityDate": "2028-01-15", "interestRate": "2%"}`
+	s.handleCalculate(w, httptest.NewRequest(http.MethodPost, "/kontoo/calculate", strings.NewReader(body)))
+	var resp CalculateIRRResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != StatusOK {
+		t.Fatalf("got status %v: %s", resp.Status, resp.Error)
+	}
+	// Two years of 2% interest (400), redemption (10'000), minus purchase and cost.
+	if resp.PurchaseAmount != "9'850.00" || resp.Earnings != "525.00" {
+		t.Errorf("got purchase amount %q and earnings %q, want 9'850.00 and 525.00", resp.PurchaseAmount, resp.Earnings)
+	}
+
+	w = httptest.NewRecorder()
+	body = `{"nominalValue": "10000", "purchasePrice": "105%", "cost": "25", "purchaseDate": "2026-01-15", "maturityDate": "2028-01-15", "interestRate": "2%"}`
+	s.handleCalculate(w, httptest.NewRequest(http.MethodPost, "/kontoo/calculate", strings.NewReader(body)))
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Earnings != "(125.00)" {
+		t.Errorf("loss: got %q, want (125.00)", resp.Earnings)
+	}
+}

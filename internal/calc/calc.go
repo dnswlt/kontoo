@@ -173,11 +173,35 @@ type IRRParams struct {
 	InterestPayment ledger.InterestPaymentSchedule
 }
 
-// irrWithInterest calculates the IRR for a single purchase of a fixed-income asset.
+// IRRWithInterest calculates the IRR for a single purchase of a fixed-income asset.
 // The price must be given in %.
 // This function is used in the Calculator UI.
 func IRRWithInterest(p IRRParams) (units.Micros, error) {
+	values, dates, err := p.cashflows()
+	if err != nil {
+		return 0, err
+	}
+	return XIRR(values, dates)
+}
 
+// EarningsWithInterest calculates the total earnings by the maturity date for
+// a single purchase of a fixed-income asset: interest and redemption, minus
+// the purchase price and cost.
+func EarningsWithInterest(p IRRParams) (units.Micros, error) {
+	values, _, err := p.cashflows()
+	if err != nil {
+		return 0, err
+	}
+	var total units.Micros
+	for _, v := range values {
+		total += v
+	}
+	return total, nil
+}
+
+// cashflows returns the payments of a single purchase of a fixed-income asset:
+// the purchase (negative), interest payments, and the redemption.
+func (p IRRParams) cashflows() ([]units.Micros, []civil.Date, error) {
 	var values []units.Micros
 	var dates []civil.Date
 	values = append(values, -p.Price.Mul(p.NominalValue)-p.Cost)
@@ -211,13 +235,13 @@ func IRRWithInterest(p IRRParams) (units.Micros, error) {
 		values = append(values, p.NominalValue.Mul(interest))
 		dates = append(dates, p.MaturityDate)
 	default:
-		return 0, fmt.Errorf("unsupported payment schedule: %v", p.InterestPayment)
+		return nil, nil, fmt.Errorf("unsupported payment schedule: %v", p.InterestPayment)
 	}
 	// Append redemption payment.
 	values = append(values, p.NominalValue)
 	dates = append(dates, p.MaturityDate)
 
-	return XIRR(values, dates)
+	return values, dates, nil
 }
 
 // InternalRateOfReturn calculates the internal rate of return (IRR) of the

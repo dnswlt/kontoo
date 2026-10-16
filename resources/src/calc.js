@@ -1,7 +1,12 @@
 import { calloutError, calloutWarning, hideCallout, loadPref, parseMicros, savePref } from './common';
 
 function initIrr(form) {
-    const result = document.getElementById('IRR');
+    const results = {
+        purchaseAmount: document.getElementById('PurchaseAmount'),
+        earnings: document.getElementById('Earnings'),
+        irrFormatted: document.getElementById('IRR'),
+    };
+    const show = data => Object.entries(results).forEach(([key, output]) => { output.textContent = data?.[key] ?? '–'; });
     form.addEventListener('submit', async event => {
         event.preventDefault();
         const value = id => document.getElementById(id).value.trim();
@@ -23,9 +28,9 @@ function initIrr(form) {
             const data = await response.json();
             if (data.status !== 'OK') throw new Error(data.error);
             hideCallout();
-            result.textContent = data.irrFormatted;
+            show(data);
         } catch (error) {
-            result.textContent = '–';
+            show(null);
             calloutError(error.message);
         }
     });

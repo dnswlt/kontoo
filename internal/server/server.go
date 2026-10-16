@@ -148,10 +148,12 @@ type CalculateIRRRequest struct {
 }
 
 type CalculateIRRResponse struct {
-	Status       StatusCode `json:"status"`
-	Error        string     `json:"error,omitempty"`
-	IRRMicros    int64      `json:"irrMicros"`
-	IRRFormatted string     `json:"irrFormatted"`
+	Status         StatusCode `json:"status"`
+	Error          string     `json:"error,omitempty"`
+	IRRMicros      int64      `json:"irrMicros"`
+	IRRFormatted   string     `json:"irrFormatted"`
+	PurchaseAmount string     `json:"purchaseAmount"` // Nominal value times purchase price, without cost.
+	Earnings       string     `json:"earnings"`       // Interest and redemption, minus purchase amount and cost.
 }
 
 type CalculateAllocationRequest struct {
@@ -1460,7 +1462,7 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 	if req.AccruedInterest {
 		interestPayment = ledger.AccruedPayment
 	}
-	irrMicros, err := calc.IRRWithInterest(calc.IRRParams{
+	params := calc.IRRParams{
 		NominalValue:    req.NominalValue,
 		Price:           req.PurchasePrice,
 		InterestRate:    req.InterestRate,
@@ -1468,7 +1470,12 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 		PurchaseDate:    req.PurchaseDate,
 		MaturityDate:    req.MaturityDate,
 		InterestPayment: interestPayment,
-	})
+	}
+	var earnings units.Micros
+	irrMicros, err := calc.IRRWithInterest(params)
+	if err == nil {
+		earnings, err = calc.EarningsWithInterest(params)
+	}
 	if err != nil {
 		s.jsonResponse(w, CalculateIRRResponse{
 			Status: StatusInvalidArgument,
@@ -1477,9 +1484,11 @@ func (s *Server) handleCalculate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.jsonResponse(w, CalculateIRRResponse{
-		Status:       StatusOK,
-		IRRMicros:    int64(irrMicros),
-		IRRFormatted: irrMicros.Format("()'.2%"),
+		Status:         StatusOK,
+		IRRMicros:      int64(irrMicros),
+		IRRFormatted:   irrMicros.Format("()'.2%"),
+		PurchaseAmount: req.PurchasePrice.Mul(req.NominalValue).Format("()'.2"),
+		Earnings:       earnings.Format("()'.2"),
 	})
 }
 

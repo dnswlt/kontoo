@@ -69,6 +69,18 @@
         </div>
         <div class="field">
             <div class="field-label">
+                <label for="PurchaseAmount">Purchase amount</label>
+            </div>
+            <output id="PurchaseAmount" class="calc-result" for="NominalValue PurchasePrice">–</output>
+        </div>
+        <div class="field">
+            <div class="field-label">
+                <label for="Earnings">Total earnings at maturity</label>
+            </div>
+            <output id="Earnings" class="calc-result" for="NominalValue PurchasePrice Cost PurchaseDate MaturityDate InterestRate">–</output>
+        </div>
+        <div class="field">
+            <div class="field-label">
                 <label for="IRR">Internal rate of return</label>
             </div>
             <output id="IRR" class="calc-result" for="NominalValue PurchasePrice Cost PurchaseDate MaturityDate InterestRate">–</output>
