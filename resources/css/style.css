@@ -45,6 +45,11 @@ th {
     text-align: left;
 }
 
+/* The page font is loaded in two weights: 400 and 600 for emphasis. */
+th, b, strong, h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+}
+
 table {
     border-collapse: collapse;
 }
@@ -79,7 +84,7 @@ tr.subtotal {
 }
 
 tr.total td {
-    font-weight: bold;
+    font-weight: 600;
 }
 
 .negative-amount {
@@ -87,7 +92,6 @@ tr.total td {
 }
 .calculated-value {
     font-style: italic;
-    /* font-weight: 300; */
 }
 
 /* Horizontal separation between widgets. */
@@ -167,7 +171,7 @@ div.field {
 }
 
 .field-label {
-    font-weight: bold;
+    font-weight: 600;
     /* font-size: 90%; */
     margin-bottom: 4px;
 }
@@ -315,7 +319,7 @@ input.filter {
 }
 
 #asset-info .main {
-    font-weight: bold;
+    font-weight: 600;
 }
 
 #asset-info td.label {
