@@ -112,6 +112,17 @@ type ValueChart struct {
 	Timelines []*PositionTimeline `json:"timelines"`
 }
 
+// YearlyChangeChart contains the change in the total value of all assets per
+// year, in the base currency: from the end of the previous year to the end of
+// the year, or to the report date in its year. The first year of the ledger
+// has no previous year-end value and is left out.
+type YearlyChangeChart struct {
+	Currency     units.Currency `json:"currency"`
+	Labels       []string       `json:"labels"` // The year, e.g. "2025", or "2026 YTD".
+	ChangeMicros []int64        `json:"changeMicros"`
+	ValueMicros  []int64        `json:"valueMicros"` // The value at the end of the year (or on the report date).
+}
+
 // MaturitiesChart contains the principal (nominal value) of maturing
 // positions per bucket of time to maturity, in the base currency.
 type MaturitiesChart struct {
@@ -911,6 +922,7 @@ func (s *Server) renderPositionsTemplate(w io.Writer, r *http.Request, date civi
 		"MissingRates":           missingRates,
 		"CategoryChart":          chart,
 		"ValueChart":             s.valueChart(date, period, assetIDs),
+		"YearlyChangeChart":      s.yearlyChangeChart(date),
 		"ActiveChips": map[string]bool{
 			"all":   true,
 			"today": date.Equal(civil.Today()),
@@ -1314,6 +1326,45 @@ func (s *Server) valueChart(date civil.Date, period string, assetIDs []string) *
 			all = append(all, a.ID())
 		}
 		chart.Timelines = []*PositionTimeline{timeline("", "Total", all)}
+	}
+	return chart
+}
+
+// yearlyChangeChart returns the change in the total value of all assets in
+// each year up to the year of date.
+func (s *Server) yearlyChangeChart(date civil.Date) *YearlyChangeChart {
+	var all []string
+	for _, a := range s.Store().AllAssets() {
+		all = append(all, a.ID())
+	}
+	chart := &YearlyChangeChart{Currency: s.Store().BaseCurrency()}
+	timeline := s.Store().ValueTimeline(all, civil.Date{}, date)
+	if len(timeline) == 0 {
+		return chart
+	}
+	// valueAt returns the value on d, for increasing d: the value only changes
+	// on the dates of the timeline.
+	i := 0
+	valueAt := func(d civil.Date) units.Micros {
+		for i+1 < len(timeline) && !timeline[i+1].Date.After(d) {
+			i++
+		}
+		return timeline[i].ValueMicros
+	}
+	first := timeline[0].Date.Year()
+	prev := valueAt(civil.DateVal(first, 12, 31))
+	for year := first + 1; year <= date.Year(); year++ {
+		end := civil.DateVal(year, 12, 31)
+		label := strconv.Itoa(year)
+		if date.Before(end) {
+			end = date
+			label += " YTD"
+		}
+		value := valueAt(end)
+		chart.Labels = append(chart.Labels, label)
+		chart.ChangeMicros = append(chart.ChangeMicros, int64(value-prev))
+		chart.ValueMicros = append(chart.ValueMicros, int64(value))
+		prev = value
 	}
 	return chart
 }

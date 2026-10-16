@@ -1,5 +1,6 @@
 import { chartColor, loadPref, pageData, savePref } from './common';
-import Chart, { barChartOptions, barStyle } from './charts';
+import Chart, { barChartOptions, barStyle, lossColor } from './charts';
+import { color } from 'chart.js/helpers';
 import ChartDataLabels from 'chartjs-plugin-datalabels';
 import 'chartjs-adapter-date-fns';
 import { enGB } from 'date-fns/locale';
@@ -112,7 +113,7 @@ function renderSeries(timelines) {
     if (state.assetIds.length === 0) {
         const title = document.createElement('span');
         title.className = 'positions-chart-title';
-        title.append(dot(chartColor(0)), `Total value (${currency})`);
+        title.append(dot(chartColor(0)), 'Total');
         series.append(title);
         return;
     }
@@ -272,9 +273,51 @@ function initCategoryChart(data) {
     render();
 }
 
+// Yearly change: one bar per year with the change in total value since the end
+// of the previous year, labelled with the amount; the tooltip adds the change in
+// percent. The current year runs to the report date and has a lighter bar.
+function drawYearlyChangeChart(data) {
+    const changes = data.changeMicros.map(v => Math.round(v / 1e6));
+    const values = data.valueMicros.map(v => Math.round(v / 1e6));
+    // In percent of the previous year-end value, if that was positive.
+    const percent = i => {
+        const previous = values[i] - changes[i];
+        return previous > 0 ? changes[i] / previous * 100 : null;
+    };
+    const barColor = ctx => {
+        const c = changes[ctx.dataIndex] < 0 ? lossColor : chartColor(0); // The color of the total in the value chart.
+        return data.labels[ctx.dataIndex].endsWith('YTD') ? color(c).alpha(0.5).rgbString() : c;
+    };
+    const options = barChartOptions(data.currency);
+    options.plugins.tooltip.callbacks.label = ctx => {
+        const p = percent(ctx.dataIndex);
+        return `${wholeNumber.format(changes[ctx.dataIndex])} ${data.currency}${p === null ? '' : ` (${p > 0 ? '+' : ''}${p.toFixed(1)}%)`}`;
+    };
+    options.plugins.tooltip.callbacks.footer = items => `Value: ${wholeNumber.format(values[items[0].dataIndex])} ${data.currency}`;
+    // Room for the amount labels at the bar ends, above and below (Chart.js takes
+    // the percentage of half the data range).
+    options.scales.y.grace = '40%';
+    options.plugins.datalabels = {
+        formatter: value => `${value > 0 ? '+' : ''}${compactNumber.format(value)}`,
+        // The plugin's direction for vertical bars is always up: the end of a
+        // negative bar is its start.
+        anchor: ctx => (changes[ctx.dataIndex] < 0 ? 'start' : 'end'),
+        align: ctx => (changes[ctx.dataIndex] < 0 ? 'start' : 'end'),
+        color: '#566171',
+    };
+    new Chart(document.getElementById('yearly-change-canvas'), {
+        type: 'bar',
+        data: { labels: data.labels, datasets: [{ ...barStyle, data: changes, backgroundColor: barColor }] },
+        options,
+        plugins: [ChartDataLabels],
+    });
+}
+
 export function init() {
     const categoryData = pageData('category-chart-data');
     if (categoryData) initCategoryChart(categoryData);
+    const yearlyChangeData = pageData('yearly-change-chart-data');
+    if (yearlyChangeData) drawYearlyChangeChart(yearlyChangeData);
     document.querySelectorAll('[data-position-chart]').forEach(button => {
         button.addEventListener('click', () => {
             button.closest('[popover]').hidePopover();

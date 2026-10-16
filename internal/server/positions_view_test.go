@@ -12,6 +12,7 @@ import (
 	"github.com/dnswlt/kontoo/internal/civil"
 	"github.com/dnswlt/kontoo/internal/ledger"
 	"github.com/dnswlt/kontoo/internal/units"
+	"github.com/google/go-cmp/cmp"
 	"golang.org/x/net/html"
 )
 
@@ -184,5 +185,43 @@ func TestValueChartEmbeddedAndServed(t *testing.T) {
 	}
 	if total.Period != "1Y" || len(total.AssetIDs) != 0 || len(total.Timelines) != 1 || total.Timelines[0].Label != "Total" {
 		t.Errorf("total: got %+v", total)
+	}
+}
+
+func TestYearlyChangeChart(t *testing.T) {
+	balance := func(seq int64, date civil.Date, value units.Micros) *ledger.LedgerEntry {
+		return &ledger.LedgerEntry{SequenceNum: seq, AssetID: "account", Currency: "CHF", Type: ledger.AccountBalance, ValueDate: date, ValueMicros: value}
+	}
+	store, err := ledger.NewStore(&ledger.Ledger{
+		Header: &ledger.LedgerHeader{BaseCurrency: "CHF"},
+		Assets: []*ledger.Asset{{CustomID: "account", Name: "Alpha Bank", Type: ledger.CheckingAccount, Currency: "CHF"}},
+		Entries: []*ledger.LedgerEntry{
+			balance(1, civil.DateVal(2023, 6, 1), 100*units.One),
+			balance(2, civil.DateVal(2024, 3, 1), 150*units.One),
+			balance(3, civil.DateVal(2024, 12, 31), 120*units.One),
+			balance(4, civil.DateVal(2026, 2, 1), 200*units.One),
+		},
+	}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{store: store}
+
+	// 2023 is the first year, with no value at the end of the previous year.
+	want := &YearlyChangeChart{
+		Currency:     "CHF",
+		Labels:       []string{"2024", "2025", "2026 YTD"},
+		ChangeMicros: []int64{20_000_000, 0, 80_000_000},
+		ValueMicros:  []int64{120_000_000, 120_000_000, 200_000_000},
+	}
+	if diff := cmp.Diff(want, s.yearlyChangeChart(civil.DateVal(2026, 10, 16))); diff != "" {
+		t.Errorf("yearlyChangeChart() mismatch (-want +got):\n%s", diff)
+	}
+	// On the last day of a year, the year is complete.
+	if got := s.yearlyChangeChart(civil.DateVal(2025, 12, 31)); !slices.Equal(got.Labels, []string{"2024", "2025"}) {
+		t.Errorf("yearlyChangeChart() on 2025-12-31: got labels %q", got.Labels)
+	}
+	if got := s.yearlyChangeChart(civil.DateVal(2023, 12, 31)); len(got.Labels) != 0 {
+		t.Errorf("yearlyChangeChart() in the first year: got labels %q, want none", got.Labels)
 	}
 }
